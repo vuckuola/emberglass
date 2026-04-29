@@ -3,6 +3,7 @@ import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
 import { BOSSES } from '../data/bosses'
 import { CHARACTERS, type CharacterData, type CharacterStats } from '../data/characters'
 import { ENEMIES, type EnemySkill } from '../data/enemies'
+import { ITEMS_BY_ID } from '../data/items'
 import type { Element, Skill } from '../data/skills'
 import { BattleEntity, CombatSystem } from '../systems/CombatSystem'
 import { SaveSystem, type SaveData } from '../systems/SaveSystem'
@@ -81,7 +82,7 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(100)
 
-    this.showMessage('Battle Start!', 1000, () => this.startTurn())
+    this.showMessage('Battle Start!\nRelics are active.', 1000, () => this.startTurn())
   }
 
   private drawBackground(width: number, height: number) {
@@ -97,9 +98,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createBattle() {
-    const party = ['nara', 'kael', 'io'].map((id) =>
-      this.createPartyEntity(CHARACTERS[id], 3),
-    )
+    const party = ['nara', 'kael', 'io'].map((id) => {
+      const savedMember = this.saveData?.party.find((member) => member.characterId === id)
+      return this.createPartyEntity(CHARACTERS[id], savedMember?.level ?? 3, savedMember)
+    })
     const enemyIds = this.initData.enemyIds?.length
       ? this.initData.enemyIds
       : ['vinecrawler', 'moss_knight']
@@ -108,15 +110,22 @@ export class BattleScene extends Phaser.Scene {
     this.combat = new CombatSystem(party, enemies.filter(Boolean))
   }
 
-  private createPartyEntity(character: CharacterData, level: number): BattleEntity {
-    const stats = this.scaleStats(character.baseStats, character.growth, level)
+  private createPartyEntity(
+    character: CharacterData,
+    level: number,
+    savedMember?: SaveData['party'][number],
+  ): BattleEntity {
+    const stats = this.applyEquipmentStats(
+      this.scaleStats(character.baseStats, character.growth, level),
+      savedMember,
+    )
     return new BattleEntity({
       id: character.id,
       name: character.name,
       isPlayer: true,
       stats,
-      currentHp: stats.hp,
-      currentMp: stats.mp,
+      currentHp: savedMember?.currentHp ?? stats.hp,
+      currentMp: savedMember?.currentMp ?? stats.mp,
       skills: character.skills,
       element: character.element,
       weaknesses: [],
@@ -159,6 +168,32 @@ export class BattleScene extends Phaser.Scene {
       spd: baseStats.spd + growth.spd * levelUps,
       mag: baseStats.mag + growth.mag * levelUps,
     }
+  }
+
+  private applyEquipmentStats(
+    stats: CharacterStats,
+    savedMember?: SaveData['party'][number],
+  ): CharacterStats {
+    const adjusted = { ...stats }
+    const equippedIds = savedMember
+      ? [savedMember.equipment.weapon, savedMember.equipment.charm, savedMember.equipment.relic]
+      : []
+
+    equippedIds.forEach((itemId) => {
+      const item = itemId ? ITEMS_BY_ID[itemId] : undefined
+      if (!item?.effect.stat || typeof item.effect.value !== 'number') {
+        return
+      }
+
+      item.effect.stat.split(',').forEach((stat) => {
+        const key = stat.trim() as keyof CharacterStats
+        if (key in adjusted) {
+          adjusted[key] += item.effect.value ?? 0
+        }
+      })
+    })
+
+    return adjusted
   }
 
   private createEntityViews() {
@@ -481,7 +516,7 @@ export class BattleScene extends Phaser.Scene {
       if (!target || result.missed) {
         return
       }
-      this.showFloatingNumber(target, result.damage, result.healed)
+      this.showFloatingNumber(target, result.damage, result.healed, result.critical, result.effectiveness)
       this.flashTarget(target)
       if (!result.healed) {
         this.cameras.main.shake(100, 0.01)
@@ -526,7 +561,8 @@ export class BattleScene extends Phaser.Scene {
       const reward = this.combat.getReward()
       const emberShards = this.initData.battleId ? 1 : 0
       const itemRewards = [{ itemId: 'health_potion', quantity: 1 }]
-      this.showMessage(`Victory!\n${reward.gold}g earned\nEmber Shard x${emberShards}\nPotion x1`, 2200, () => {
+      this.cameras.main.flash(450, 255, 241, 168, false)
+      this.showMessage(`Victory!\nEXP +${reward.exp}   Gold +${reward.gold}\nRewards: Ember Shard x${emberShards}, Potion x1\nPress onward to claim your prize.`, 2800, () => {
         this.scene.start('OverworldScene', {
           continueGame: true,
           battleResult: {
@@ -607,17 +643,23 @@ export class BattleScene extends Phaser.Scene {
     })
   }
 
-  private showFloatingNumber(entity: BattleEntity, amount: number, healed: boolean) {
+  private showFloatingNumber(
+    entity: BattleEntity,
+    amount: number,
+    healed: boolean,
+    critical = false,
+    effectiveness = 'normal',
+  ) {
     const view = this.entityViews.get(entity)
     if (!view) {
       return
     }
 
     const text = this.add
-      .text(view.rect.x, view.rect.y - 44, `${healed ? '+' : '-'}${amount}`, {
-        color: healed ? '#45e67a' : '#ff5050',
+      .text(view.rect.x, view.rect.y - 44, `${critical ? 'CRIT ' : ''}${healed ? '+' : '-'}${amount}${effectiveness === 'super_effective' ? '!' : ''}`, {
+        color: healed ? '#45e67a' : effectiveness === 'super_effective' ? '#fff1a8' : '#ff5050',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '20px',
+        fontSize: critical || effectiveness === 'super_effective' ? '24px' : '20px',
       })
       .setOrigin(0.5)
       .setDepth(90)

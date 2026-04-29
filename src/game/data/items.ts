@@ -75,6 +75,14 @@ export const ITEMS: Item[] = [
     description: "Cures burn from one ally.",
   },
   {
+    id: "ember_shard",
+    name: "Ember Shard",
+    type: "key",
+    effect: {},
+    value: 40,
+    description: "Warm crystal currency traded by quay merchants.",
+  },
+  {
     id: "cartographer_staff",
     name: "Cartographer Staff",
     type: "weapon",
@@ -137,6 +145,14 @@ export const ITEMS: Item[] = [
     effect: { stat: "critPercent", value: 15 },
     value: 250,
     description: "A polished lens that improves critical chance by 15%.",
+  },
+  {
+    id: "warding_ember",
+    name: "Warding Ember",
+    type: "relic",
+    effect: { stat: "def,mag", value: 4 },
+    value: 220,
+    description: "A protective relic from Maelin. DEF +4 and MAG +4.",
   },
   {
     id: "lighthouse_key",

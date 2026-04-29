@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
 import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
+import { CHARACTERS } from '../data/characters'
+import { ITEMS_BY_ID } from '../data/items'
 import { SaveSystem, type SaveData } from '../systems/SaveSystem'
 
 const TILE_SIZE = 48
@@ -10,6 +12,7 @@ const SAVE_TILE = { x: 5, y: 5 }
 const CHEST_TILE = { x: 15, y: 8 }
 const GUIDE_TILE = { x: 8, y: 3 }
 const ELDER_TILE = { x: 10, y: 3 }
+const MERCHANT_TILE = { x: 6, y: 9 }
 const MARKER_TILE = { x: 16, y: 11 }
 const SIGNPOST_TILE = { x: 3, y: 11 }
 const FIELD_BATTLE_TILE = { x: 17, y: 12 }
@@ -36,12 +39,13 @@ type OverworldInitData = {
 }
 
 type InventoryCounts = { potion: number; ether: number; emberShard: number }
+type MenuOverlay = { container: Phaser.GameObjects.Container }
 
 export class OverworldScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private player?: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle
   private playerOutline?: Phaser.GameObjects.Rectangle
-  private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space', Phaser.Input.Keyboard.Key>
+  private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
   private facing: Direction = 'down'
   private saveNoticeShown = false
@@ -50,6 +54,8 @@ export class OverworldScene extends Phaser.Scene {
   private saveData!: SaveData
   private objectiveText?: Phaser.GameObjects.Text
   private inventoryText?: Phaser.GameObjects.Text
+  private promptText?: Phaser.GameObjects.Text
+  private menuOverlay?: MenuOverlay
 
   constructor() {
     super('OverworldScene')
@@ -86,7 +92,9 @@ export class OverworldScene extends Phaser.Scene {
       d: Phaser.Input.Keyboard.KeyCodes.D,
       enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
       space: Phaser.Input.Keyboard.KeyCodes.SPACE,
-    }) as Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space', Phaser.Input.Keyboard.Key>
+      m: Phaser.Input.Keyboard.KeyCodes.M,
+      escape: Phaser.Input.Keyboard.KeyCodes.ESC,
+    }) as Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
 
     this.createHud()
     this.refreshHud()
@@ -95,7 +103,18 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    if (!this.player || !this.playerOutline || !this.cursors || !this.keys || this.busy) {
+    if (!this.player || !this.playerOutline || !this.cursors || !this.keys) {
+      return
+    }
+
+    if (this.menuOverlay) {
+      if (Phaser.Input.Keyboard.JustDown(this.keys.escape) || Phaser.Input.Keyboard.JustDown(this.keys.m)) {
+        this.closeMenu()
+      }
+      return
+    }
+
+    if (this.busy) {
       return
     }
 
@@ -128,6 +147,12 @@ export class OverworldScene extends Phaser.Scene {
     this.movePlayer(velocityX * seconds, velocityY * seconds)
     this.playerOutline.setPosition(this.player.x, this.player.y)
     this.checkSavePoint()
+    this.updateInteractionPrompt()
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.m) || Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
+      this.openMenu()
+      return
+    }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.enter) || Phaser.Input.Keyboard.JustDown(this.keys.space)) {
       this.interact()
@@ -176,6 +201,7 @@ export class OverworldScene extends Phaser.Scene {
     this.drawChest()
     this.drawNpc(GUIDE_TILE, 0x3278d4, 'Guide Rin')
     this.drawNpc(ELDER_TILE, 0xd7a85a, 'Elder')
+    this.drawNpc(MERCHANT_TILE, 0x45c987, 'Peddler')
     this.drawMarker(MARKER_TILE, 0xff8a32, 'Ruin Marker')
     this.drawMarker(SIGNPOST_TILE, 0x8ab4f8, 'Signpost')
     this.drawMarker(FIELD_BATTLE_TILE, this.flag('field_battle_won') ? 0x45e67a : 0xd94747, this.flag('field_battle_won') ? 'Cleared Field' : 'Guardian Field')
@@ -191,16 +217,16 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private drawNpc(tile: { x: number; y: number }, color: number, label: string) {
-    if (hasTexture(this, GENERATED_ASSETS.npc)) {
-      this.add.sprite(this.tileCenter(tile.x), this.tileCenter(tile.y), GENERATED_ASSETS.npc, 0).setTint(color).setDepth(4)
-    } else {
-      this.add.rectangle(this.tileCenter(tile.x), this.tileCenter(tile.y), 34, 44, color).setStrokeStyle(2, 0xffffff, 0.45).setDepth(4)
-    }
+    const npc = hasTexture(this, GENERATED_ASSETS.npc)
+      ? this.add.sprite(this.tileCenter(tile.x), this.tileCenter(tile.y), GENERATED_ASSETS.npc, 0).setTint(color).setDepth(4)
+      : this.add.rectangle(this.tileCenter(tile.x), this.tileCenter(tile.y), 34, 44, color).setStrokeStyle(2, 0xffffff, 0.45).setDepth(4)
+    this.tweens.add({ targets: npc, y: npc.y - 3, yoyo: true, repeat: -1, duration: 1400 + tile.x * 45, ease: 'Sine.easeInOut' })
     this.add.text(this.tileCenter(tile.x), this.tileCenter(tile.y) - 36, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(0.5).setDepth(5)
   }
 
   private drawMarker(tile: { x: number; y: number }, color: number, label: string) {
-    this.add.rectangle(this.tileCenter(tile.x), this.tileCenter(tile.y), 34, 34, color, 0.86).setStrokeStyle(2, 0xffffff, 0.35).setDepth(3)
+    const marker = this.add.rectangle(this.tileCenter(tile.x), this.tileCenter(tile.y), 34, 34, color, 0.86).setStrokeStyle(2, 0xffffff, 0.35).setDepth(3)
+    this.tweens.add({ targets: marker, angle: 2, scale: 1.06, yoyo: true, repeat: -1, duration: 1200, ease: 'Sine.easeInOut' })
     this.add.text(this.tileCenter(tile.x), this.tileCenter(tile.y) - 30, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(0.5).setDepth(5)
   }
 
@@ -212,10 +238,11 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createHud() {
-    const panel = this.add.rectangle(12, 12, 470, 92, 0x08091a, 0.82).setOrigin(0).setScrollFactor(0).setDepth(90)
+    const panel = this.add.rectangle(12, 12, 520, 104, 0x08091a, 0.84).setOrigin(0).setScrollFactor(0).setDepth(90)
     panel.setStrokeStyle(1, 0x8ab4f8, 0.45)
-    this.objectiveText = this.add.text(28, 24, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 430 } }).setScrollFactor(0).setDepth(91)
-    this.inventoryText = this.add.text(28, 74, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setScrollFactor(0).setDepth(91)
+    this.objectiveText = this.add.text(28, 24, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 480 } }).setScrollFactor(0).setDepth(91)
+    this.inventoryText = this.add.text(28, 78, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setScrollFactor(0).setDepth(91)
+    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 32, 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', backgroundColor: '#08091acc', padding: { x: 12, y: 7 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
   }
 
   private movePlayer(deltaX: number, deltaY: number) {
@@ -273,6 +300,8 @@ export class OverworldScene extends Phaser.Scene {
       this.talkGuide()
     } else if (isAt(ELDER_TILE)) {
       this.talkElder()
+    } else if (isAt(MERCHANT_TILE)) {
+      this.openShop()
     } else if (isAt(MARKER_TILE)) {
       this.inspectMarker()
     } else if (isAt(SIGNPOST_TILE)) {
@@ -291,7 +320,9 @@ export class OverworldScene extends Phaser.Scene {
     this.saveData.openedChests.push(CHEST_ID)
     this.addInventory('health_potion', 2)
     this.addInventory('mana_potion', 1)
-    this.showToast('Supply chest: Potion x2, Ether x1')
+    this.addInventory('wind_charm', 1)
+    this.saveData.party[0].equipment.charm = 'wind_charm'
+    this.showToast('Supply chest: Potion x2, Ether x1, Wind Charm equipped to Nara')
     this.persist()
     this.refreshHud()
   }
@@ -326,8 +357,10 @@ export class OverworldScene extends Phaser.Scene {
       this.setFlag('elder_rewarded')
       this.setFlag('slice_complete')
       this.addInventory('ember_shard', 1)
+      this.addInventory('warding_ember', 1)
+      this.saveData.party[2].equipment.relic = 'warding_ember'
       this.setObjective(OBJECTIVES.complete)
-      this.showToast('Elder Maelin: Take this ember shard. Save your progress.')
+      this.showToast('Elder Maelin: Take this ember shard and Warding Ember. Io equips it.')
     } else {
       this.showToast('Elder Maelin: Luma Quay remembers your help.')
     }
@@ -406,6 +439,93 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: text, y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => text.destroy() })
   }
 
+  private openShop() {
+    const counts = this.getInventoryCounts()
+    if (counts.emberShard > 0) {
+      this.addInventory('ember_shard', -1)
+      this.addInventory('mana_potion', 1)
+      this.saveData.gold += 15
+      this.showToast('Peddler: Ember Shard traded for Ether x1 and 15g.')
+    } else if (this.saveData.gold >= 25) {
+      this.saveData.gold -= 25
+      this.addInventory('health_potion', 1)
+      this.showToast('Peddler: Potion purchased for 25g.')
+    } else {
+      this.showToast('Peddler: Bring 25g for potions, or an Ember Shard for ether.')
+    }
+    this.persist()
+    this.refreshHud()
+  }
+
+  private openMenu() {
+    if (this.menuOverlay) {
+      return
+    }
+
+    this.busy = true
+    const { width, height } = this.scale
+    const container = this.add.container(0, 0).setScrollFactor(0).setDepth(200)
+    const counts = this.getInventoryCounts()
+    const relicLines = this.saveData.party
+      .map((member) => {
+        const character = CHARACTERS[member.characterId]
+        const equipped = [member.equipment.weapon, member.equipment.charm, member.equipment.relic]
+          .filter(Boolean)
+          .map((itemId) => ITEMS_BY_ID[itemId ?? '']?.name)
+          .filter(Boolean)
+        return `${character?.name ?? member.characterId} Lv ${member.level}  HP ${member.currentHp}  MP ${member.currentMp}\n  ${equipped.length ? equipped.join(' • ') : 'No relics equipped'}`
+      })
+      .join('\n')
+
+    const inventoryLines = [
+      `Potion x${counts.potion}`,
+      `Ether x${counts.ether}`,
+      `Ember Shard x${counts.emberShard}`,
+      ...this.saveData.inventory
+        .filter((entry) => ['wind_charm', 'warding_ember', 'skywell_shard', 'glass_lens'].includes(entry.itemId))
+        .map((entry) => `${ITEMS_BY_ID[entry.itemId]?.name ?? entry.itemId} x${entry.quantity}`),
+    ]
+
+    container.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.72))
+    const panel = this.add.rectangle(width / 2, height / 2, 700, 500, 0x0b1028, 0.97).setStrokeStyle(2, 0x8ab4f8, 0.7)
+    container.add(panel)
+    container.add(this.add.text(width / 2 - 310, height / 2 - 220, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '28px' }))
+    container.add(this.add.text(width / 2 + 170, height / 2 - 216, `${this.saveData.gold}g`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '24px' }))
+    container.add(this.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 610 } }))
+    container.add(this.add.text(width / 2 - 310, height / 2 - 86, `Status / Equipment\n${relicLines}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 5 }))
+    container.add(this.add.text(width / 2 + 64, height / 2 - 86, `Inventory\n${inventoryLines.join('\n')}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 7 }))
+    container.add(this.add.text(width / 2 - 310, height / 2 + 184, 'Controls: Move WASD/Arrows • Interact Enter/Space • Menu M/Esc • Shop trades shards first, then sells potions.', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 620 } }))
+    this.menuOverlay = { container }
+  }
+
+  private closeMenu() {
+    this.menuOverlay?.container.destroy()
+    this.menuOverlay = undefined
+    this.busy = false
+  }
+
+  private updateInteractionPrompt() {
+    const tile = this.getInteractionTile()
+    const playerTile = this.player ? this.worldToTile(this.player.x, this.player.y) : null
+    const isAt = (target: { x: number; y: number }) => this.matchesTile(tile, target) || this.matchesTile(playerTile, target)
+    const prompt = isAt(CHEST_TILE)
+      ? 'Open supply chest'
+      : isAt(GUIDE_TILE)
+        ? 'Talk to Guide Rin'
+        : isAt(ELDER_TILE)
+          ? 'Talk to Elder Maelin'
+          : isAt(MERCHANT_TILE)
+            ? 'Trade with quay peddler'
+            : isAt(MARKER_TILE)
+              ? 'Inspect ruin marker'
+              : isAt(SIGNPOST_TILE)
+                ? 'Read signpost'
+                : isAt(FIELD_BATTLE_TILE)
+                  ? 'Enter guardian field'
+                  : 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc'
+    this.promptText?.setText(prompt.startsWith('Move') ? prompt : `${prompt}  [Enter]`)
+  }
+
   private createDefaultSaveData(): SaveData {
     return {
       version: SaveSystem.SAVE_VERSION,
@@ -417,7 +537,7 @@ export class OverworldScene extends Phaser.Scene {
         { characterId: 'io', level: 3, currentHp: 88, currentMp: 58, equipment: { weapon: null, charm: null, relic: null }, skills: ['lumen_bolt', 'mend'] },
       ],
       inventory: [{ itemId: 'health_potion', quantity: 3 }, { itemId: 'mana_potion', quantity: 1 }, { itemId: 'ember_shard', quantity: 0 }],
-      gold: 0,
+      gold: 60,
       openedChests: [],
       completedEvents: [],
       currentObjective: OBJECTIVES.talkToElder,
