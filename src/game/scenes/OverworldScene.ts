@@ -15,6 +15,10 @@ const ELDER_TILE = { x: 10, y: 3 }
 const MERCHANT_TILE = { x: 6, y: 9 }
 const MARKER_TILE = { x: 16, y: 11 }
 const SIGNPOST_TILE = { x: 3, y: 11 }
+const TIDE_BELL_TILE = { x: 2, y: 7 }
+const MURAL_TILE = { x: 12, y: 5 }
+const WATCH_LANTERN_TILE = { x: 14, y: 9 }
+const SHRINE_GATE_TILE = { x: 18, y: 6 }
 const FIELD_BATTLE_TILE = { x: 17, y: 12 }
 const FIELD_BATTLE_ID = 'field_marker_battle'
 const CHEST_ID = 'quay_supply_chest'
@@ -24,6 +28,7 @@ const OBJECTIVES = {
   inspectMarker: 'Inspect the ruin marker in the eastern field.',
   winBattle: 'Defeat the field guardian beyond the marker.',
   returnToElder: 'Return to Elder Maelin with the ember shard.',
+  visitShrineGate: 'Follow the opened east path to the Moonwake Shrine gate.',
   complete: 'Save at the skywell. Luma Quay is safe for now.',
 } as const
 
@@ -55,6 +60,7 @@ export class OverworldScene extends Phaser.Scene {
   private objectiveText?: Phaser.GameObjects.Text
   private inventoryText?: Phaser.GameObjects.Text
   private promptText?: Phaser.GameObjects.Text
+  private areaText?: Phaser.GameObjects.Text
   private menuOverlay?: MenuOverlay
 
   constructor() {
@@ -98,6 +104,7 @@ export class OverworldScene extends Phaser.Scene {
 
     this.createHud()
     this.refreshHud()
+    this.showAreaBanner('Luma Quay', 'A harbor village holding its breath beneath emberlit glass.')
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE)
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
   }
@@ -169,16 +176,18 @@ export class OverworldScene extends Phaser.Scene {
           (tileX === 13 && tileY >= 2 && tileY <= 5) ||
           (tileX >= 11 && tileX <= 12 && tileY === 11)
         const isBattleGate = tileX === FIELD_BATTLE_TILE.x && tileY === FIELD_BATTLE_TILE.y && !this.flag('field_battle_won')
+        const isShrineGate = tileX === SHRINE_GATE_TILE.x && tileY === SHRINE_GATE_TILE.y && !this.flag('shrine_gate_seen')
         const isWall = isBorder || isInteriorWall || isBattleGate
+        const blocksTravel = isWall && !isShrineGate
 
         if (hasTexture(this, GENERATED_ASSETS.tileset)) {
-          const frameX = isWall ? 16 : (tileX + tileY) % 5 === 0 ? 32 : 0
+          const frameX = blocksTravel ? 16 : (tileX + tileY) % 5 === 0 ? 32 : 0
           this.add.tileSprite(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE, GENERATED_ASSETS.tileset).setOrigin(0).setTilePosition(frameX, 0).setDepth(0)
         } else {
-          this.add.rectangle(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE, isWall ? 0x0a1a1a : 0x0a2a2a).setOrigin(0).setStrokeStyle(1, 0x123838, 0.35)
+          this.add.rectangle(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE, blocksTravel ? 0x0a1a1a : 0x0a2a2a).setOrigin(0).setStrokeStyle(1, 0x123838, 0.35)
         }
 
-        if (isWall) {
+        if (blocksTravel) {
           this.walls.add(this.tileKey(tileX, tileY))
         }
       }
@@ -188,6 +197,10 @@ export class OverworldScene extends Phaser.Scene {
   private createBackdrop() {
     if (hasTexture(this, GENERATED_ASSETS.overworldBg)) {
       this.add.image((MAP_WIDTH * TILE_SIZE) / 2, (MAP_HEIGHT * TILE_SIZE) / 2, GENERATED_ASSETS.overworldBg).setDisplaySize(MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE).setDepth(-10)
+    }
+    for (let index = 0; index < 22; index += 1) {
+      const mote = this.add.circle(Phaser.Math.Between(48, MAP_WIDTH * TILE_SIZE - 48), Phaser.Math.Between(64, MAP_HEIGHT * TILE_SIZE - 64), Phaser.Math.Between(1, 3), 0x9ff3ff, 0.16).setDepth(-2)
+      this.tweens.add({ targets: mote, x: mote.x + Phaser.Math.Between(-22, 22), y: mote.y - Phaser.Math.Between(14, 42), alpha: 0.04, yoyo: true, repeat: -1, duration: Phaser.Math.Between(2800, 5200), ease: 'Sine.easeInOut' })
     }
   }
 
@@ -204,6 +217,10 @@ export class OverworldScene extends Phaser.Scene {
     this.drawNpc(MERCHANT_TILE, 0x45c987, 'Peddler')
     this.drawMarker(MARKER_TILE, 0xff8a32, 'Ruin Marker')
     this.drawMarker(SIGNPOST_TILE, 0x8ab4f8, 'Signpost')
+    this.drawMarker(TIDE_BELL_TILE, 0x75d6ff, 'Tide Bell')
+    this.drawMarker(MURAL_TILE, 0xc88dff, 'Glass Mural')
+    this.drawMarker(WATCH_LANTERN_TILE, 0xffd36e, 'Watch Lantern')
+    this.drawMarker(SHRINE_GATE_TILE, this.flag('slice_complete') ? 0x9ff36e : 0x5d536d, 'Shrine Gate')
     this.drawMarker(FIELD_BATTLE_TILE, this.flag('field_battle_won') ? 0x45e67a : 0xd94747, this.flag('field_battle_won') ? 'Cleared Field' : 'Guardian Field')
   }
 
@@ -242,6 +259,7 @@ export class OverworldScene extends Phaser.Scene {
     panel.setStrokeStyle(1, 0x8ab4f8, 0.45)
     this.objectiveText = this.add.text(28, 24, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 480 } }).setScrollFactor(0).setDepth(91)
     this.inventoryText = this.add.text(28, 78, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setScrollFactor(0).setDepth(91)
+    this.areaText = this.add.text(this.scale.width - 24, 24, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '18px', backgroundColor: '#08091acc', padding: { x: 10, y: 6 } }).setOrigin(1, 0).setScrollFactor(0).setDepth(91)
     this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 32, 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', backgroundColor: '#08091acc', padding: { x: 12, y: 7 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
   }
 
@@ -305,8 +323,16 @@ export class OverworldScene extends Phaser.Scene {
     } else if (isAt(MARKER_TILE)) {
       this.inspectMarker()
     } else if (isAt(SIGNPOST_TILE)) {
-      this.showToast('Signpost: Elder north, marker east, skywell west.')
+      this.showToast(this.flag('slice_complete') ? 'Signpost: Moonwake Shrine east. Luma Quay west. Home behind you.' : 'Signpost: Elder north, marker east, skywell west. Fresh paint hides old scorch marks.')
       this.addEvent('read_signpost')
+    } else if (isAt(TIDE_BELL_TILE)) {
+      this.ringTideBell()
+    } else if (isAt(MURAL_TILE)) {
+      this.inspectMural()
+    } else if (isAt(WATCH_LANTERN_TILE)) {
+      this.lightWatchLantern()
+    } else if (isAt(SHRINE_GATE_TILE)) {
+      this.inspectShrineGate()
     } else if (isAt(FIELD_BATTLE_TILE)) {
       this.startFieldBattle()
     }
@@ -329,18 +355,18 @@ export class OverworldScene extends Phaser.Scene {
 
   private talkGuide() {
     if (!this.flag('elder_intro')) {
-      this.showToast('Guide Rin: Elder Maelin can explain the emberglass tremor.')
+      this.showToast('Guide Rin: Hear that glass-singing? The quay only does that before storms—or prophecies.')
       return
     }
     if (!this.flag('field_marker_seen')) {
-      this.showToast('Guide Rin: The marker is east. Read it before crossing.')
+      this.showToast('Guide Rin: Check the old marker east. I tied blue cord around the safe stones.')
       return
     }
     if (!this.flag('field_battle_won')) {
-      this.showToast('Guide Rin: Strike ember weaknesses and keep potions ready.')
+      this.showToast('Guide Rin: The guardian hates emberlight. Keep Io standing and do not hoard potions.')
       return
     }
-    this.showToast('Guide Rin: You brought the quay back to a calm glow.')
+    this.showToast(this.flag('shrine_gate_seen') ? 'Guide Rin: Moonwake Shrine was sealed when I was little. If it opened for you, go carefully.' : 'Guide Rin: You brought the quay back to a calm glow. Ask Maelin what the east gate means.')
   }
 
   private talkElder() {
@@ -359,10 +385,11 @@ export class OverworldScene extends Phaser.Scene {
       this.addInventory('ember_shard', 1)
       this.addInventory('warding_ember', 1)
       this.saveData.party[2].equipment.relic = 'warding_ember'
-      this.setObjective(OBJECTIVES.complete)
-      this.showToast('Elder Maelin: Take this ember shard and Warding Ember. Io equips it.')
+      this.setObjective(OBJECTIVES.visitShrineGate)
+      this.showEventBanner('Moonwake Route Opened', 'A green seam of light unlocks the old shrine gate east of the field.')
+      this.showToast('Elder Maelin: Take the Warding Ember. Io equips it. Then follow the gate that woke for you.')
     } else {
-      this.showToast('Elder Maelin: Luma Quay remembers your help.')
+      this.showToast(this.flag('shrine_gate_seen') ? 'Elder Maelin: Beyond Moonwake lies the first true answer. Tonight, Luma Quay will keep your names.' : 'Elder Maelin: The shrine gate is awake. Let it see the ember you carry.')
     }
     this.persist()
     this.refreshHud()
@@ -380,7 +407,7 @@ export class OverworldScene extends Phaser.Scene {
     } else if (!this.flag('field_battle_won')) {
       this.showToast('Marker: The guardian waits in the red-lit field southeast.')
     } else {
-      this.showToast('Marker: The path is calm. Report back to Elder Maelin.')
+      this.showToast(this.flag('slice_complete') ? 'Marker: Guardian vow fulfilled. Moonwake Shrine accepts passage east.' : 'Marker: The path is calm. Report back to Elder Maelin.')
     }
     this.persist()
     this.refreshHud()
@@ -428,15 +455,81 @@ export class OverworldScene extends Phaser.Scene {
     }
     this.persist()
     this.time.delayedCall(250, () => {
-      this.showToast(`Rewards: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
+      this.showEventBanner('Guardian Felled', 'The field exhales. Far east, a shrine bell answers once.')
+      this.showToast(`Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
       this.refreshHud()
     })
+  }
+
+  private ringTideBell() {
+    if (!this.flag('tide_bell_rung')) {
+      this.setFlag('tide_bell_rung')
+      this.showToast('The tide bell rings without echo. Fisher charms flicker awake along the quay.')
+    } else {
+      this.showToast(this.flag('field_battle_won') ? 'The bell tone is clear now, no longer warped by the guardian field.' : 'The bell answers with a nervous blue shimmer.')
+    }
+    this.persist()
+  }
+
+  private inspectMural() {
+    this.addEvent('glass_mural_seen')
+    const message = this.flag('slice_complete')
+      ? 'Mural: Three pilgrims carry emberglass toward a crescent gate—the last figure now glows like Nara.'
+      : 'Mural: A cracked mosaic shows Luma Quay before the fall, every roof bright with bottled starlight.'
+    this.showToast(message)
+    this.persist()
+  }
+
+  private lightWatchLantern() {
+    if (!this.flag('watch_lantern_lit')) {
+      this.setFlag('watch_lantern_lit')
+      this.addInventory('health_potion', 1)
+      this.showToast('Watch Lantern: You trim the wick. A hidden keeper cache yields Potion x1.')
+      this.refreshHud()
+    } else {
+      this.showToast('The watch lantern burns steady, painting the grass in warm gold.')
+    }
+    this.persist()
+  }
+
+  private inspectShrineGate() {
+    if (!this.flag('slice_complete')) {
+      this.showToast('Moonwake Gate: Moon-silver roots lock the path. The elder may know the vow.')
+      return
+    }
+    if (!this.flag('shrine_gate_seen')) {
+      this.setFlag('shrine_gate_seen')
+      this.setObjective(OBJECTIVES.complete)
+      this.showAreaBanner('Moonwake Shrine Approach', 'Beyond the gate, old glass ruins breathe with patient light.')
+      this.showEventBanner('To Be Continued', 'The route forward is clear: Moonwake Shrine waits past Luma Quay.')
+    } else {
+      this.showToast('Moonwake Gate: The way ahead is open, bright, and much older than the village.')
+    }
+    this.persist()
+    this.refreshHud()
   }
 
   private showToast(message: string) {
     const { width } = this.scale
     const text = this.add.text(width / 2, 126, message, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px', backgroundColor: '#0a0a2e', padding: { x: 14, y: 8 }, wordWrap: { width: 720 } }).setOrigin(0.5).setScrollFactor(0).setDepth(100)
     this.tweens.add({ targets: text, y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => text.destroy() })
+  }
+
+  private showAreaBanner(title: string, subtitle: string) {
+    this.areaText?.setText(title)
+    const { width } = this.scale
+    const panel = this.add.rectangle(width / 2, 84, 580, 84, 0x071023, 0.88).setScrollFactor(0).setDepth(120).setStrokeStyle(1, 0x9ff3ff, 0.5)
+    const heading = this.add.text(width / 2, 62, title, { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '26px' }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
+    const body = this.add.text(width / 2, 92, subtitle, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 520 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
+    this.tweens.add({ targets: [panel, heading, body], alpha: 0, delay: 2300, duration: 600, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy() } })
+  }
+
+  private showEventBanner(title: string, subtitle: string) {
+    const { width, height } = this.scale
+    const panel = this.add.rectangle(width / 2, height / 2 - 140, 660, 92, 0x1b1020, 0.92).setScrollFactor(0).setDepth(130).setStrokeStyle(2, 0xffd36e, 0.72)
+    const heading = this.add.text(width / 2, height / 2 - 162, title, { color: '#ffd36e', fontFamily: 'Arial, sans-serif', fontSize: '24px' }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
+    const body = this.add.text(width / 2, height / 2 - 130, subtitle, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 600 } }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
+    this.tweens.add({ targets: [panel, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy() } })
   }
 
   private openShop() {
@@ -520,9 +613,17 @@ export class OverworldScene extends Phaser.Scene {
               ? 'Inspect ruin marker'
               : isAt(SIGNPOST_TILE)
                 ? 'Read signpost'
-                : isAt(FIELD_BATTLE_TILE)
-                  ? 'Enter guardian field'
-                  : 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc'
+                : isAt(TIDE_BELL_TILE)
+                  ? 'Ring tide bell'
+                  : isAt(MURAL_TILE)
+                    ? 'Study glass mural'
+                    : isAt(WATCH_LANTERN_TILE)
+                      ? 'Tend watch lantern'
+                      : isAt(SHRINE_GATE_TILE)
+                        ? 'Inspect shrine gate'
+                        : isAt(FIELD_BATTLE_TILE)
+                          ? 'Enter guardian field'
+                          : 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc'
     this.promptText?.setText(prompt.startsWith('Move') ? prompt : `${prompt}  [Enter]`)
   }
 
