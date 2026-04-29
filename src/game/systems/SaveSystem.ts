@@ -12,6 +12,10 @@ export interface SaveData {
   }>
   inventory: Array<{ itemId: string; quantity: number }>
   gold: number
+  openedChests: string[]
+  completedEvents: string[]
+  currentObjective: string
+  battleRewards: { exp: number; gold: number; emberShards: number }
   position: { mapId: string; x: number; y: number }
   quests: Record<string, string>
   flags: Record<string, boolean>
@@ -92,6 +96,15 @@ export class SaveSystem {
 
     save.timestamp = typeof save.timestamp === 'number' ? save.timestamp : Date.now()
     save.slot = typeof save.slot === 'number' ? save.slot : 0
+    save.openedChests = this.isStringArray(save.openedChests) ? save.openedChests : []
+    save.completedEvents = this.isStringArray(save.completedEvents) ? save.completedEvents : []
+    save.currentObjective =
+      typeof save.currentObjective === 'string'
+        ? save.currentObjective
+        : 'Speak with Elder Maelin at Luma Quay.'
+    save.battleRewards = this.isBattleRewards(save.battleRewards)
+      ? save.battleRewards
+      : { exp: 0, gold: 0, emberShards: 0 }
     save.quests = this.isStringRecord(save.quests) ? save.quests : {}
     save.flags = this.isBooleanRecord(save.flags) ? save.flags : {}
     save.playTime = typeof save.playTime === 'number' ? save.playTime : 0
@@ -209,6 +222,26 @@ export class SaveSystem {
     return (
       this.isObject(value) &&
       Object.values(value).every((entry) => typeof entry === 'boolean')
+    )
+  }
+
+  private static isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+  }
+
+  private static isBattleRewards(value: unknown): value is SaveData['battleRewards'] {
+    if (!this.isObject(value)) {
+      return false
+    }
+
+    const rewards = value as SaveData['battleRewards']
+    return (
+      typeof rewards.exp === 'number' &&
+      rewards.exp >= 0 &&
+      typeof rewards.gold === 'number' &&
+      rewards.gold >= 0 &&
+      typeof rewards.emberShards === 'number' &&
+      rewards.emberShards >= 0
     )
   }
 

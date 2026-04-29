@@ -5,9 +5,10 @@ import { CHARACTERS, type CharacterData, type CharacterStats } from '../data/cha
 import { ENEMIES, type EnemySkill } from '../data/enemies'
 import type { Element, Skill } from '../data/skills'
 import { BattleEntity, CombatSystem } from '../systems/CombatSystem'
-import { SaveSystem } from '../systems/SaveSystem'
+import { SaveSystem, type SaveData } from '../systems/SaveSystem'
 
 type BattleInitData = {
+  battleId?: string
   enemyIds?: string[]
   isBoss?: boolean
 }
@@ -48,6 +49,7 @@ export class BattleScene extends Phaser.Scene {
   private selectedSkill?: Skill
   private validTargets: BattleEntity[] = []
   private potions = 3
+  private saveData: SaveData | null = null
   private waitingForTarget = false
 
   constructor() {
@@ -62,6 +64,8 @@ export class BattleScene extends Phaser.Scene {
     const { width, height } = this.scale
 
     this.drawBackground(width, height)
+    this.saveData = SaveSystem.load(0)
+    this.potions = this.getInventoryQuantity('health_potion')
     this.createBattle()
     this.createEntityViews()
     this.createBottomPanel(width, height)
@@ -433,6 +437,8 @@ export class BattleScene extends Phaser.Scene {
     }
 
     this.potions -= 1
+    this.addInventory('health_potion', -1)
+    this.persistSave()
     const healed = Math.min(45, target.maxHp - target.currentHp)
     target.currentHp = Math.min(target.maxHp, target.currentHp + 45)
     this.showFloatingNumber(target, healed || 0, true)
@@ -497,7 +503,7 @@ export class BattleScene extends Phaser.Scene {
 
     if (Math.random() < 0.5) {
       this.combat.state = 'escaped'
-      this.showMessage('Escaped!', 700, () => this.scene.start('OverworldScene'))
+      this.showMessage('Escaped!', 700, () => this.scene.start('OverworldScene', { continueGame: true }))
       return
     }
 
@@ -518,8 +524,17 @@ export class BattleScene extends Phaser.Scene {
 
     if (this.combat.state === 'victory') {
       const reward = this.combat.getReward()
-      this.showMessage(`Victory!\nXP gained: ${reward.exp}`, 1800, () => {
-        this.scene.start('OverworldScene')
+      const emberShards = this.initData.battleId ? 1 : 0
+      const itemRewards = [{ itemId: 'health_potion', quantity: 1 }]
+      this.showMessage(`Victory!\n${reward.gold}g earned\nEmber Shard x${emberShards}\nPotion x1`, 2200, () => {
+        this.scene.start('OverworldScene', {
+          continueGame: true,
+          battleResult: {
+            battleId: this.initData.battleId,
+            victory: true,
+            rewards: { exp: reward.exp, gold: reward.gold, emberShards, items: itemRewards },
+          },
+        })
       })
       return
     }
@@ -666,6 +681,29 @@ export class BattleScene extends Phaser.Scene {
         return 'ember'
       default:
         return 'neutral'
+    }
+  }
+
+  private getInventoryQuantity(itemId: string): number {
+    return this.saveData?.inventory.find((item) => item.itemId === itemId)?.quantity ?? 3
+  }
+
+  private addInventory(itemId: string, quantity: number) {
+    if (!this.saveData) {
+      return
+    }
+
+    const item = this.saveData.inventory.find((entry) => entry.itemId === itemId)
+    if (item) {
+      item.quantity = Math.max(0, item.quantity + quantity)
+    } else if (quantity > 0) {
+      this.saveData.inventory.push({ itemId, quantity })
+    }
+  }
+
+  private persistSave() {
+    if (this.saveData) {
+      SaveSystem.autoSave(this.saveData)
     }
   }
 }
