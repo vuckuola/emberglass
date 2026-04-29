@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { audioManager } from '../audio/AudioManager'
 import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
 import { BOSSES } from '../data/bosses'
 import { CHARACTERS, type CharacterData, type CharacterStats } from '../data/characters'
@@ -63,6 +64,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     const { width, height } = this.scale
+    audioManager.playMusic(this.initData.isBoss ? 'boss' : 'battle')
 
     this.drawBackground(width, height)
     this.saveData = SaveSystem.load(0)
@@ -360,6 +362,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.clearOptions()
     this.clearTargeting()
+    audioManager.playSfx('ui_confirm')
 
     if (command === 'Attack') {
       this.beginTargetSelection(BASIC_ATTACK)
@@ -373,6 +376,7 @@ export class BattleScene extends Phaser.Scene {
 
     if (command === 'Defend') {
       this.combat.currentEntity.statusEffects.set('buff_def', 1)
+      audioManager.playSfx('defend_guard')
       this.showMessage(`${this.combat.currentEntity.name} defends`, 550, () => {
         this.combat?.finishAction()
         this.startTurn()
@@ -404,6 +408,7 @@ export class BattleScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: actor.currentMp >= skill.mpCost })
       text.on('pointerdown', () => {
         if (actor.currentMp >= skill.mpCost) {
+          audioManager.playSfx('ui_blip')
           this.beginTargetSelection(skill)
         }
       })
@@ -425,6 +430,7 @@ export class BattleScene extends Phaser.Scene {
         return
       }
       this.selectedSkill = undefined
+      audioManager.playSfx('ui_blip')
       this.waitingForTarget = true
       this.validTargets = this.combat.party.filter((entity) => entity.isAlive)
       this.highlightTargets(this.validTargets)
@@ -438,9 +444,12 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (!this.combat.selectSkill(skill)) {
+      audioManager.playSfx('ui_cancel')
       this.showMessage('Not enough MP', 700, () => this.showActionMenu())
       return
     }
+
+    audioManager.playSfx(skill.type === 'magical' || skill.type === 'heal' ? 'magic_cast' : 'attack_thrust')
 
     this.selectedSkill = skill
     this.waitingForTarget = true
@@ -474,6 +483,7 @@ export class BattleScene extends Phaser.Scene {
     this.potions -= 1
     this.addInventory('health_potion', -1)
     this.persistSave()
+    audioManager.playSfx('item_use')
     const healed = Math.min(45, target.maxHp - target.currentHp)
     target.currentHp = Math.min(target.maxHp, target.currentHp + 45)
     this.showFloatingNumber(target, healed || 0, true)
@@ -490,6 +500,7 @@ export class BattleScene extends Phaser.Scene {
       [...this.combat.party, ...this.combat.enemies].map((entity) => [entity, entity.currentHp]),
     )
     this.combat.executeEnemyTurn()
+    audioManager.playSfx('attack_swing')
     const changedTargets = [...this.combat.party, ...this.combat.enemies].filter(
       (entity) => before.get(entity) !== entity.currentHp,
     )
@@ -498,6 +509,7 @@ export class BattleScene extends Phaser.Scene {
       const delta = target.currentHp - (before.get(target) ?? target.currentHp)
       this.showFloatingNumber(target, Math.abs(delta), delta > 0)
       this.flashTarget(target)
+      audioManager.playSfx(delta > 0 ? 'heal' : 'hit_physical')
     })
     if (changedTargets.some((target) => (before.get(target) ?? target.currentHp) > target.currentHp)) {
       this.cameras.main.shake(100, 0.01)
@@ -507,6 +519,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private afterAction(targets: BattleEntity[], results: ReturnType<CombatSystem['executeSkill']>) {
+    const actedSkill = this.selectedSkill
     this.clearTargeting()
     this.setCommandsEnabled(false)
     this.refreshUi()
@@ -518,6 +531,14 @@ export class BattleScene extends Phaser.Scene {
       }
       this.showFloatingNumber(target, result.damage, result.healed, result.critical, result.effectiveness)
       this.flashTarget(target)
+      if (result.healed) {
+        audioManager.playSfx('heal')
+      } else if (result.critical || result.effectiveness === 'super_effective') {
+        audioManager.playSfx('critical_flash')
+        this.time.delayedCall(45, () => audioManager.playSfx('impact_heavy'))
+      } else {
+        audioManager.playSfx(actedSkill?.type === 'magical' ? 'hit_magical' : 'hit_physical')
+      }
       if (!result.healed) {
         this.cameras.main.shake(100, 0.01)
       }
@@ -538,10 +559,12 @@ export class BattleScene extends Phaser.Scene {
 
     if (Math.random() < 0.5) {
       this.combat.state = 'escaped'
+      audioManager.playSfx('ui_confirm')
       this.showMessage('Escaped!', 700, () => this.scene.start('OverworldScene', { continueGame: true }))
       return
     }
 
+    audioManager.playSfx('ui_cancel')
     this.showMessage('Could not escape!', 700, () => {
       this.combat?.finishAction()
       this.startTurn()
@@ -561,6 +584,8 @@ export class BattleScene extends Phaser.Scene {
       const reward = this.combat.getReward()
       const emberShards = this.initData.battleId ? 1 : 0
       const itemRewards = [{ itemId: 'health_potion', quantity: 1 }]
+      audioManager.playMusic('victory')
+      audioManager.playSfx('victory_fanfare')
       this.cameras.main.flash(450, 255, 241, 168, false)
       this.showMessage(`Victory!\nEXP +${reward.exp}   Gold +${reward.gold}\nRewards: Ember Shard x${emberShards}, Potion x1\nPress onward to claim your prize.`, 2800, () => {
         this.scene.start('OverworldScene', {

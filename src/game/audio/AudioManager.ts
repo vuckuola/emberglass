@@ -2,12 +2,28 @@ export type MusicTrack = 'title' | 'town' | 'dungeon' | 'battle' | 'boss' | 'vic
 
 export type SfxName =
   | 'ui_blip'
+  | 'ui_menu_open'
   | 'ui_confirm'
   | 'ui_cancel'
+  | 'item_use'
+  | 'chest_open'
+  | 'merchant_trade'
+  | 'objective_update'
+  | 'save_point'
+  | 'shrine_beat'
+  | 'field_interact'
+  | 'victory_fanfare'
+  | 'reward_gain'
+  | 'equipment_gain'
   | 'attack_swing'
+  | 'attack_thrust'
+  | 'magic_cast'
+  | 'defend_guard'
   | 'hit_physical'
   | 'hit_magical'
   | 'heal'
+  | 'impact_heavy'
+  | 'critical_flash'
   | 'stagger_break'
   | 'level_up'
 
@@ -61,6 +77,10 @@ const DEFAULT_SETTINGS: AudioSettings = {
 }
 const FADE_SECONDS = 0.3
 const LOOP_LOOK_AHEAD_SECONDS = 0.5
+
+const tideBellStageOffset = (stage: number): number => {
+  return Math.max(0, Math.min(4, Math.floor(stage))) * 18
+}
 
 export class AudioManager {
   private activeMusic: ActiveMusic | null = null
@@ -174,6 +194,11 @@ export class AudioManager {
           type: 'sine',
         })
         break
+      case 'ui_menu_open':
+        ;[392, 523, 659].forEach((frequency, index) => {
+          this.scheduleTone({ destination: sfxGain, duration: 0.09, frequency, gain: 0.075, release: 0.05, startTime: startTime + index * 0.035, type: 'triangle' })
+        })
+        break
       case 'ui_confirm':
         this.scheduleTone({
           destination: sfxGain,
@@ -214,6 +239,38 @@ export class AudioManager {
           type: 'triangle',
         })
         break
+      case 'item_use':
+        this.scheduleTone({ destination: sfxGain, duration: 0.2, endFrequency: 760, frequency: 310, gain: 0.12, release: 0.09, startTime, type: 'triangle' })
+        this.scheduleNoise({ destination: sfxGain, duration: 0.18, filterFrequency: 3200, filterQ: 1.2, filterType: 'highpass', gain: 0.05, release: 0.12, startTime: startTime + 0.02 })
+        break
+      case 'chest_open':
+        this.scheduleTone({ destination: sfxGain, duration: 0.16, endFrequency: 95, frequency: 150, gain: 0.16, release: 0.09, startTime, type: 'square' })
+        ;[523, 659, 784].forEach((frequency, index) => this.scheduleTone({ destination: sfxGain, duration: 0.18, frequency, gain: 0.085, release: 0.08, startTime: startTime + 0.11 + index * 0.055, type: 'sine' }))
+        break
+      case 'merchant_trade':
+        ;[988, 1175, 784].forEach((frequency, index) => this.scheduleTone({ destination: sfxGain, duration: 0.07, frequency, gain: 0.11, release: 0.03, startTime: startTime + index * 0.06, type: 'triangle' }))
+        break
+      case 'objective_update':
+        this.playResonancePulse('objective')
+        break
+      case 'save_point':
+        ;[330, 494, 660, 990].forEach((frequency, index) => this.scheduleTone({ attack: 0.02, destination: sfxGain, duration: 0.42, frequency, gain: 0.065, release: 0.28, startTime: startTime + index * 0.08, type: 'sine' }))
+        break
+      case 'shrine_beat':
+        this.playTideBell(0)
+        break
+      case 'field_interact':
+        this.scheduleTone({ destination: sfxGain, duration: 0.13, endFrequency: 280, frequency: 420, gain: 0.09, release: 0.07, startTime, type: 'triangle' })
+        break
+      case 'victory_fanfare':
+        ;[523, 659, 784, 1047].forEach((frequency, index) => this.scheduleTone({ destination: sfxGain, duration: index === 3 ? 0.42 : 0.14, frequency, gain: 0.13, release: 0.12, startTime: startTime + index * 0.12, type: 'triangle' }))
+        break
+      case 'reward_gain':
+        ;[784, 1047, 1319].forEach((frequency, index) => this.scheduleTone({ destination: sfxGain, duration: 0.12, frequency, gain: 0.1, release: 0.06, startTime: startTime + index * 0.07, type: 'sine' }))
+        break
+      case 'equipment_gain':
+        ;[196, 392, 587, 784].forEach((frequency, index) => this.scheduleTone({ attack: 0.01, destination: sfxGain, duration: 0.24, frequency, gain: 0.095, release: 0.12, startTime: startTime + index * 0.06, type: index === 0 ? 'triangle' : 'sine' }))
+        break
       case 'attack_swing':
         this.scheduleNoise({
           destination: sfxGain,
@@ -235,6 +292,17 @@ export class AudioManager {
           startTime,
           type: 'sawtooth',
         })
+        break
+      case 'attack_thrust':
+        this.scheduleNoise({ destination: sfxGain, duration: 0.07, filterFrequency: 2600, filterQ: 1.1, filterType: 'bandpass', gain: 0.18, release: 0.04, startTime })
+        this.scheduleTone({ destination: sfxGain, duration: 0.08, endFrequency: 260, frequency: 740, gain: 0.07, release: 0.04, startTime, type: 'sawtooth' })
+        break
+      case 'magic_cast':
+        ;[659, 880, 1175].forEach((frequency, index) => this.scheduleTone({ attack: 0.03, destination: sfxGain, duration: 0.24, endFrequency: frequency * 1.25, frequency, gain: 0.055, release: 0.15, startTime: startTime + index * 0.04, type: 'sine' }))
+        break
+      case 'defend_guard':
+        this.scheduleTone({ destination: sfxGain, duration: 0.18, endFrequency: 180, frequency: 260, gain: 0.15, release: 0.08, startTime, type: 'square' })
+        this.scheduleNoise({ destination: sfxGain, duration: 0.12, filterFrequency: 620, filterQ: 1.5, filterType: 'bandpass', gain: 0.12, release: 0.08, startTime: startTime + 0.02 })
         break
       case 'hit_physical':
         this.scheduleTone({
@@ -294,6 +362,13 @@ export class AudioManager {
           type: 'triangle',
         })
         break
+      case 'impact_heavy':
+        this.scheduleNoise({ destination: sfxGain, duration: 0.16, filterFrequency: 420, filterQ: 0.8, filterType: 'lowpass', gain: 0.25, release: 0.12, startTime })
+        this.scheduleTone({ destination: sfxGain, duration: 0.18, endFrequency: 48, frequency: 110, gain: 0.18, release: 0.12, startTime, type: 'sine' })
+        break
+      case 'critical_flash':
+        ;[1047, 1568, 2093].forEach((frequency, index) => this.scheduleTone({ destination: sfxGain, duration: 0.1, frequency, gain: 0.08, release: 0.06, startTime: startTime + index * 0.025, type: 'square' }))
+        break
       case 'stagger_break':
         this.scheduleNoise({
           destination: sfxGain,
@@ -334,6 +409,58 @@ export class AudioManager {
 
   playSFX(name: SfxName): void {
     this.playSfx(name)
+  }
+
+  playResonancePulse(mode: 'objective' | 'event' | 'reward' = 'event'): void {
+    const context = this.ensureContext()
+
+    if (!context || !this.sfxGain) {
+      return
+    }
+
+    void this.resume()
+
+    const startTime = context.currentTime + 0.01
+    const root = mode === 'objective' ? 294 : mode === 'reward' ? 330 : 247
+    const chord = [1, 1.5, 2, 3]
+    chord.forEach((ratio, index) => {
+      this.scheduleTone({
+        attack: 0.018,
+        destination: this.sfxGain as GainNode,
+        duration: 0.58 + index * 0.07,
+        endFrequency: root * ratio * 1.01,
+        frequency: root * ratio,
+        gain: 0.08 - index * 0.011,
+        release: 0.38,
+        startTime: startTime + index * 0.045,
+        type: index === 0 ? 'triangle' : 'sine',
+      })
+    })
+  }
+
+  playTideBell(stage = 0): void {
+    const context = this.ensureContext()
+
+    if (!context || !this.sfxGain) {
+      return
+    }
+
+    void this.resume()
+
+    const startTime = context.currentTime + 0.01
+    const base = 196 + tideBellStageOffset(stage)
+    ;[1, 2.01, 2.72, 3.98].forEach((ratio, index) => {
+      this.scheduleTone({
+        attack: 0.004,
+        destination: this.sfxGain as GainNode,
+        duration: 1.2 - index * 0.14,
+        frequency: base * ratio,
+        gain: 0.09 - index * 0.014,
+        release: 0.95,
+        startTime: startTime + index * 0.035,
+        type: 'sine',
+      })
+    })
   }
 
   async resume(): Promise<void> {

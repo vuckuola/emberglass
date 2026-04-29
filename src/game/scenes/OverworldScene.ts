@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { audioManager } from '../audio/AudioManager'
 import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
 import { CHARACTERS } from '../data/characters'
 import { ITEMS_BY_ID } from '../data/items'
@@ -73,6 +74,7 @@ export class OverworldScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor('#08090f')
+    audioManager.playMusic('town')
     this.walls.clear()
     this.saveNoticeShown = false
     this.busy = false
@@ -303,11 +305,14 @@ export class OverworldScene extends Phaser.Scene {
     if (tile.x === SAVE_TILE.x && tile.y === SAVE_TILE.y && !this.saveNoticeShown) {
       this.saveNoticeShown = true
       this.persist()
+      audioManager.playSfx('save_point')
+      this.cameras.main.flash(180, 159, 243, 255, false)
       this.showToast(this.flag('slice_complete') ? 'Progress saved. Luma Quay rests easier.' : 'Progress saved.')
     }
   }
 
   private interact() {
+    audioManager.playSfx('field_interact')
     const tile = this.getInteractionTile()
     const playerTile = this.player ? this.worldToTile(this.player.x, this.player.y) : null
     const isAt = (target: { x: number; y: number }) => this.matchesTile(tile, target) || this.matchesTile(playerTile, target)
@@ -340,6 +345,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private openChest() {
     if (this.saveData.openedChests.includes(CHEST_ID)) {
+      audioManager.playSfx('ui_cancel')
       this.showToast('The supply chest is empty.')
       return
     }
@@ -348,6 +354,8 @@ export class OverworldScene extends Phaser.Scene {
     this.addInventory('mana_potion', 1)
     this.addInventory('wind_charm', 1)
     this.saveData.party[0].equipment.charm = 'wind_charm'
+    audioManager.playSfx('chest_open')
+    this.time.delayedCall(230, () => audioManager.playSfx('equipment_gain'))
     this.showToast('Supply chest: Potion x2, Ether x1, Wind Charm equipped to Nara')
     this.persist()
     this.refreshHud()
@@ -373,11 +381,13 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.flag('elder_intro')) {
       this.setFlag('elder_intro')
       this.setObjective(OBJECTIVES.inspectMarker)
+      audioManager.playSfx('objective_update')
       this.showToast('Elder Maelin: Inspect the eastern marker; the field will answer.')
     } else if (!this.flag('field_marker_seen')) {
       this.showToast('Elder Maelin: The marker holds the route. Return after reading it.')
     } else if (!this.flag('field_battle_won')) {
       this.setObjective(OBJECTIVES.winBattle)
+      audioManager.playSfx('objective_update')
       this.showToast('Elder Maelin: Face the guardian past the marker.')
     } else if (!this.flag('slice_complete')) {
       this.setFlag('elder_rewarded')
@@ -386,6 +396,8 @@ export class OverworldScene extends Phaser.Scene {
       this.addInventory('warding_ember', 1)
       this.saveData.party[2].equipment.relic = 'warding_ember'
       this.setObjective(OBJECTIVES.visitShrineGate)
+      audioManager.playSfx('equipment_gain')
+      this.time.delayedCall(260, () => audioManager.playResonancePulse('event'))
       this.showEventBanner('Moonwake Route Opened', 'A green seam of light unlocks the old shrine gate east of the field.')
       this.showToast('Elder Maelin: Take the Warding Ember. Io equips it. Then follow the gate that woke for you.')
     } else {
@@ -403,6 +415,7 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.flag('field_marker_seen')) {
       this.setFlag('field_marker_seen')
       this.setObjective(OBJECTIVES.winBattle)
+      audioManager.playSfx('objective_update')
       this.showToast('Marker: Guardian wake confirmed. Step southeast to challenge it.')
     } else if (!this.flag('field_battle_won')) {
       this.showToast('Marker: The guardian waits in the red-lit field southeast.')
@@ -425,6 +438,7 @@ export class OverworldScene extends Phaser.Scene {
     this.busy = true
     this.saveCurrentPosition()
     this.persist()
+    audioManager.playSfx('shrine_beat')
     this.cameras.main.fadeOut(300, 0, 0, 0)
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       this.scene.start('BattleScene', {
@@ -452,10 +466,12 @@ export class OverworldScene extends Phaser.Scene {
     if (result.battleId === FIELD_BATTLE_ID) {
       this.setFlag('field_battle_won')
       this.setObjective(OBJECTIVES.returnToElder)
+      audioManager.playResonancePulse('objective')
     }
     this.persist()
     this.time.delayedCall(250, () => {
       this.showEventBanner('Guardian Felled', 'The field exhales. Far east, a shrine bell answers once.')
+      audioManager.playSfx('reward_gain')
       this.showToast(`Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
       this.refreshHud()
     })
@@ -464,8 +480,10 @@ export class OverworldScene extends Phaser.Scene {
   private ringTideBell() {
     if (!this.flag('tide_bell_rung')) {
       this.setFlag('tide_bell_rung')
+      audioManager.playTideBell(1)
       this.showToast('The tide bell rings without echo. Fisher charms flicker awake along the quay.')
     } else {
+      audioManager.playTideBell(this.flag('field_battle_won') ? 3 : 2)
       this.showToast(this.flag('field_battle_won') ? 'The bell tone is clear now, no longer warped by the guardian field.' : 'The bell answers with a nervous blue shimmer.')
     }
     this.persist()
@@ -484,6 +502,7 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.flag('watch_lantern_lit')) {
       this.setFlag('watch_lantern_lit')
       this.addInventory('health_potion', 1)
+      audioManager.playSfx('item_use')
       this.showToast('Watch Lantern: You trim the wick. A hidden keeper cache yields Potion x1.')
       this.refreshHud()
     } else {
@@ -500,6 +519,7 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.flag('shrine_gate_seen')) {
       this.setFlag('shrine_gate_seen')
       this.setObjective(OBJECTIVES.complete)
+      audioManager.playResonancePulse('event')
       this.showAreaBanner('Moonwake Shrine Approach', 'Beyond the gate, old glass ruins breathe with patient light.')
       this.showEventBanner('To Be Continued', 'The route forward is clear: Moonwake Shrine waits past Luma Quay.')
     } else {
@@ -530,6 +550,7 @@ export class OverworldScene extends Phaser.Scene {
     const heading = this.add.text(width / 2, height / 2 - 162, title, { color: '#ffd36e', fontFamily: 'Arial, sans-serif', fontSize: '24px' }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
     const body = this.add.text(width / 2, height / 2 - 130, subtitle, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 600 } }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
     this.tweens.add({ targets: [panel, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy() } })
+    this.cameras.main.flash(180, 255, 211, 110, false)
   }
 
   private openShop() {
@@ -538,12 +559,15 @@ export class OverworldScene extends Phaser.Scene {
       this.addInventory('ember_shard', -1)
       this.addInventory('mana_potion', 1)
       this.saveData.gold += 15
+      audioManager.playSfx('merchant_trade')
       this.showToast('Peddler: Ember Shard traded for Ether x1 and 15g.')
     } else if (this.saveData.gold >= 25) {
       this.saveData.gold -= 25
       this.addInventory('health_potion', 1)
+      audioManager.playSfx('merchant_trade')
       this.showToast('Peddler: Potion purchased for 25g.')
     } else {
+      audioManager.playSfx('ui_cancel')
       this.showToast('Peddler: Bring 25g for potions, or an Ember Shard for ether.')
     }
     this.persist()
@@ -556,6 +580,7 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     this.busy = true
+    audioManager.playSfx('ui_menu_open')
     const { width, height } = this.scale
     const container = this.add.container(0, 0).setScrollFactor(0).setDepth(200)
     const counts = this.getInventoryCounts()
@@ -595,6 +620,7 @@ export class OverworldScene extends Phaser.Scene {
     this.menuOverlay?.container.destroy()
     this.menuOverlay = undefined
     this.busy = false
+    audioManager.playSfx('ui_cancel')
   }
 
   private updateInteractionPrompt() {

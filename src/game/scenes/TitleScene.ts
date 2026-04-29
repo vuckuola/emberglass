@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { audioManager } from '../audio/AudioManager'
 import { SaveSystem } from '../systems/SaveSystem'
 
 const MENU_ITEMS = ['New Game', 'Continue', 'Settings', 'Credits'] as const
@@ -15,6 +16,7 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     const { width, height } = this.scale
+    audioManager.playMusic('title')
 
     this.drawGradientBackground(width, height)
     this.createEmbers(width, height)
@@ -123,6 +125,7 @@ export class TitleScene extends Phaser.Scene {
   private moveSelection(direction: number) {
     this.selectedIndex =
       (this.selectedIndex + direction + MENU_ITEMS.length) % MENU_ITEMS.length
+    audioManager.playSfx('ui_blip')
     this.updateSelection()
   }
 
@@ -138,6 +141,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private selectMenuItem(label: MenuItem) {
+    audioManager.playSfx(label === 'Continue' && !SaveSystem.getSlotInfo(0)?.exists ? 'ui_cancel' : 'ui_confirm')
     if (label === 'New Game') {
       this.scene.start('OverworldScene', { newGame: true })
       return
