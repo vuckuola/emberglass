@@ -234,48 +234,54 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: this.add.circle(saveX, saveY, 26, 0x52d9ff, 0.12).setDepth(1), scale: 1.35, alpha: 0.02, yoyo: true, repeat: -1, duration: 1100 })
 
     this.drawChest()
-    this.drawNpc(GUIDE_TILE, 0x3278d4, 'Guide Rin')
-    this.drawNpc(ELDER_TILE, 0xd7a85a, 'Elder')
-    this.drawNpc(MERCHANT_TILE, 0x45c987, 'Peddler')
-    this.drawMarker(MARKER_TILE, 0xff8a32, 'Ruin Marker')
-    this.drawMarker(SIGNPOST_TILE, 0x8ab4f8, 'Signpost')
-    this.drawMarker(TIDE_BELL_TILE, 0x75d6ff, 'Tide Bell')
-    this.drawMarker(MURAL_TILE, 0xc88dff, 'Glass Mural')
-    this.drawMarker(WATCH_LANTERN_TILE, 0xffd36e, 'Watch Lantern')
-    this.drawMarker(SHRINE_GATE_TILE, this.flag('slice_complete') ? 0x9ff36e : 0x5d536d, 'Shrine Gate')
+    this.drawNpc(GUIDE_TILE, GENERATED_ASSETS.npcs.guideRin, 'Guide Rin')
+    this.drawNpc(ELDER_TILE, GENERATED_ASSETS.npcs.elderMaelin, 'Elder')
+    this.drawNpc(MERCHANT_TILE, GENERATED_ASSETS.npcs.peddler, 'Peddler')
+    this.drawMarker(MARKER_TILE, GENERATED_ASSETS.objects.ruinMarker, 'Ruin Marker')
+    this.drawMarker(SIGNPOST_TILE, GENERATED_ASSETS.objects.signpost, 'Signpost')
+    this.drawMarker(TIDE_BELL_TILE, GENERATED_ASSETS.objects.tideBell, 'Tide Bell')
+    this.drawMarker(MURAL_TILE, GENERATED_ASSETS.objects.mural, 'Glass Mural')
+    this.drawMarker(WATCH_LANTERN_TILE, GENERATED_ASSETS.objects.watchLantern, 'Watch Lantern')
+    this.drawMarker(SHRINE_GATE_TILE, GENERATED_ASSETS.objects.shrineGate, 'Shrine Gate')
     if (this.flag('shrine_gate_seen')) {
-      this.drawMarker(SHRINE_FONT_TILE, this.flag('shrine_font_attuned') ? 0x75d6ff : 0x8ab4f8, 'Pilgrim Font')
-      this.drawMarker(SHRINE_SEAL_TILE, this.flag('shrine_guardian_won') ? 0xfff1a8 : 0xc88dff, this.flag('shrine_guardian_won') ? 'Awakened Seal' : 'Inner Seal')
+      this.drawMarker(SHRINE_FONT_TILE, GENERATED_ASSETS.objects.pilgrimFont, 'Pilgrim Font')
+      this.drawMarker(SHRINE_SEAL_TILE, GENERATED_ASSETS.objects.innerSeal, this.flag('shrine_guardian_won') ? 'Awakened Seal' : 'Inner Seal')
     }
-    this.drawMarker(FIELD_BATTLE_TILE, this.flag('field_battle_won') ? 0x45e67a : 0xd94747, this.flag('field_battle_won') ? 'Cleared Field' : 'Guardian Field')
+    this.drawMarker(FIELD_BATTLE_TILE, GENERATED_ASSETS.objects.guardianField, this.flag('field_battle_won') ? 'Cleared Field' : 'Guardian Field')
   }
 
   private drawChest() {
     const isOpen = this.saveData.openedChests.includes(CHEST_ID)
-    if (hasTexture(this, GENERATED_ASSETS.chest)) {
-      this.add.image(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), GENERATED_ASSETS.chest).setScale(1.25).setAlpha(isOpen ? 0.45 : 1).setDepth(4)
+    if (hasTexture(this, GENERATED_ASSETS.objects.chest)) {
+      this.add.image(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), GENERATED_ASSETS.objects.chest).setScale(0.5).setAlpha(isOpen ? 0.45 : 1).setDepth(4)
       return
     }
     this.add.rectangle(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), 32, 26, isOpen ? 0x403520 : 0x8a5a21).setStrokeStyle(3, 0xf0c040, 0.8).setDepth(4)
   }
 
-  private drawNpc(tile: { x: number; y: number }, color: number, label: string) {
-    const npc = hasTexture(this, GENERATED_ASSETS.npc)
-      ? this.add.sprite(this.tileCenter(tile.x), this.tileCenter(tile.y), GENERATED_ASSETS.npc, 0).setTint(color).setDepth(4)
-      : this.add.rectangle(this.tileCenter(tile.x), this.tileCenter(tile.y), 34, 44, color).setStrokeStyle(2, 0xffffff, 0.45).setDepth(4)
+  private drawNpc(tile: { x: number; y: number }, assetKey: string, label: string) {
+    const x = this.tileCenter(tile.x)
+    const y = this.tileCenter(tile.y)
+    const npc = hasTexture(this, assetKey)
+      ? this.add.image(x, y, assetKey).setScale(0.5).setDepth(4)
+      : this.add.rectangle(x, y, 34, 44, 0x888888).setStrokeStyle(2, 0xffffff, 0.45).setDepth(4)
     this.tweens.add({ targets: npc, y: npc.y - 3, yoyo: true, repeat: -1, duration: 1400 + tile.x * 45, ease: 'Sine.easeInOut' })
-    this.add.text(this.tileCenter(tile.x), this.tileCenter(tile.y) - 36, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(0.5).setDepth(5)
+    this.add.text(x, y - 36, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(0.5).setDepth(5)
   }
 
-  private drawMarker(tile: { x: number; y: number }, color: number, label: string) {
-    const marker = this.add.rectangle(this.tileCenter(tile.x), this.tileCenter(tile.y), 34, 34, color, 0.86).setStrokeStyle(2, 0xffffff, 0.35).setDepth(3)
-    this.tweens.add({ targets: marker, angle: 2, scale: 1.06, yoyo: true, repeat: -1, duration: 1200, ease: 'Sine.easeInOut' })
-    this.add.text(this.tileCenter(tile.x), this.tileCenter(tile.y) - 30, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(0.5).setDepth(5)
+  private drawMarker(tile: { x: number; y: number }, assetKey: string, label: string) {
+    const x = this.tileCenter(tile.x)
+    const y = this.tileCenter(tile.y)
+    const marker = hasTexture(this, assetKey)
+      ? this.add.image(x, y, assetKey).setScale(0.5).setDepth(3)
+      : this.add.rectangle(x, y, 34, 34, 0x888888, 0.86).setStrokeStyle(2, 0xffffff, 0.35).setDepth(3)
+    this.tweens.add({ targets: marker, angle: 2, scale: hasTexture(this, assetKey) ? 0.53 : 1.06, yoyo: true, repeat: -1, duration: 1200, ease: 'Sine.easeInOut' })
+    this.add.text(x, y - 30, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(0.5).setDepth(5)
   }
 
   private createPlayer(x: number, y: number): Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle {
     if (hasTexture(this, GENERATED_ASSETS.heroes.nara)) {
-      return this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setDepth(11)
+      return this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setScale(0.5).setDepth(11)
     }
     return this.add.rectangle(x, y, 32, 48, 0xff8a32).setDepth(11)
   }

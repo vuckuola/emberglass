@@ -1,69 +1,71 @@
 {
-  "generatedBy": "scripts/generate_assets.py",
+  "generatedBy": "scripts/gen_pixel_assets.py",
+  "style": "16-bit SNES JRPG pixel art (Breath of Fire IV / classic Zelda)",
+  "count": 16,
   "assets": [
     {
-      "path": "/assets/generated/hero_nara_sheet.png",
-      "purpose": "4-frame character sheet for hero_nara"
-    },
-    {
-      "path": "/assets/generated/hero_kael_sheet.png",
-      "purpose": "4-frame character sheet for hero_kael"
-    },
-    {
-      "path": "/assets/generated/hero_io_sheet.png",
-      "purpose": "4-frame character sheet for hero_io"
-    },
-    {
-      "path": "/assets/generated/npc_luma_elder_sheet.png",
-      "purpose": "4-frame character sheet for npc_luma_elder"
-    },
-    {
-      "path": "/assets/generated/enemy_vinecrawler.png",
-      "purpose": "battle sprite for vinecrawler"
-    },
-    {
-      "path": "/assets/generated/enemy_moss_knight.png",
-      "purpose": "battle sprite for moss_knight"
-    },
-    {
-      "path": "/assets/generated/enemy_sporefiend.png",
-      "purpose": "battle sprite for sporefiend"
-    },
-    {
-      "path": "/assets/generated/enemy_archive_guardian.png",
-      "purpose": "battle sprite for archive_guardian"
-    },
-    {
-      "path": "/assets/generated/icon_potion.png",
-      "purpose": "item icon for potion"
-    },
-    {
-      "path": "/assets/generated/icon_ether.png",
-      "purpose": "item icon for ether"
-    },
-    {
-      "path": "/assets/generated/icon_ember_shard.png",
-      "purpose": "item icon for ember shard"
-    },
-    {
-      "path": "/assets/generated/tileset_ember_quay_16.png",
-      "purpose": "16x16 overworld terrain tileset"
+      "path": "/assets/generated/bg_battle_skywell.png",
+      "purpose": "pixel-art asset for bg_battle_skywell"
     },
     {
       "path": "/assets/generated/bg_overworld_luma_quay.png",
-      "purpose": "overworld parallax background layer"
+      "purpose": "pixel-art asset for bg_overworld_luma_quay"
     },
     {
-      "path": "/assets/generated/bg_battle_skywell.png",
-      "purpose": "battle arena background"
+      "path": "/assets/generated/enemy_archive_guardian.png",
+      "purpose": "pixel-art asset for enemy_archive_guardian"
     },
     {
-      "path": "/assets/generated/ui_panel_frame.png",
-      "purpose": "ornate UI panel frame"
+      "path": "/assets/generated/enemy_moss_knight.png",
+      "purpose": "pixel-art asset for enemy_moss_knight"
+    },
+    {
+      "path": "/assets/generated/enemy_sporefiend.png",
+      "purpose": "pixel-art asset for enemy_sporefiend"
+    },
+    {
+      "path": "/assets/generated/enemy_vinecrawler.png",
+      "purpose": "pixel-art asset for enemy_vinecrawler"
+    },
+    {
+      "path": "/assets/generated/hero_io_sheet.png",
+      "purpose": "pixel-art asset for hero_io_sheet"
+    },
+    {
+      "path": "/assets/generated/hero_kael_sheet.png",
+      "purpose": "pixel-art asset for hero_kael_sheet"
+    },
+    {
+      "path": "/assets/generated/hero_nara_sheet.png",
+      "purpose": "pixel-art asset for hero_nara_sheet"
+    },
+    {
+      "path": "/assets/generated/icon_ember_shard.png",
+      "purpose": "pixel-art asset for icon_ember_shard"
+    },
+    {
+      "path": "/assets/generated/icon_ether.png",
+      "purpose": "pixel-art asset for icon_ether"
+    },
+    {
+      "path": "/assets/generated/icon_potion.png",
+      "purpose": "pixel-art asset for icon_potion"
+    },
+    {
+      "path": "/assets/generated/npc_luma_elder_sheet.png",
+      "purpose": "pixel-art asset for npc_luma_elder_sheet"
     },
     {
       "path": "/assets/generated/object_chest.png",
-      "purpose": "overworld treasure chest sprite"
+      "purpose": "pixel-art asset for object_chest"
+    },
+    {
+      "path": "/assets/generated/tileset_ember_quay_16.png",
+      "purpose": "pixel-art asset for tileset_ember_quay_16"
+    },
+    {
+      "path": "/assets/generated/ui_panel_frame.png",
+      "purpose": "pixel-art asset for ui_panel_frame"
     }
   ]
 }
