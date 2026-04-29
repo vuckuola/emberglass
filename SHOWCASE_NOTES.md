@@ -1,0 +1,40 @@
+# Emberglass Showcase Notes
+
+## Playable Now
+
+- A playable web JRPG vertical slice centered on Luma Quay.
+- Title screen, loading flow, overworld exploration, interactable NPCs/objects, save persistence, shop/chest rewards, field-gated battle, victory rewards, and a short post-battle shrine-gate objective chain.
+- Procedural/generated visual treatment and audio identity are present for the title, town, battle, victory, and interaction feedback.
+
+## Controls
+
+- Move/select: `WASD` or arrow keys.
+- Interact/confirm: `Enter` or `Space` in the overworld, `Enter` on the title screen.
+- Open/close menu: `M` or `Esc` in the overworld.
+- Reset demo save: `R` on the title screen deletes autosave slot `0` for a fresh showcase run.
+
+## Current Loop
+
+1. Start a new game from the title screen.
+2. Explore Luma Quay and speak with Elder Maelin.
+3. Inspect the eastern ruin marker.
+4. Enter the guardian field and win the battle.
+5. Return to Elder Maelin for the route-opening reward.
+6. Inspect the Moonwake Shrine gate for the current slice endpoint.
+7. Save at the skywell or use the title-screen reset helper before another demo pass.
+
+## QA Pass Summary
+
+- Ran code-level inspection of title, overworld, save, and battle state transitions.
+- Verified TypeScript with `npx tsc --noEmit` during the QA pass.
+- Added title-screen feedback for unavailable `Continue`, `Settings`, and `Credits` selections so menu items no longer fail silently.
+- Added a tiny title-screen reset helper for fresh demo-save behavior without browser devtools.
+- Clarified title-screen controls with an on-screen hint.
+
+## Known Limitations
+
+- The slice is intentionally small and ends at the Moonwake Shrine gate; there is no playable shrine dungeon yet.
+- Settings and credits are informational title prompts, not full submenus.
+- Save support currently uses autosave slot `0` only.
+- Battle presentation is functional for the showcase encounter, but enemy variety and long-form balancing are not final.
+- Browser audio may still require an initial user gesture before playback, depending on browser policy.
