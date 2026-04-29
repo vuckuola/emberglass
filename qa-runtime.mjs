@@ -84,7 +84,7 @@ async function evalScene(fn, arg) {
   return page.evaluate(fn, arg);
 }
 
-await page.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
+await page.goto('http://127.0.0.1:4173/emberglass/', { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas', { timeout: 10000 });
 await page.waitForFunction(() => !!window.__EMBERGLASS_GAME__, undefined, { timeout: 10000 });
 await page.evaluate(() => localStorage.clear());

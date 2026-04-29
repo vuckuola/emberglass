@@ -25,7 +25,7 @@ export const GENERATED_ASSETS = {
   chest: 'generated.object.chest',
 } as const
 
-const BASE = '/assets/generated/'
+const BASE = import.meta.env.BASE_URL + 'assets/generated/'
 
 export function preloadGeneratedAssets(scene: Phaser.Scene) {
   scene.load.spritesheet(GENERATED_ASSETS.heroes.nara, `${BASE}hero_nara_sheet.png`, { frameWidth: 32, frameHeight: 48 })
