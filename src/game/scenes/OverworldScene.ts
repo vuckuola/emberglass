@@ -112,6 +112,7 @@ export class OverworldScene extends Phaser.Scene {
 
     this.createHud()
     this.refreshHud()
+    this.cameras.main.fadeIn(420, 5, 6, 18)
     this.showAreaBanner('Luma Quay', 'A harbor village holding its breath beneath emberlit glass.')
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE)
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
@@ -459,13 +460,17 @@ export class OverworldScene extends Phaser.Scene {
     this.busy = true
     this.saveCurrentPosition()
     this.persist()
-    audioManager.playSfx('shrine_beat')
-    this.cameras.main.fadeOut(300, 0, 0, 0)
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-      this.scene.start('BattleScene', {
-        battleId: FIELD_BATTLE_ID,
-        enemyIds: ['vinecrawler', 'moss_knight'],
-        isBoss: false,
+    audioManager.playSfx('scene_whoosh')
+    this.showEventBanner('Guardian Field', 'The grass folds inward. Relics flare as the ward answers.')
+    this.cameras.main.shake(180, 0.004)
+    this.time.delayedCall(760, () => {
+      this.cameras.main.fadeOut(420, 0, 0, 0)
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+        this.scene.start('BattleScene', {
+          battleId: FIELD_BATTLE_ID,
+          enemyIds: ['vinecrawler', 'moss_knight'],
+          isBoss: false,
+        })
       })
     })
   }
@@ -512,8 +517,9 @@ export class OverworldScene extends Phaser.Scene {
           ? 'The shrine opens a silver route toward the Skywell. Nara equips the Skywell Shard.'
           : 'The field exhales. Far east, a shrine bell answers once.',
       )
-      audioManager.playSfx('reward_gain')
-      this.showToast(result.battleId === SHRINE_BOSS_BATTLE_ID ? `Climax reward: ${rewards.gold}g, Skywell Shard, party level 4. Save at the skywell.` : `Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
+      audioManager.playSfx(result.battleId === SHRINE_BOSS_BATTLE_ID ? 'equipment_gain' : 'reward_gain')
+      this.time.delayedCall(320, () => audioManager.playSfx('reward_gain'))
+      this.showRewardToast(result.battleId === SHRINE_BOSS_BATTLE_ID ? `Climax reward: ${rewards.gold}g, Skywell Shard, party level 4. Save at the skywell.` : `Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
       this.refreshHud()
     })
   }
@@ -561,6 +567,8 @@ export class OverworldScene extends Phaser.Scene {
       this.setFlag('shrine_gate_seen')
       this.setObjective(OBJECTIVES.attuneShrineFont)
       audioManager.playResonancePulse('event')
+      audioManager.playSfx('scene_whoosh')
+      this.cameras.main.shake(220, 0.004)
       this.showAreaBanner('Moonwake Shrine Approach', 'Beyond the gate, old glass ruins breathe with patient light.')
       this.showEventBanner('Moonwake Shrine', 'A narrow pilgrim route opens. The inner seal waits beyond the font.')
     } else {
@@ -615,9 +623,11 @@ export class OverworldScene extends Phaser.Scene {
     this.busy = true
     this.saveCurrentPosition()
     this.persist()
-    audioManager.playSfx('shrine_beat')
+    audioManager.playSfx('boss_sting')
     this.showEventBanner('Inner Seal Broken', 'The Moonwake Guardian descends to test the ember vow.')
-    this.time.delayedCall(1000, () => {
+    this.cameras.main.shake(360, 0.007)
+    this.time.delayedCall(1180, () => {
+      audioManager.playSfx('scene_whoosh')
       this.cameras.main.fadeOut(420, 6, 8, 22)
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
         this.scene.start('BattleScene', {
@@ -637,6 +647,15 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: text, y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => { if (this.toast === text) { this.toast = undefined }; text.destroy() } })
   }
 
+  private showRewardToast(message: string) {
+    const { width } = this.scale
+    this.toast?.destroy()
+    const panel = this.add.rectangle(width / 2, 128, 760, 48, 0x231525, 0.94).setScrollFactor(0).setDepth(101).setStrokeStyle(2, 0xffd36e, 0.72)
+    const text = this.add.text(width / 2, 128, message, { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '18px', wordWrap: { width: 700 } }).setOrigin(0.5).setScrollFactor(0).setDepth(102)
+    this.toast = text
+    this.tweens.add({ targets: [panel, text], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { if (this.toast === text) { this.toast = undefined }; panel.destroy(); text.destroy() } })
+  }
+
   private showAreaBanner(title: string, subtitle: string) {
     this.areaText?.setText(title)
     const { width } = this.scale
@@ -649,9 +668,11 @@ export class OverworldScene extends Phaser.Scene {
   private showEventBanner(title: string, subtitle: string) {
     const { width, height } = this.scale
     const panel = this.add.rectangle(width / 2, height / 2 - 140, 660, 92, 0x1b1020, 0.92).setScrollFactor(0).setDepth(130).setStrokeStyle(2, 0xffd36e, 0.72)
+    const accent = this.add.rectangle(width / 2, height / 2 - 186, 0, 2, 0xffd36e, 0.9).setScrollFactor(0).setDepth(131)
     const heading = this.add.text(width / 2, height / 2 - 162, title, { color: '#ffd36e', fontFamily: 'Arial, sans-serif', fontSize: '24px' }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
     const body = this.add.text(width / 2, height / 2 - 130, subtitle, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 600 } }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
-    this.tweens.add({ targets: [panel, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy() } })
+    this.tweens.add({ targets: accent, width: 560, duration: 260, ease: 'Sine.easeOut' })
+    this.tweens.add({ targets: [panel, accent, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); accent.destroy(); heading.destroy(); body.destroy() } })
     this.cameras.main.flash(180, 255, 211, 110, false)
   }
 

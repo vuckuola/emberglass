@@ -451,15 +451,13 @@ export class TitleScene extends Phaser.Scene {
 
     audioManager.playSfx(label === 'Continue' && !SaveSystem.getSlotInfo(0)?.exists ? 'ui_cancel' : 'ui_confirm')
     if (label === 'New Game') {
-      this.lockForTransition()
-      this.scene.start('OverworldScene', { newGame: true })
+      this.beginGameTransition({ newGame: true })
       return
     }
 
     if (label === 'Continue') {
       if (SaveSystem.getSlotInfo(0)?.exists) {
-        this.lockForTransition()
-        this.scene.start('OverworldScene', { continueGame: true })
+        this.beginGameTransition({ continueGame: true })
         return
       }
 
@@ -501,6 +499,26 @@ export class TitleScene extends Phaser.Scene {
   private lockForTransition() {
     this.transitionLocked = true
     this.buttons.forEach((button) => button.disableInteractive().setAlpha(0.55))
+  }
+
+  private beginGameTransition(data: { newGame?: boolean; continueGame?: boolean }) {
+    const { width, height } = this.scale
+    this.lockForTransition()
+    audioManager.playSfx('scene_whoosh')
+
+    const veil = this.add.rectangle(width / 2, height / 2, width, height, 0x050612, 0).setDepth(80)
+    const line = this.add.rectangle(width / 2, height / 2, 0, 2, 0xffd36e, 0.88).setDepth(81)
+    const caption = this.add.text(width / 2, height / 2 + 34, data.newGame ? 'The Skywell calls...' : 'Returning to the covenant...', {
+      color: '#fff1a8',
+      fontFamily: 'Georgia, serif',
+      fontSize: '20px',
+    }).setOrigin(0.5).setAlpha(0).setDepth(82)
+
+    this.tweens.add({ targets: line, width: width * 0.72, duration: 360, ease: 'Sine.easeOut' })
+    this.tweens.add({ targets: caption, alpha: 1, y: caption.y - 8, duration: 360, ease: 'Sine.easeOut' })
+    this.tweens.add({ targets: veil, alpha: 1, delay: 220, duration: 520, ease: 'Sine.easeInOut' })
+    this.cameras.main.fadeOut(780, 5, 6, 18)
+    this.time.delayedCall(820, () => this.scene.start('OverworldScene', data))
   }
 
   private showTitleNotice(message: string) {

@@ -15,6 +15,8 @@ export type SfxName =
   | 'victory_fanfare'
   | 'reward_gain'
   | 'equipment_gain'
+  | 'scene_whoosh'
+  | 'boss_sting'
   | 'attack_swing'
   | 'attack_thrust'
   | 'magic_cast'
@@ -270,6 +272,15 @@ export class AudioManager {
         break
       case 'equipment_gain':
         ;[196, 392, 587, 784].forEach((frequency, index) => this.scheduleTone({ attack: 0.01, destination: sfxGain, duration: 0.24, frequency, gain: 0.095, release: 0.12, startTime: startTime + index * 0.06, type: index === 0 ? 'triangle' : 'sine' }))
+        break
+      case 'scene_whoosh':
+        this.scheduleNoise({ destination: sfxGain, duration: 0.42, filterFrequency: 900, filterQ: 0.7, filterType: 'highpass', gain: 0.12, release: 0.24, startTime })
+        this.scheduleTone({ destination: sfxGain, duration: 0.35, endFrequency: 180, frequency: 520, gain: 0.06, release: 0.18, startTime: startTime + 0.02, type: 'triangle' })
+        break
+      case 'boss_sting':
+        this.scheduleTone({ destination: sfxGain, duration: 0.55, endFrequency: 65, frequency: 130, gain: 0.18, release: 0.32, startTime, type: 'sawtooth' })
+        ;[392, 466, 698].forEach((frequency, index) => this.scheduleTone({ attack: 0.015, destination: sfxGain, duration: 0.32, frequency, gain: 0.07, release: 0.2, startTime: startTime + 0.16 + index * 0.04, type: 'sine' }))
+        this.scheduleNoise({ destination: sfxGain, duration: 0.22, filterFrequency: 520, filterQ: 1.1, filterType: 'bandpass', gain: 0.13, release: 0.16, startTime: startTime + 0.08 })
         break
       case 'attack_swing':
         this.scheduleNoise({

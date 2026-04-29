@@ -93,6 +93,7 @@ export class BattleScene extends Phaser.Scene {
     this.createEntityViews()
     this.createBottomPanel(width, height)
     this.createTimeline()
+    this.cameras.main.fadeIn(360, 5, 6, 18)
 
     this.messageText = this.add
       .text(width / 2, height / 2, '', {
@@ -109,15 +110,17 @@ export class BattleScene extends Phaser.Scene {
 
   private showBattleIntro(onComplete: () => void) {
     if (!this.initData.isBoss) {
-      this.showMessage('Battle Start!\nRelics are active.', 1000, onComplete)
+      audioManager.playSfx('scene_whoosh')
+      this.showMessage('Battle Start!\nRelics are active.', 1100, onComplete)
       return
     }
 
     const boss = BOSSES.find((entry) => entry.id === this.initData.enemyIds?.[0])
     const intro = boss?.introDialogue.join('\n') ?? 'A shrine guardian bars the way.'
-    this.cameras.main.flash(360, 210, 180, 255, false)
-    audioManager.playSfx('shrine_beat')
-    this.showMessage(`${boss?.name ?? 'Guardian'}\n${intro}`, 2600, onComplete)
+    this.cameras.main.flash(420, 210, 180, 255, false)
+    this.cameras.main.shake(260, 0.006)
+    audioManager.playSfx('boss_sting')
+    this.showMessage(`${boss?.name ?? 'Guardian'}\n${intro}`, 3000, onComplete)
   }
 
   private drawBackground(width: number, height: number) {
@@ -641,14 +644,18 @@ export class BattleScene extends Phaser.Scene {
       audioManager.playMusic('victory')
       audioManager.playSfx('victory_fanfare')
       this.cameras.main.flash(450, 255, 241, 168, false)
-      this.showMessage(`Victory!\nEXP +${reward.exp}   Gold +${reward.gold}\n${bossReward?.rewardLine ?? `Rewards: Ember Shard x${emberShards}, Potion x1\nPress onward to claim your prize.`}`, bossReward ? 3600 : 2800, () => {
-        this.scene.start('OverworldScene', {
-          continueGame: true,
-          battleResult: {
-            battleId: this.initData.battleId,
-            victory: true,
-            rewards: { exp: reward.exp, gold: reward.gold, emberShards, items: itemRewards },
-          },
+      this.showVictoryCard(reward.exp, reward.gold, bossReward?.rewardLine ?? `Rewards: Ember Shard x${emberShards}, Potion x1\nPress onward to claim your prize.`, Boolean(bossReward))
+      this.showMessage(`Victory!\nEXP +${reward.exp}   Gold +${reward.gold}\n${bossReward?.rewardLine ?? `Rewards: Ember Shard x${emberShards}, Potion x1\nPress onward to claim your prize.`}`, bossReward ? 3900 : 3100, () => {
+        this.cameras.main.fadeOut(420, 5, 6, 18)
+        this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+          this.scene.start('OverworldScene', {
+            continueGame: true,
+            battleResult: {
+              battleId: this.initData.battleId,
+              victory: true,
+              rewards: { exp: reward.exp, gold: reward.gold, emberShards, items: itemRewards },
+            },
+          })
         })
       })
       return
@@ -745,11 +752,26 @@ export class BattleScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: text,
-      y: text.y - 34,
+      y: text.y - (critical || effectiveness === 'super_effective' ? 46 : 34),
       alpha: 0,
-      duration: 700,
+      scale: critical || effectiveness === 'super_effective' ? 1.18 : 1,
+      duration: critical || effectiveness === 'super_effective' ? 860 : 700,
+      ease: 'Sine.easeOut',
       onComplete: () => text.destroy(),
     })
+  }
+
+  private showVictoryCard(exp: number, gold: number, rewardLine: string, bossReward: boolean) {
+    const { width, height } = this.scale
+    const panel = this.add.rectangle(width / 2, height / 2 - 108, 600, bossReward ? 142 : 124, 0x181020, 0.94).setDepth(98).setStrokeStyle(2, bossReward ? 0xffd36e : 0x9ff3ff, 0.78)
+    const title = this.add.text(width / 2, height / 2 - 150, bossReward ? 'COVENANT FULFILLED' : 'VICTORY', { color: bossReward ? '#ffd36e' : '#fff1a8', fontFamily: 'Georgia, serif', fontSize: bossReward ? '24px' : '28px' }).setOrigin(0.5).setDepth(99)
+    const rewards = this.add.text(width / 2, height / 2 - 108, `EXP +${exp}    Gold +${gold}\n${rewardLine}`, { align: 'center', color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 540 } }).setOrigin(0.5).setDepth(99)
+    panel.setScale(0.92)
+    title.setAlpha(0)
+    rewards.setAlpha(0)
+    this.tweens.add({ targets: panel, scale: 1, duration: 260, ease: 'Back.easeOut' })
+    this.tweens.add({ targets: [title, rewards], alpha: 1, delay: 120, duration: 240 })
+    this.tweens.add({ targets: [panel, title, rewards], alpha: 0, delay: bossReward ? 3150 : 2450, duration: 360, onComplete: () => { panel.destroy(); title.destroy(); rewards.destroy() } })
   }
 
   private flashTarget(entity: BattleEntity) {
