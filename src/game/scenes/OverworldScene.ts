@@ -88,6 +88,7 @@ export class OverworldScene extends Phaser.Scene {
   private toast?: Phaser.GameObjects.Text
   private touchMove: { x: number; y: number } | null = null
   private touchButtons: Phaser.GameObjects.GameObject[] = []
+  private activeBanners: Phaser.GameObjects.GameObject[] = []
 
   constructor() {
     super('OverworldScene')
@@ -106,6 +107,7 @@ export class OverworldScene extends Phaser.Scene {
     this.toast = undefined
     this.touchMove = null
     this.touchButtons = []
+    this.activeBanners = []
     this.objectiveText = undefined
     this.inventoryText = undefined
     this.promptText = undefined
@@ -117,6 +119,7 @@ export class OverworldScene extends Phaser.Scene {
 
     this.applyBattleResult()
     this.createBackdrop()
+    this.createAmbientParticles()
     this.createMap()
     this.createObjects()
 
@@ -271,6 +274,40 @@ export class OverworldScene extends Phaser.Scene {
     }
   }
 
+  private createAmbientParticles() {
+    const saveCenterX = SAVE_TILE.x * TILE_SIZE + TILE_SIZE / 2
+    const saveCenterY = SAVE_TILE.y * TILE_SIZE + TILE_SIZE / 2
+    for (let i = 0; i < 6; i++) {
+      const fx = Phaser.Math.Between(saveCenterX - 48, saveCenterX + 48)
+      const fy = Phaser.Math.Between(saveCenterY - 48, saveCenterY + 48)
+      const glow = this.add.circle(fx, fy, Phaser.Math.FloatBetween(1.5, 3), 0x9ff3ff, Phaser.Math.FloatBetween(0.15, 0.35)).setDepth(5)
+      this.tweens.add({
+        targets: glow,
+        x: `+=${Phaser.Math.Between(-20, 20)}`,
+        y: `+=${Phaser.Math.Between(-30, -10)}`,
+        alpha: 0.05,
+        yoyo: true, repeat: -1,
+        duration: Phaser.Math.Between(2500, 4500),
+        ease: 'Sine.easeInOut',
+      })
+    }
+    for (let i = 0; i < 8; i++) {
+      const gx = Phaser.Math.Between(48, MAP_WIDTH * TILE_SIZE - 48)
+      const gy = Phaser.Math.Between(48, MAP_HEIGHT * TILE_SIZE - 48)
+      const leaf = this.add.circle(gx, gy, 1.5, 0x6abf5e, 0.12).setDepth(0.3)
+      this.tweens.add({
+        targets: leaf,
+        x: `+=${Phaser.Math.Between(-12, 12)}`,
+        y: `+=${Phaser.Math.Between(-16, 16)}`,
+        alpha: 0.02,
+        yoyo: true, repeat: -1,
+        duration: Phaser.Math.Between(3000, 5000),
+        delay: Phaser.Math.Between(0, 2000),
+        ease: 'Sine.easeInOut',
+      })
+    }
+  }
+
   private createObjects() {
     const saveX = this.tileCenter(SAVE_TILE.x)
     const saveY = this.tileCenter(SAVE_TILE.y)
@@ -337,13 +374,21 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createHud() {
-    const panel = this.add.rectangle(12, 12, 500, 86, 0x111320, 0.82).setOrigin(0).setScrollFactor(0).setDepth(90)
+    const panel = this.add.rectangle(12, 12, 500, 86, 0x0b0e1a, 0.88).setOrigin(0).setScrollFactor(0).setDepth(90)
     panel.setStrokeStyle(2, 0xf3e1b0, 0.68)
-    this.objectiveText = this.add.text(26, 23, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 460 } }).setScrollFactor(0).setDepth(91)
+    const cornerSize = 10
+    const g = this.add.graphics().setScrollFactor(0).setDepth(90.1)
+    g.lineStyle(2, 0xf0c040, 0.5)
+    g.beginPath(); g.moveTo(14, 18 + cornerSize); g.lineTo(14, 18); g.lineTo(14 + cornerSize, 18); g.strokePath()
+    g.beginPath(); g.moveTo(504, 18 + cornerSize); g.lineTo(504, 18); g.lineTo(504 - cornerSize, 18); g.strokePath()
+    g.beginPath(); g.moveTo(14, 86 - cornerSize); g.lineTo(14, 86); g.lineTo(14 + cornerSize, 86); g.strokePath()
+    g.beginPath(); g.moveTo(504, 86 - cornerSize); g.lineTo(504, 86); g.lineTo(504 - cornerSize, 86); g.strokePath()
+
+    this.objectiveText = this.add.text(26, 23, '', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '15px', fontStyle: 'bold', wordWrap: { width: 460 } }).setScrollFactor(0).setDepth(91)
     this.inventoryText = this.add.text(26, 69, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px' }).setScrollFactor(0).setDepth(91)
-    const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 160, 34, 0x111320, 0.82).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
-    areaPanel.setStrokeStyle(2, 0xf3e1b0, 0.58)
-    this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
+    const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 160, 34, 0x0b0e1a, 0.88).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
+    areaPanel.setStrokeStyle(1, 0xf3e1b0, 0.5)
+    this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
     this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'Move • ACT/Enter • Menu', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '14px', backgroundColor: '#08091aaa', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
   }
 
@@ -748,9 +793,13 @@ export class OverworldScene extends Phaser.Scene {
   private showToast(message: string) {
     const { width } = this.scale
     this.toast?.destroy()
-    const text = this.add.text(width / 2, 126, message, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px', backgroundColor: '#0a0a2e', padding: { x: 14, y: 8 }, wordWrap: { width: 720 } }).setOrigin(0.5).setScrollFactor(0).setDepth(100)
+    const panelW = Math.min(message.length * 9 + 48, 740)
+    const panelH = Math.max(Math.ceil(message.length / 70) * 22 + 32, 40)
+    const panel = this.add.rectangle(width / 2, 126, panelW, panelH, 0x0a0e1e, 0.92).setScrollFactor(0).setDepth(100).setStrokeStyle(1, 0xd4a84b, 0.6)
+    const accent = this.add.rectangle(width / 2 - panelW / 2 + 3, 126, 3, panelH - 8, 0xd4a84b, 0.8).setScrollFactor(0).setDepth(100.1)
+    const text = this.add.text(width / 2, 126, message, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: panelW - 32 } }).setOrigin(0.5).setScrollFactor(0).setDepth(101)
     this.toast = text
-    this.tweens.add({ targets: text, y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => { if (this.toast === text) { this.toast = undefined }; text.destroy() } })
+    this.tweens.add({ targets: [panel, accent, text], y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => { if (this.toast === text) { this.toast = undefined }; panel.destroy(); accent.destroy(); text.destroy() } })
   }
 
   private showRewardToast(message: string) {
@@ -763,22 +812,26 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private showAreaBanner(title: string, subtitle: string) {
+    this.dismissBanners()
     this.areaText?.setText(title)
     const { width } = this.scale
     const panel = this.add.rectangle(width / 2, 84, 580, 84, 0x071023, 0.88).setScrollFactor(0).setDepth(120).setStrokeStyle(1, 0x9ff3ff, 0.5)
-    const heading = this.add.text(width / 2, 62, title, { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '26px' }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
+    const heading = this.add.text(width / 2, 62, title, { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '26px' }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
     const body = this.add.text(width / 2, 92, subtitle, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 520 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
-    this.tweens.add({ targets: [panel, heading, body], alpha: 0, delay: 2300, duration: 600, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy() } })
+    this.activeBanners.push(panel, heading, body)
+    this.tweens.add({ targets: [panel, heading, body], alpha: 0, delay: 2300, duration: 600, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
   }
 
   private showEventBanner(title: string, subtitle: string) {
+    this.dismissBanners()
     const { width, height } = this.scale
     const panel = this.add.rectangle(width / 2, height / 2 - 140, 660, 92, 0x1b1020, 0.92).setScrollFactor(0).setDepth(130).setStrokeStyle(2, 0xffd36e, 0.72)
     const accent = this.add.rectangle(width / 2, height / 2 - 186, 0, 2, 0xffd36e, 0.9).setScrollFactor(0).setDepth(131)
-    const heading = this.add.text(width / 2, height / 2 - 162, title, { color: '#ffd36e', fontFamily: 'Arial, sans-serif', fontSize: '24px' }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
+    const heading = this.add.text(width / 2, height / 2 - 162, title, { color: '#ffd36e', fontFamily: 'Georgia, serif', fontSize: '24px' }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
     const body = this.add.text(width / 2, height / 2 - 130, subtitle, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 600 } }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
+    this.activeBanners.push(panel, accent, heading, body)
     this.tweens.add({ targets: accent, width: 560, duration: 260, ease: 'Sine.easeOut' })
-    this.tweens.add({ targets: [panel, accent, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); accent.destroy(); heading.destroy(); body.destroy() } })
+    this.tweens.add({ targets: [panel, accent, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); accent.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
     this.cameras.main.flash(180, 255, 211, 110, false)
   }
 
@@ -795,6 +848,7 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private showDemoCompletionCard() {
+    this.dismissBanners()
     const { width, height } = this.scale
     const panel = this.add.rectangle(width / 2, height / 2 + 20, 760, 210, 0x071023, 0.96).setScrollFactor(0).setDepth(180).setStrokeStyle(2, 0x9ff3ff, 0.82)
     const heading = this.add.text(width / 2, height / 2 - 58, 'Thanks for Playing the Emberglass Demo', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
@@ -855,9 +909,13 @@ export class OverworldScene extends Phaser.Scene {
     ]
 
     container.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.72))
-    const panel = this.add.rectangle(width / 2, height / 2, 700, 500, 0x0b1028, 0.97).setStrokeStyle(2, 0x8ab4f8, 0.7)
+    const panel = this.add.rectangle(width / 2, height / 2, 700, 500, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.6)
     container.add(panel)
-    container.add(this.add.text(width / 2 - 310, height / 2 - 220, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '28px' }))
+    container.add(this.add.rectangle(width / 2, height / 2 - 136, 640, 1, 0xd4a84b, 0.3))
+    container.add(this.add.rectangle(width / 2, height / 2 - 52, 640, 1, 0xd4a84b, 0.3))
+    container.add(this.add.rectangle(width / 2, height / 2 + 160, 640, 1, 0xd4a84b, 0.3))
+    container.add(this.add.text(width / 2 - 310, height / 2 - 220, '◈', { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '22px' }))
+    container.add(this.add.text(width / 2 - 290, height / 2 - 220, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }))
     container.add(this.add.text(width / 2 + 170, height / 2 - 216, `${this.saveData.gold}g`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '24px' }))
     container.add(this.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 610 } }))
     container.add(this.add.text(width / 2 - 310, height / 2 - 86, `Status / Equipment\n${relicLines}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 5 }))
@@ -871,6 +929,11 @@ export class OverworldScene extends Phaser.Scene {
     this.menuOverlay = undefined
     this.busy = false
     audioManager.playSfx('ui_cancel')
+  }
+
+  private dismissBanners() {
+    this.activeBanners.forEach((b) => b.destroy())
+    this.activeBanners = []
   }
 
   private updateInteractionPrompt() {
@@ -903,8 +966,8 @@ export class OverworldScene extends Phaser.Scene {
                             ? 'Challenge inner seal'
                         : isAt(FIELD_BATTLE_TILE)
                           ? 'Enter guardian field'
-                          : 'Move WASD/Arrows or touch pad • Interact Enter/Space/ACT • Menu M/Esc'
-    this.promptText?.setText(prompt.startsWith('Move') ? prompt : `${prompt}  [Enter/ACT]`)
+                          : 'Move WASD/Arrows • Enter: Interact • M/Esc: Menu'
+    this.promptText?.setText(prompt.startsWith('Move') ? prompt : `${prompt}  [Enter]`)
   }
 
   private createDefaultSaveData(): SaveData {

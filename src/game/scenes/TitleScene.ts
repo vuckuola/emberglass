@@ -98,7 +98,7 @@ export class TitleScene extends Phaser.Scene {
     })
 
     this.add
-      .text(width / 2, height - 18, 'v0.1', {
+      .text(width / 2, height - 18, 'v0.18', {
         color: '#3a3050',
         fontFamily: 'Arial, sans-serif',
         fontSize: '12px',

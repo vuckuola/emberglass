@@ -1,7 +1,7 @@
 {
   "name": "emberglass",
   "private": true,
-  "version": "0.15.0",
+  "version": "0.18.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,7 +32,7 @@
     "globals": "^17.5.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10",
+    "vite": "^8.8.10",
     "vitest": "^4.1.5"
   }
 }

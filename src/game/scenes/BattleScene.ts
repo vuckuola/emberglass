@@ -63,6 +63,8 @@ export class BattleScene extends Phaser.Scene {
   private waitingForTarget = false
   private actionLocked = false
   private battleEnding = false
+  private deathEffectDone = new Set<BattleEntity>()
+  private turnIndicator?: Phaser.GameObjects.Ellipse
   private commandKeys?: Record<'one' | 'two' | 'three' | 'four' | 'five', Phaser.Input.Keyboard.Key>
 
   constructor() {
@@ -278,11 +280,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createEntityView(entity: BattleEntity, x: number, y: number, color: number) {
+    this.add.ellipse(x, y + (entity.isPlayer ? 38 : 30), entity.isPlayer ? 36 : 42, 12, 0x050510, 0.4).setDepth(0.5)
+
     const rect = this.add
       .rectangle(x, y, entity.isPlayer ? 58 : 68, entity.isPlayer ? 72 : 58, color)
       .setStrokeStyle(2, 0xffffff, 0.25)
       .setInteractive({ useHandCursor: true })
       .setAlpha(this.getEntityAssetKey(entity) ? 0.18 : 1)
+      .setDepth(1)
 
     rect.on('pointerdown', () => this.tryTarget(entity))
 
@@ -299,15 +304,23 @@ export class BattleScene extends Phaser.Scene {
     const label = this.add
       .text(x, y - 54, entity.name, {
         color: '#ffffff',
-        fontFamily: 'Arial, sans-serif',
+        fontFamily: 'Georgia, serif',
         fontSize: '14px',
       })
       .setOrigin(0.5)
 
-    this.add.rectangle(x, y + 48, 80, 8, 0x2b1010).setOrigin(0.5)
-    const hpFill = this.add.rectangle(x - 40, y + 48, 80, 8, 0x36d65f).setOrigin(0, 0.5)
-    this.add.rectangle(x, y + 60, 60, 6, 0x10182b).setOrigin(0.5)
-    const mpFill = this.add.rectangle(x - 30, y + 60, 60, 6, 0x3f8cff).setOrigin(0, 0.5)
+    const hpTrackW = 90
+    const hpBarH = 8
+    const hpY = y + 48
+    this.add.rectangle(x - hpTrackW / 2, hpY, hpTrackW, hpBarH, 0x1a0a0a, 0.8).setOrigin(0, 0.5).setDepth(10)
+    this.add.rectangle(x - hpTrackW / 2, hpY, hpTrackW, hpBarH, 0x2a1515, 0.6).setOrigin(0, 0.5).setStrokeStyle(1, 0x4a2020, 0.4).setDepth(10.1)
+    const hpFill = this.add.rectangle(x - hpTrackW / 2 + 1, hpY, hpTrackW - 2, hpBarH - 2, 0x36d65f).setOrigin(0, 0.5).setDepth(10.2)
+    const mpTrackW = 68
+    const mpBarH = 6
+    const mpY = y + 60
+    this.add.rectangle(x - mpTrackW / 2, mpY, mpTrackW, mpBarH, 0x0a0a1a, 0.8).setOrigin(0, 0.5).setDepth(10)
+    this.add.rectangle(x - mpTrackW / 2, mpY, mpTrackW, mpBarH, 0x101828, 0.6).setOrigin(0, 0.5).setStrokeStyle(1, 0x1a2040, 0.4).setDepth(10.1)
+    const mpFill = this.add.rectangle(x - mpTrackW / 2 + 1, mpY, mpTrackW - 2, mpBarH - 2, 0x3f8cff).setOrigin(0, 0.5).setDepth(10.2)
 
     this.entityViews.set(entity, { rect, sprite, label, hpFill, mpFill, color })
   }
@@ -324,27 +337,36 @@ export class BattleScene extends Phaser.Scene {
     if (hasTexture(this, GENERATED_ASSETS.uiPanel)) {
       this.add.image(width / 2, panelY + 70, GENERATED_ASSETS.uiPanel).setDisplaySize(width - 24, 132).setAlpha(0.96)
     } else {
-      this.add.rectangle(0, panelY, 960, 140, 0x0a0a2e, 0.96).setOrigin(0)
-      this.add.rectangle(0, panelY, 960, 2, 0x8ab4f8, 0.35).setOrigin(0)
+      this.add.rectangle(12, panelY, width - 24, 132, 0x0a0e1e, 0.96).setOrigin(0).setStrokeStyle(2, 0xf3e1b0, 0.55).setDepth(49)
+      const cg = this.add.graphics().setDepth(49.1)
+      cg.lineStyle(2, 0xf0c040, 0.4)
+      cg.beginPath(); cg.moveTo(18, panelY + 10); cg.lineTo(18, panelY + 2); cg.lineTo(26, panelY + 2); cg.strokePath()
+      cg.beginPath(); cg.moveTo(width - 18, panelY + 10); cg.lineTo(width - 18, panelY + 2); cg.lineTo(width - 26, panelY + 2); cg.strokePath()
     }
 
     this.currentNameText = this.add.text(32, panelY + 22, '', {
       color: '#f0c040',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: 'Georgia, serif',
       fontSize: '20px',
-    })
+    }).setDepth(50)
 
     COMMANDS.forEach((command, index) => {
+      const numText = this.add.text(34 + index * 116, panelY + 62, `${index + 1}`, {
+        color: '#f0c040',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '12px',
+      }).setDepth(50)
       const text = this.add
-        .text(34 + index * 116, panelY + 72, command, {
+        .text(50 + index * 116, panelY + 72, command, {
           color: '#d7d9e8',
           fontFamily: 'Arial, sans-serif',
           fontSize: '20px',
         })
         .setInteractive({ useHandCursor: true })
+        .setDepth(50)
       text.on('pointerdown', () => this.selectCommand(command))
-      text.on('pointerover', () => text.setColor('#fff1a8'))
-      text.on('pointerout', () => text.setColor('#d7d9e8'))
+      text.on('pointerover', () => { text.setColor('#fff1a8'); numText.setColor('#fff1a8') })
+      text.on('pointerout', () => { text.setColor('#d7d9e8'); numText.setColor('#f0c040') })
       this.commandTexts.push(text)
     })
 
@@ -352,7 +374,7 @@ export class BattleScene extends Phaser.Scene {
       color: '#8ab4f8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
-    })
+    }).setDepth(50)
   }
 
   private createTimeline() {
@@ -410,6 +432,24 @@ export class BattleScene extends Phaser.Scene {
     this.clearTargeting()
     this.setCommandsEnabled(true)
     this.currentNameText?.setText(this.combat.currentEntity.name)
+    this.updateTurnIndicator()
+  }
+
+  private updateTurnIndicator() {
+    this.turnIndicator?.destroy()
+    if (!this.combat?.currentEntity) return
+    const view = this.entityViews.get(this.combat.currentEntity)
+    if (!view) return
+    const target = view.sprite ?? view.rect
+    this.turnIndicator = this.add.ellipse(target.x, target.y, 70, 80, 0xfff1a8, 0).setDepth(0.8)
+    this.tweens.add({
+      targets: this.turnIndicator,
+      alpha: 0.12,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    })
   }
 
   private selectCommand(command: Command) {
@@ -697,14 +737,18 @@ export class BattleScene extends Phaser.Scene {
     for (const [entity, view] of this.entityViews) {
       const hpRatio = Phaser.Math.Clamp(entity.currentHp / entity.maxHp, 0, 1)
       const mpRatio = entity.maxMp > 0 ? Phaser.Math.Clamp(entity.currentMp / entity.maxMp, 0, 1) : 0
-      view.hpFill.width = 80 * hpRatio
-      view.hpFill.fillColor = hpRatio > 0.35 ? 0x36d65f : 0xd94747
-      view.mpFill.width = 60 * mpRatio
+      view.hpFill.width = Math.max(0, 86 * hpRatio)
+      view.hpFill.fillColor = hpRatio > 0.35 ? 0x36d65f : hpRatio > 0.15 ? 0xd4a020 : 0xd94747
+      view.mpFill.width = Math.max(0, 64 * mpRatio)
       view.rect.setAlpha(entity.isAlive ? 1 : 0.35)
       if (view.sprite) {
         view.sprite.setAlpha(entity.isAlive ? 1 : 0.35)
       }
       view.label.setAlpha(entity.isAlive ? 1 : 0.45)
+      if (!entity.isAlive && !this.deathEffectDone.has(entity)) {
+        this.deathEffectDone.add(entity)
+        this.addDeathEffect(view)
+      }
     }
 
     this.currentNameText?.setText(this.combat.currentEntity?.name ?? '')
@@ -791,7 +835,40 @@ export class BattleScene extends Phaser.Scene {
     rewards.setAlpha(0)
     this.tweens.add({ targets: panel, scale: 1, duration: 260, ease: 'Back.easeOut' })
     this.tweens.add({ targets: [title, rewards], alpha: 1, delay: 120, duration: 240 })
+    for (let i = 0; i < 5; i++) {
+      const sparkle = this.add.circle(width / 2 + Phaser.Math.Between(-180, 180), height / 2 - 108, Phaser.Math.Between(2, 4), 0xffd36e, 0.8).setDepth(99.5)
+      this.tweens.add({
+        targets: sparkle,
+        y: sparkle.y - Phaser.Math.Between(30, 60),
+        alpha: 0,
+        duration: Phaser.Math.Between(600, 1200),
+        delay: 200 + i * 80,
+        ease: 'Sine.easeOut',
+        onComplete: () => sparkle.destroy(),
+      })
+    }
     this.tweens.add({ targets: [panel, title, rewards], alpha: 0, delay: bossReward ? 3150 : 2450, duration: 360, onComplete: () => { panel.destroy(); title.destroy(); rewards.destroy() } })
+  }
+
+  private addDeathEffect(view: EntityView) {
+    const target = view.sprite ?? view.rect
+    if (!target || !target.active) return
+    const x = target.x
+    const y = target.y
+    for (let i = 0; i < 3; i++) {
+      const particle = this.add.circle(x, y, Phaser.Math.Between(2, 4), 0xffffff, 0.7).setDepth(95)
+      this.tweens.add({
+        targets: particle,
+        x: x + Phaser.Math.Between(-30, 30),
+        y: y + Phaser.Math.Between(-30, 10),
+        alpha: 0,
+        scale: 0.2,
+        duration: Phaser.Math.Between(400, 700),
+        delay: i * 60,
+        ease: 'Sine.easeOut',
+        onComplete: () => particle.destroy(),
+      })
+    }
   }
 
   private flashTarget(entity: BattleEntity) {
@@ -804,8 +881,8 @@ export class BattleScene extends Phaser.Scene {
       targets: view.sprite ?? view.rect,
       duration: 80,
       onStart: () => {
-        view.sprite?.setTint(0xffffff)
-        view.rect.setFillStyle(0xffffff)
+        view.sprite?.setTint(0xff4444)
+        view.rect.setFillStyle(0xff4444)
       },
       onComplete: () => {
         view.sprite?.clearTint()
