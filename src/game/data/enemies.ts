@@ -1,0 +1,301 @@
+import type { CharacterStats } from "./characters";
+
+export interface EnemySkill {
+  id: string;
+  name: string;
+  power: number;
+  element: string;
+  chance: number;
+}
+
+export type EnemyBehavior = "aggressive" | "cautious" | "support";
+
+export interface Enemy {
+  id: string;
+  name: string;
+  region: string;
+  stats: CharacterStats;
+  skills: EnemySkill[];
+  weaknesses: string[];
+  resists: string[];
+  expReward: number;
+  goldReward: number;
+  spritePath: string;
+  behavior: EnemyBehavior;
+}
+
+export const ENEMIES: Enemy[] = [
+  {
+    id: "vinecrawler",
+    name: "Vinecrawler",
+    region: "verdant",
+    stats: { hp: 45, mp: 8, atk: 9, def: 5, spd: 8, mag: 3 },
+    skills: [
+      { id: "thorn_lash", name: "Thorn Lash", power: 10, element: "earth", chance: 0.65 },
+      { id: "sap_bite", name: "Sap Bite", power: 8, element: "dark", chance: 0.35 },
+    ],
+    weaknesses: ["ember", "ice"],
+    resists: ["earth"],
+    expReward: 12,
+    goldReward: 8,
+    spritePath: "assets/sprites/enemies/vinecrawler.png",
+    behavior: "aggressive",
+  },
+  {
+    id: "moss_knight",
+    name: "Moss Knight",
+    region: "verdant",
+    stats: { hp: 70, mp: 10, atk: 11, def: 10, spd: 5, mag: 4 },
+    skills: [
+      { id: "rusted_cleave", name: "Rusted Cleave", power: 13, element: "neutral", chance: 0.55 },
+      { id: "moss_guard", name: "Moss Guard", power: 0, element: "earth", chance: 0.25 },
+      { id: "shield_bash", name: "Shield Bash", power: 9, element: "neutral", chance: 0.2 },
+    ],
+    weaknesses: ["ember"],
+    resists: ["earth"],
+    expReward: 18,
+    goldReward: 14,
+    spritePath: "assets/sprites/enemies/moss_knight.png",
+    behavior: "cautious",
+  },
+  {
+    id: "sporefiend",
+    name: "Sporefiend",
+    region: "verdant",
+    stats: { hp: 55, mp: 18, atk: 7, def: 6, spd: 6, mag: 11 },
+    skills: [
+      { id: "spore_cloud", name: "Spore Cloud", power: 9, element: "dark", chance: 0.45 },
+      { id: "toxic_puff", name: "Toxic Puff", power: 11, element: "earth", chance: 0.4 },
+      { id: "drain_root", name: "Drain Root", power: 8, element: "dark", chance: 0.15 },
+    ],
+    weaknesses: ["wind", "ember"],
+    resists: ["dark"],
+    expReward: 16,
+    goldReward: 12,
+    spritePath: "assets/sprites/enemies/sporefiend.png",
+    behavior: "support",
+  },
+  {
+    id: "archive_guardian",
+    name: "Archive Guardian",
+    region: "verdant",
+    stats: { hp: 90, mp: 20, atk: 13, def: 12, spd: 6, mag: 9 },
+    skills: [
+      { id: "page_cleave", name: "Page Cleave", power: 14, element: "neutral", chance: 0.45 },
+      { id: "glyph_snare", name: "Glyph Snare", power: 12, element: "arcane", chance: 0.35 },
+      { id: "seal_ward", name: "Seal Ward", power: 0, element: "light", chance: 0.2 },
+    ],
+    weaknesses: ["ember", "dark"],
+    resists: ["arcane"],
+    expReward: 26,
+    goldReward: 22,
+    spritePath: "assets/sprites/enemies/archive_guardian.png",
+    behavior: "cautious",
+  },
+  {
+    id: "glass_scorpion",
+    name: "Glass Scorpion",
+    region: "mirrordrift",
+    stats: { hp: 60, mp: 10, atk: 12, def: 7, spd: 11, mag: 4 },
+    skills: [
+      { id: "crystal_sting", name: "Crystal Sting", power: 13, element: "earth", chance: 0.6 },
+      { id: "fracture_claw", name: "Fracture Claw", power: 11, element: "neutral", chance: 0.4 },
+    ],
+    weaknesses: ["thunder"],
+    resists: ["light"],
+    expReward: 20,
+    goldReward: 18,
+    spritePath: "assets/sprites/enemies/glass_scorpion.png",
+    behavior: "aggressive",
+  },
+  {
+    id: "sand_wraith",
+    name: "Sand Wraith",
+    region: "mirrordrift",
+    stats: { hp: 80, mp: 24, atk: 8, def: 8, spd: 10, mag: 13 },
+    skills: [
+      { id: "mirage_bolt", name: "Mirage Bolt", power: 14, element: "arcane", chance: 0.5 },
+      { id: "sandveil", name: "Sandveil", power: 0, element: "earth", chance: 0.3 },
+      { id: "dry_grasp", name: "Dry Grasp", power: 10, element: "dark", chance: 0.2 },
+    ],
+    weaknesses: ["wind", "light"],
+    resists: ["earth"],
+    expReward: 24,
+    goldReward: 20,
+    spritePath: "assets/sprites/enemies/sand_wraith.png",
+    behavior: "cautious",
+  },
+  {
+    id: "mirror_phantom",
+    name: "Mirror Phantom",
+    region: "mirrordrift",
+    stats: { hp: 65, mp: 28, atk: 7, def: 6, spd: 13, mag: 14 },
+    skills: [
+      { id: "reflected_pain", name: "Reflected Pain", power: 12, element: "arcane", chance: 0.45 },
+      { id: "split_image", name: "Split Image", power: 0, element: "light", chance: 0.35 },
+      { id: "silver_hex", name: "Silver Hex", power: 10, element: "dark", chance: 0.2 },
+    ],
+    weaknesses: ["earth", "dark"],
+    resists: ["light"],
+    expReward: 27,
+    goldReward: 24,
+    spritePath: "assets/sprites/enemies/mirror_phantom.png",
+    behavior: "support",
+  },
+  {
+    id: "dune_sentinel",
+    name: "Dune Sentinel",
+    region: "mirrordrift",
+    stats: { hp: 100, mp: 16, atk: 15, def: 13, spd: 6, mag: 6 },
+    skills: [
+      { id: "pillar_slam", name: "Pillar Slam", power: 16, element: "earth", chance: 0.55 },
+      { id: "glass_shield", name: "Glass Shield", power: 0, element: "light", chance: 0.25 },
+      { id: "sun_crack", name: "Sun Crack", power: 13, element: "ember", chance: 0.2 },
+    ],
+    weaknesses: ["ice"],
+    resists: ["earth"],
+    expReward: 34,
+    goldReward: 30,
+    spritePath: "assets/sprites/enemies/dune_sentinel.png",
+    behavior: "aggressive",
+  },
+  {
+    id: "storm_imp",
+    name: "Storm Imp",
+    region: "thunderveil",
+    stats: { hp: 55, mp: 18, atk: 9, def: 5, spd: 14, mag: 11 },
+    skills: [
+      { id: "spark_jab", name: "Spark Jab", power: 11, element: "thunder", chance: 0.55 },
+      { id: "static_laugh", name: "Static Laugh", power: 8, element: "thunder", chance: 0.45 },
+    ],
+    weaknesses: ["earth"],
+    resists: ["thunder"],
+    expReward: 28,
+    goldReward: 24,
+    spritePath: "assets/sprites/enemies/storm_imp.png",
+    behavior: "aggressive",
+  },
+  {
+    id: "volt_crawler",
+    name: "Volt Crawler",
+    region: "thunderveil",
+    stats: { hp: 75, mp: 16, atk: 13, def: 9, spd: 12, mag: 8 },
+    skills: [
+      { id: "charged_bite", name: "Charged Bite", power: 14, element: "thunder", chance: 0.5 },
+      { id: "ground_scuttle", name: "Ground Scuttle", power: 10, element: "earth", chance: 0.3 },
+      { id: "jolt_carapace", name: "Jolt Carapace", power: 0, element: "thunder", chance: 0.2 },
+    ],
+    weaknesses: ["ice", "earth"],
+    resists: ["thunder"],
+    expReward: 32,
+    goldReward: 28,
+    spritePath: "assets/sprites/enemies/volt_crawler.png",
+    behavior: "cautious",
+  },
+  {
+    id: "thunder_hawk",
+    name: "Thunder Hawk",
+    region: "thunderveil",
+    stats: { hp: 85, mp: 22, atk: 14, def: 7, spd: 16, mag: 10 },
+    skills: [
+      { id: "divebolt", name: "Divebolt", power: 15, element: "thunder", chance: 0.55 },
+      { id: "razor_wing", name: "Razor Wing", power: 12, element: "wind", chance: 0.3 },
+      { id: "stormcry", name: "Stormcry", power: 0, element: "thunder", chance: 0.15 },
+    ],
+    weaknesses: ["earth", "ice"],
+    resists: ["wind"],
+    expReward: 36,
+    goldReward: 34,
+    spritePath: "assets/sprites/enemies/thunder_hawk.png",
+    behavior: "aggressive",
+  },
+  {
+    id: "crystal_golem",
+    name: "Crystal Golem",
+    region: "thunderveil",
+    stats: { hp: 110, mp: 18, atk: 17, def: 16, spd: 4, mag: 8 },
+    skills: [
+      { id: "quartz_slam", name: "Quartz Slam", power: 17, element: "earth", chance: 0.55 },
+      { id: "prism_charge", name: "Prism Charge", power: 15, element: "thunder", chance: 0.3 },
+      { id: "mineral_shell", name: "Mineral Shell", power: 0, element: "earth", chance: 0.15 },
+    ],
+    weaknesses: ["ice"],
+    resists: ["thunder"],
+    expReward: 44,
+    goldReward: 42,
+    spritePath: "assets/sprites/enemies/crystal_golem.png",
+    behavior: "cautious",
+  },
+  {
+    id: "emberglass_wisp",
+    name: "Emberglass Wisp",
+    region: "skywell",
+    stats: { hp: 70, mp: 30, atk: 7, def: 7, spd: 14, mag: 16 },
+    skills: [
+      { id: "glassflame", name: "Glassflame", power: 15, element: "ember", chance: 0.45 },
+      { id: "skywell_pulse", name: "Skywell Pulse", power: 13, element: "arcane", chance: 0.35 },
+      { id: "flicker", name: "Flicker", power: 0, element: "light", chance: 0.2 },
+    ],
+    weaknesses: ["dark", "ice"],
+    resists: ["ember"],
+    expReward: 42,
+    goldReward: 40,
+    spritePath: "assets/sprites/enemies/emberglass_wisp.png",
+    behavior: "support",
+  },
+  {
+    id: "memory_phantom",
+    name: "Memory Phantom",
+    region: "skywell",
+    stats: { hp: 95, mp: 34, atk: 10, def: 8, spd: 12, mag: 17 },
+    skills: [
+      { id: "remembered_wound", name: "Remembered Wound", power: 16, element: "dark", chance: 0.5 },
+      { id: "echo_step", name: "Echo Step", power: 0, element: "arcane", chance: 0.25 },
+      { id: "mind_shear", name: "Mind Shear", power: 14, element: "arcane", chance: 0.25 },
+    ],
+    weaknesses: ["light"],
+    resists: ["dark"],
+    expReward: 50,
+    goldReward: 46,
+    spritePath: "assets/sprites/enemies/memory_phantom.png",
+    behavior: "support",
+  },
+  {
+    id: "void_walker",
+    name: "Void Walker",
+    region: "skywell",
+    stats: { hp: 120, mp: 38, atk: 16, def: 12, spd: 10, mag: 16 },
+    skills: [
+      { id: "void_rend", name: "Void Rend", power: 18, element: "dark", chance: 0.5 },
+      { id: "gravity_well", name: "Gravity Well", power: 15, element: "arcane", chance: 0.3 },
+      { id: "phase_cut", name: "Phase Cut", power: 13, element: "neutral", chance: 0.2 },
+    ],
+    weaknesses: ["light", "arcane"],
+    resists: ["dark"],
+    expReward: 62,
+    goldReward: 58,
+    spritePath: "assets/sprites/enemies/void_walker.png",
+    behavior: "aggressive",
+  },
+  {
+    id: "skywell_guardian",
+    name: "Skywell Guardian",
+    region: "skywell",
+    stats: { hp: 130, mp: 42, atk: 18, def: 17, spd: 8, mag: 14 },
+    skills: [
+      { id: "covenant_spear", name: "Covenant Spear", power: 19, element: "light", chance: 0.45 },
+      { id: "skywell_barrier", name: "Skywell Barrier", power: 0, element: "arcane", chance: 0.25 },
+      { id: "emberglass_burst", name: "Emberglass Burst", power: 17, element: "ember", chance: 0.3 },
+    ],
+    weaknesses: ["dark", "thunder"],
+    resists: ["light"],
+    expReward: 70,
+    goldReward: 65,
+    spritePath: "assets/sprites/enemies/skywell_guardian.png",
+    behavior: "cautious",
+  },
+];
+
+export const ENEMIES_BY_ID: Record<string, Enemy> = Object.fromEntries(
+  ENEMIES.map((enemy) => [enemy.id, enemy]),
+);
