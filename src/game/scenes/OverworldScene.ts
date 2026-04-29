@@ -124,6 +124,9 @@ export class OverworldScene extends Phaser.Scene {
     this.refreshHud()
     this.cameras.main.fadeIn(420, 5, 6, 18)
     this.showAreaBanner('Luma Quay', 'A harbor village holding its breath beneath emberlit glass.')
+    if (!continuedSave && !this.initData.continueGame) {
+      this.time.delayedCall(850, () => this.showFirstSessionGuide())
+    }
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE)
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
   }
@@ -418,7 +421,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private talkGuide() {
     if (!this.flag('elder_intro')) {
-      this.showToast('Guide Rin: Hear that glass-singing? The quay only does that before storms—or prophecies.')
+      this.showToast('Guide Rin: First stop is Elder Maelin north of here. I will keep pointing the safe route if you get turned around.')
       return
     }
     if (!this.flag('field_marker_seen')) {
@@ -541,6 +544,7 @@ export class OverworldScene extends Phaser.Scene {
     if (result.battleId === SHRINE_BOSS_BATTLE_ID) {
       this.setFlag('shrine_guardian_won')
       this.setObjective(OBJECTIVES.complete)
+      this.setFlag('demo_complete')
       this.addInventory('skywell_shard', 1)
       this.saveData.party[0].equipment.relic = 'skywell_shard'
       this.saveData.party.forEach((member) => {
@@ -560,6 +564,9 @@ export class OverworldScene extends Phaser.Scene {
       this.time.delayedCall(320, () => audioManager.playSfx('reward_gain'))
       this.showRewardToast(result.battleId === SHRINE_BOSS_BATTLE_ID ? `Climax reward: ${rewards.gold}g, Skywell Shard, party level 4. Save at the skywell.` : `Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
       this.refreshHud()
+      if (result.battleId === SHRINE_BOSS_BATTLE_ID) {
+        this.time.delayedCall(3050, () => this.showDemoCompletionCard())
+      }
     })
   }
 
@@ -713,6 +720,27 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: accent, width: 560, duration: 260, ease: 'Sine.easeOut' })
     this.tweens.add({ targets: [panel, accent, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); accent.destroy(); heading.destroy(); body.destroy() } })
     this.cameras.main.flash(180, 255, 211, 110, false)
+  }
+
+  private showFirstSessionGuide() {
+    if (this.flag('elder_intro')) {
+      return
+    }
+
+    audioManager.playSfx('objective_update')
+    this.showEventBanner('Demo Start', 'A 15-minute vertical slice: meet Elder Maelin, follow the objective, and chase the Moonwake Shrine route.')
+    this.time.delayedCall(450, () => {
+      this.showToast('Start here: move north to Elder Maelin. Guide Rin, signposts, and the gold objective will keep you on the authored path.')
+    })
+  }
+
+  private showDemoCompletionCard() {
+    const { width, height } = this.scale
+    const panel = this.add.rectangle(width / 2, height / 2 + 20, 760, 210, 0x071023, 0.96).setScrollFactor(0).setDepth(180).setStrokeStyle(2, 0x9ff3ff, 0.82)
+    const heading = this.add.text(width / 2, height / 2 - 58, 'Thanks for Playing the Emberglass Demo', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
+    const body = this.add.text(width / 2, height / 2 + 2, 'You cleared the public-demo route: Luma Quay, the guardian field, Moonwake Shrine, and the first Skywell clue. Save at the Skywell to keep this clear file, or return to the title and press R to reset for another showcase run.', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', align: 'center', wordWrap: { width: 690 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
+    const footer = this.add.text(width / 2, height / 2 + 82, 'This slice represents onboarding, exploration, relic combat, boss payoff, and save/load flow.', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '15px', align: 'center', wordWrap: { width: 660 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
+    this.tweens.add({ targets: [panel, heading, body, footer], alpha: 0, delay: 7200, duration: 900, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy(); footer.destroy() } })
   }
 
   private openShop() {

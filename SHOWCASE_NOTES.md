@@ -3,7 +3,7 @@
 ## Playable Now
 
 - A playable web JRPG vertical slice centered on Luma Quay.
-- Title screen, loading flow, overworld exploration, interactable NPCs/objects, save persistence, shop/chest rewards, field-gated battle, victory rewards, and a short post-battle shrine-gate objective chain.
+- Title screen, loading flow, first-session demo guidance, overworld exploration, interactable NPCs/objects, save persistence, shop/chest rewards, field-gated battle, shrine boss route, victory rewards, and an end-of-slice thank-you card.
 - Procedural/generated visual treatment and audio identity are present for the title, town, battle, victory, and interaction feedback.
 
 ## Controls
@@ -16,12 +16,13 @@
 ## Current Loop
 
 1. Start a new game from the title screen.
-2. Explore Luma Quay and speak with Elder Maelin.
+2. Follow the demo-start guidance, then speak with Elder Maelin.
 3. Inspect the eastern ruin marker.
 4. Enter the guardian field and win the battle.
 5. Return to Elder Maelin for the route-opening reward.
-6. Inspect the Moonwake Shrine gate for the current slice endpoint.
-7. Save at the skywell or use the title-screen reset helper before another demo pass.
+6. Inspect the Moonwake Shrine gate, attune the pilgrim font, and break the inner seal.
+7. Defeat the Moonwake Guardian and read the thank-you/demo-complete payoff card.
+8. Save at the skywell or use the title-screen reset helper before another demo pass.
 
 ## QA Pass Summary
 
@@ -30,10 +31,12 @@
 - Added title-screen feedback for unavailable `Continue`, `Settings`, and `Credits` selections so menu items no longer fail silently.
 - Added a tiny title-screen reset helper for fresh demo-save behavior without browser devtools.
 - Clarified title-screen controls with an on-screen hint.
+- Added an authored first-session demo-start banner so new players know the intended route and scope.
+- Added a deterministic demo-complete flag and end-of-slice thank-you card after the Moonwake Guardian route.
 
 ## Known Limitations
 
-- The slice is intentionally small and ends at the Moonwake Shrine gate; there is no playable shrine dungeon yet.
+- The slice is intentionally small and represents a public-demo vertical slice rather than a full chapter.
 - Settings and credits are informational title prompts, not full submenus.
 - Save support currently uses autosave slot `0` only.
 - Battle presentation is functional for the showcase encounter, but enemy variety and long-form balancing are not final.

@@ -161,6 +161,10 @@ await clickGameObject(() => {
 });
 await waitForScene('OverworldScene');
 steps.push('Started New Game into OverworldScene');
+await page.waitForTimeout(1000);
+assert((await getSceneTexts()).some((text) => text.includes('Demo Start')));
+assert((await getSceneTexts()).some((text) => text.includes('15-minute vertical slice')));
+steps.push('Verified first-session demo start guidance appears');
 
 let overworldState = await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
@@ -375,10 +379,13 @@ steps.push('Verified boss victory return flow');
 
 const finalState = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
 assert.equal(finalState.flags.shrine_guardian_won, true);
+assert.equal(finalState.flags.demo_complete, true);
 assert.equal(finalState.currentObjective, 'Save at the skywell. Moonwake Shrine has answered.');
 assert.equal(finalState.party[0].equipment.relic, 'skywell_shard');
 assert(finalState.party.every((member) => member.level >= 4));
-steps.push('Verified final shrine completion rewards, equipment, and level bump');
+await page.waitForTimeout(3400);
+assert((await getSceneTexts()).some((text) => text.includes('Thanks for Playing the Emberglass Demo')));
+steps.push('Verified final shrine completion rewards, equipment, level bump, and demo card');
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
