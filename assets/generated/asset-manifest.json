@@ -1,0 +1,69 @@
+{
+  "generatedBy": "scripts/generate_assets.py",
+  "assets": [
+    {
+      "path": "/assets/generated/hero_nara_sheet.png",
+      "purpose": "4-frame character sheet for hero_nara"
+    },
+    {
+      "path": "/assets/generated/hero_kael_sheet.png",
+      "purpose": "4-frame character sheet for hero_kael"
+    },
+    {
+      "path": "/assets/generated/hero_io_sheet.png",
+      "purpose": "4-frame character sheet for hero_io"
+    },
+    {
+      "path": "/assets/generated/npc_luma_elder_sheet.png",
+      "purpose": "4-frame character sheet for npc_luma_elder"
+    },
+    {
+      "path": "/assets/generated/enemy_vinecrawler.png",
+      "purpose": "battle sprite for vinecrawler"
+    },
+    {
+      "path": "/assets/generated/enemy_moss_knight.png",
+      "purpose": "battle sprite for moss_knight"
+    },
+    {
+      "path": "/assets/generated/enemy_sporefiend.png",
+      "purpose": "battle sprite for sporefiend"
+    },
+    {
+      "path": "/assets/generated/enemy_archive_guardian.png",
+      "purpose": "battle sprite for archive_guardian"
+    },
+    {
+      "path": "/assets/generated/icon_potion.png",
+      "purpose": "item icon for potion"
+    },
+    {
+      "path": "/assets/generated/icon_ether.png",
+      "purpose": "item icon for ether"
+    },
+    {
+      "path": "/assets/generated/icon_ember_shard.png",
+      "purpose": "item icon for ember shard"
+    },
+    {
+      "path": "/assets/generated/tileset_ember_quay_16.png",
+      "purpose": "16x16 overworld terrain tileset"
+    },
+    {
+      "path": "/assets/generated/bg_overworld_luma_quay.png",
+      "purpose": "overworld parallax background layer"
+    },
+    {
+      "path": "/assets/generated/bg_battle_skywell.png",
+      "purpose": "battle arena background"
+    },
+    {
+      "path": "/assets/generated/ui_panel_frame.png",
+      "purpose": "ornate UI panel frame"
+    },
+    {
+      "path": "/assets/generated/object_chest.png",
+      "purpose": "overworld treasure chest sprite"
+    }
+  ]
+}
