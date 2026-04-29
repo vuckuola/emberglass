@@ -383,8 +383,12 @@ assert.equal(finalState.flags.demo_complete, true);
 assert.equal(finalState.currentObjective, 'Save at the skywell. Moonwake Shrine has answered.');
 assert.equal(finalState.party[0].equipment.relic, 'skywell_shard');
 assert(finalState.party.every((member) => member.level >= 4));
-await page.waitForTimeout(3400);
-assert((await getSceneTexts()).some((text) => text.includes('Thanks for Playing the Emberglass Demo')));
+await page.waitForFunction(async () => {
+  const texts = Array.from(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].children.list)
+    .filter((child) => child && child.type === 'Text')
+    .map((child) => child.text ?? '');
+  return texts.some((text) => text.includes('Thanks for Playing the Emberglass Demo'));
+}, undefined, { timeout: 7000 });
 steps.push('Verified final shrine completion rewards, equipment, level bump, and demo card');
 
 await evalScene(() => {
