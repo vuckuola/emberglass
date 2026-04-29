@@ -90,12 +90,12 @@ export class SaveSystem {
       return false
     }
 
-    if (typeof save.gold !== 'number' || save.gold < 0) {
+    if (!this.isNonNegativeFiniteNumber(save.gold)) {
       return false
     }
 
-    save.timestamp = typeof save.timestamp === 'number' ? save.timestamp : Date.now()
-    save.slot = typeof save.slot === 'number' ? save.slot : 0
+    save.timestamp = this.isNonNegativeFiniteNumber(save.timestamp) ? save.timestamp : Date.now()
+    save.slot = typeof save.slot === 'number' && this.isValidSlot(save.slot) ? save.slot : 0
     save.openedChests = this.isStringArray(save.openedChests) ? save.openedChests : []
     save.completedEvents = this.isStringArray(save.completedEvents) ? save.completedEvents : []
     save.currentObjective =
@@ -107,7 +107,7 @@ export class SaveSystem {
       : { exp: 0, gold: 0, emberShards: 0 }
     save.quests = this.isStringRecord(save.quests) ? save.quests : {}
     save.flags = this.isBooleanRecord(save.flags) ? save.flags : {}
-    save.playTime = typeof save.playTime === 'number' ? save.playTime : 0
+    save.playTime = this.isNonNegativeFiniteNumber(save.playTime) ? save.playTime : 0
 
     return true
   }
@@ -154,9 +154,9 @@ export class SaveSystem {
     const member = value as SaveData['party'][number]
     if (
       typeof member.characterId !== 'string' ||
-      typeof member.level !== 'number' ||
-      typeof member.currentHp !== 'number' ||
-      typeof member.currentMp !== 'number'
+      !this.isNonNegativeFiniteNumber(member.level) ||
+      !this.isNonNegativeFiniteNumber(member.currentHp) ||
+      !this.isNonNegativeFiniteNumber(member.currentMp)
     ) {
       return false
     }
@@ -193,7 +193,7 @@ export class SaveSystem {
     const item = value as SaveData['inventory'][number]
     return (
       typeof item.itemId === 'string' &&
-      Number.isFinite(item.quantity) &&
+      Number.isInteger(item.quantity) &&
       item.quantity >= 0
     )
   }
@@ -206,8 +206,8 @@ export class SaveSystem {
     const position = value as SaveData['position']
     return (
       typeof position.mapId === 'string' &&
-      typeof position.x === 'number' &&
-      typeof position.y === 'number'
+      Number.isFinite(position.x) &&
+      Number.isFinite(position.y)
     )
   }
 
@@ -236,13 +236,14 @@ export class SaveSystem {
 
     const rewards = value as SaveData['battleRewards']
     return (
-      typeof rewards.exp === 'number' &&
-      rewards.exp >= 0 &&
-      typeof rewards.gold === 'number' &&
-      rewards.gold >= 0 &&
-      typeof rewards.emberShards === 'number' &&
-      rewards.emberShards >= 0
+      this.isNonNegativeFiniteNumber(rewards.exp) &&
+      this.isNonNegativeFiniteNumber(rewards.gold) &&
+      this.isNonNegativeFiniteNumber(rewards.emberShards)
     )
+  }
+
+  private static isNonNegativeFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0
   }
 
   private static isNullableString(value: unknown): value is string | null {

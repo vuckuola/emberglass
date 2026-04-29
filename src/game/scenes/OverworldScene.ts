@@ -68,6 +68,7 @@ export class OverworldScene extends Phaser.Scene {
   private promptText?: Phaser.GameObjects.Text
   private areaText?: Phaser.GameObjects.Text
   private menuOverlay?: MenuOverlay
+  private toast?: Phaser.GameObjects.Text
 
   constructor() {
     super('OverworldScene')
@@ -83,10 +84,10 @@ export class OverworldScene extends Phaser.Scene {
     this.walls.clear()
     this.saveNoticeShown = false
     this.busy = false
+    this.toast = undefined
 
-    this.saveData = this.initData.continueGame
-      ? SaveSystem.load(0) ?? this.createDefaultSaveData()
-      : this.createDefaultSaveData()
+    const continuedSave = this.initData.continueGame ? SaveSystem.load(0) : null
+    this.saveData = continuedSave ?? this.createDefaultSaveData()
 
     this.applyBattleResult()
     this.createBackdrop()
@@ -353,6 +354,9 @@ export class OverworldScene extends Phaser.Scene {
       this.startShrineGuardianBattle()
     } else if (isAt(FIELD_BATTLE_TILE)) {
       this.startFieldBattle()
+    } else {
+      audioManager.playSfx('ui_cancel')
+      this.showToast('Nothing responds here. Check the objective or face an object and press Enter/Space.')
     }
   }
 
@@ -440,6 +444,10 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private startFieldBattle() {
+    if (this.busy) {
+      return
+    }
+
     if (!this.flag('field_marker_seen')) {
       this.showToast('A red ward blocks the field. Inspect the marker first.')
       return
@@ -464,7 +472,12 @@ export class OverworldScene extends Phaser.Scene {
 
   private applyBattleResult() {
     const result = this.initData.battleResult
-    if (!result?.victory) {
+    if (!result) {
+      return
+    }
+
+    if (!result.victory) {
+      this.showToast('You regroup at Luma Quay. Check supplies, then try again when ready.')
       return
     }
     const rewards = result.rewards ?? { exp: 0, gold: 0, emberShards: 0, items: [] }
@@ -583,6 +596,10 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private startShrineGuardianBattle() {
+    if (this.busy) {
+      return
+    }
+
     if (!this.flag('shrine_gate_seen')) {
       this.showToast('The inner shrine is unreachable until the Moonwake Gate opens.')
       return
@@ -614,8 +631,10 @@ export class OverworldScene extends Phaser.Scene {
 
   private showToast(message: string) {
     const { width } = this.scale
+    this.toast?.destroy()
     const text = this.add.text(width / 2, 126, message, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px', backgroundColor: '#0a0a2e', padding: { x: 14, y: 8 }, wordWrap: { width: 720 } }).setOrigin(0.5).setScrollFactor(0).setDepth(100)
-    this.tweens.add({ targets: text, y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => text.destroy() })
+    this.toast = text
+    this.tweens.add({ targets: text, y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => { if (this.toast === text) { this.toast = undefined }; text.destroy() } })
   }
 
   private showAreaBanner(title: string, subtitle: string) {
@@ -765,7 +784,10 @@ export class OverworldScene extends Phaser.Scene {
 
   private persist() {
     this.saveCurrentPosition()
-    SaveSystem.autoSave(this.saveData)
+    if (!SaveSystem.autoSave(this.saveData)) {
+      audioManager.playSfx('ui_cancel')
+      this.showToast('Save failed. Progress remains playable, but browser storage may be full or blocked.')
+    }
   }
 
   private saveCurrentPosition() {

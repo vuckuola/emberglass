@@ -61,6 +61,8 @@ export class BattleScene extends Phaser.Scene {
   private potions = 3
   private saveData: SaveData | null = null
   private waitingForTarget = false
+  private actionLocked = false
+  private battleEnding = false
 
   constructor() {
     super('BattleScene')
@@ -73,6 +75,16 @@ export class BattleScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale
     audioManager.playMusic(this.initData.isBoss ? 'boss' : 'battle')
+
+    this.entityViews = new Map()
+    this.commandTexts = []
+    this.optionTexts = []
+    this.timelineDots = []
+    this.selectedSkill = undefined
+    this.validTargets = []
+    this.waitingForTarget = false
+    this.actionLocked = false
+    this.battleEnding = false
 
     this.drawBackground(width, height)
     this.saveData = SaveSystem.load(0)
@@ -370,6 +382,7 @@ export class BattleScene extends Phaser.Scene {
       return
     }
 
+    this.actionLocked = false
     this.clearOptions()
     this.clearTargeting()
     this.setCommandsEnabled(true)
@@ -377,7 +390,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private selectCommand(command: Command) {
-    if (!this.combat || !this.combat.currentEntity.isPlayer) {
+    if (!this.combat || !this.combat.currentEntity.isPlayer || this.actionLocked || this.battleEnding) {
       return
     }
 
@@ -396,6 +409,8 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (command === 'Defend') {
+      this.actionLocked = true
+      this.setCommandsEnabled(false)
       this.combat.currentEntity.statusEffects.set('buff_def', 1)
       audioManager.playSfx('defend_guard')
       this.showMessage(`${this.combat.currentEntity.name} defends`, 550, () => {
@@ -460,7 +475,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private beginTargetSelection(skill: Skill) {
-    if (!this.combat) {
+    if (!this.combat || this.actionLocked || this.battleEnding) {
       return
     }
 
@@ -479,9 +494,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private tryTarget(target: BattleEntity) {
-    if (!this.combat || !this.waitingForTarget || !this.validTargets.includes(target)) {
+    if (!this.combat || this.actionLocked || this.battleEnding || !this.waitingForTarget || !this.validTargets.includes(target)) {
       return
     }
+
+    this.actionLocked = true
+    this.setCommandsEnabled(false)
 
     if (!this.selectedSkill) {
       this.usePotion(target)
@@ -574,13 +592,19 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private tryEscape() {
-    if (!this.combat) {
+    if (!this.combat || this.actionLocked || this.battleEnding) {
       return
     }
 
+    this.actionLocked = true
+    this.setCommandsEnabled(false)
+
     if (this.initData.isBoss) {
       audioManager.playSfx('ui_cancel')
-      this.showMessage('The seal refuses retreat!', 800, () => this.showActionMenu())
+      this.showMessage('The seal refuses retreat!', 800, () => {
+        this.actionLocked = false
+        this.showActionMenu()
+      })
       return
     }
 
@@ -594,15 +618,17 @@ export class BattleScene extends Phaser.Scene {
     audioManager.playSfx('ui_cancel')
     this.showMessage('Could not escape!', 700, () => {
       this.combat?.finishAction()
+      this.actionLocked = false
       this.startTurn()
     })
   }
 
   private handleBattleEnd() {
-    if (!this.combat) {
+    if (!this.combat || this.battleEnding) {
       return
     }
 
+    this.battleEnding = true
     this.clearOptions()
     this.setCommandsEnabled(false)
     this.refreshUi()
@@ -629,9 +655,9 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (this.combat.state === 'defeat') {
-      this.showMessage('Defeat...', 1500, () => {
+      this.showMessage('Defeat...\nYou regroup at the last safe point.', 1800, () => {
         const hasSave = Boolean(SaveSystem.load(0))
-        this.scene.start('OverworldScene', hasSave ? { continueGame: true } : { newGame: true })
+        this.scene.start('OverworldScene', hasSave ? { continueGame: true, battleResult: { victory: false } } : { newGame: true, battleResult: { victory: false } })
       })
     }
   }
@@ -797,8 +823,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private persistSave() {
-    if (this.saveData) {
-      SaveSystem.autoSave(this.saveData)
+    if (this.saveData && !SaveSystem.autoSave(this.saveData)) {
+      this.showMessage('Could not save item use. Browser storage may be blocked.', 900)
     }
   }
 }

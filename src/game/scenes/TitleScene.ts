@@ -9,6 +9,8 @@ export class TitleScene extends Phaser.Scene {
   private buttons: Phaser.GameObjects.Text[] = []
   private cursor?: Phaser.GameObjects.Text
   private selectedIndex = 0
+  private transitionLocked = false
+  private notice?: Phaser.GameObjects.Text
 
   constructor() {
     super('TitleScene')
@@ -17,6 +19,8 @@ export class TitleScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale
     audioManager.playMusic('title')
+    this.transitionLocked = false
+    this.notice = undefined
 
     this.drawGradientBackground(width, height)
     this.createStarfield(width, height)
@@ -411,6 +415,10 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private moveSelection(direction: number) {
+    if (this.transitionLocked) {
+      return
+    }
+
     this.selectedIndex =
       (this.selectedIndex + direction + MENU_ITEMS.length) % MENU_ITEMS.length
     audioManager.playSfx('ui_blip')
@@ -437,14 +445,20 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private selectMenuItem(label: MenuItem) {
+    if (this.transitionLocked) {
+      return
+    }
+
     audioManager.playSfx(label === 'Continue' && !SaveSystem.getSlotInfo(0)?.exists ? 'ui_cancel' : 'ui_confirm')
     if (label === 'New Game') {
+      this.lockForTransition()
       this.scene.start('OverworldScene', { newGame: true })
       return
     }
 
     if (label === 'Continue') {
       if (SaveSystem.getSlotInfo(0)?.exists) {
+        this.lockForTransition()
         this.scene.start('OverworldScene', { continueGame: true })
         return
       }
@@ -475,13 +489,23 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private resetDemoSave() {
+    if (this.transitionLocked) {
+      return
+    }
+
     SaveSystem.delete(0)
     audioManager.playSfx('ui_cancel')
     this.showTitleNotice('Demo save reset. New Game now starts from a fresh Luma Quay state.')
   }
 
+  private lockForTransition() {
+    this.transitionLocked = true
+    this.buttons.forEach((button) => button.disableInteractive().setAlpha(0.55))
+  }
+
   private showTitleNotice(message: string) {
     const { width, height } = this.scale
+    this.notice?.destroy()
     const text = this.add
       .text(width / 2, height - 78, message, {
         color: '#ffffff',
@@ -493,13 +517,19 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(50)
+    this.notice = text
 
     this.tweens.add({
       targets: text,
       alpha: 0,
       delay: 2300,
       duration: 350,
-      onComplete: () => text.destroy(),
+      onComplete: () => {
+        if (this.notice === text) {
+          this.notice = undefined
+        }
+        text.destroy()
+      },
     })
   }
 }
