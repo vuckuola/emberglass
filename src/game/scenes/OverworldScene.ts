@@ -281,34 +281,36 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createHud() {
-    const panel = this.add.rectangle(12, 12, 520, 104, 0x08091a, 0.84).setOrigin(0).setScrollFactor(0).setDepth(90)
+    const panel = this.add.rectangle(12, 12, 570, 112, 0x08091a, 0.88).setOrigin(0).setScrollFactor(0).setDepth(90)
     panel.setStrokeStyle(1, 0x8ab4f8, 0.45)
-    this.objectiveText = this.add.text(28, 24, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 480 } }).setScrollFactor(0).setDepth(91)
-    this.inventoryText = this.add.text(28, 78, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setScrollFactor(0).setDepth(91)
+    this.objectiveText = this.add.text(28, 24, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '18px', wordWrap: { width: 520 } }).setScrollFactor(0).setDepth(91)
+    this.inventoryText = this.add.text(28, 84, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px' }).setScrollFactor(0).setDepth(91)
     this.areaText = this.add.text(this.scale.width - 24, 24, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '18px', backgroundColor: '#08091acc', padding: { x: 10, y: 6 } }).setOrigin(1, 0).setScrollFactor(0).setDepth(91)
-    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 32, 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', backgroundColor: '#08091acc', padding: { x: 12, y: 7 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 24, 'Move • ACT/Enter • Menu', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', backgroundColor: '#08091acc', padding: { x: 14, y: 8 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
   }
 
   private createTouchControls() {
     const { width, height } = this.scale
+    const padX = 104
+    const padY = height - 92
     const controls = [
-      { label: '◀', x: 58, y: height - 86, move: { x: -1, y: 0 } },
-      { label: '▶', x: 142, y: height - 86, move: { x: 1, y: 0 } },
-      { label: '▲', x: 100, y: height - 128, move: { x: 0, y: -1 } },
-      { label: '▼', x: 100, y: height - 44, move: { x: 0, y: 1 } },
+      { label: '◀', x: padX - 48, y: padY, move: { x: -1, y: 0 } },
+      { label: '▶', x: padX + 48, y: padY, move: { x: 1, y: 0 } },
+      { label: '▲', x: padX, y: padY - 48, move: { x: 0, y: -1 } },
+      { label: '▼', x: padX, y: padY + 48, move: { x: 0, y: 1 } },
     ]
 
     controls.forEach((control) => {
-      const button = this.add.circle(control.x, control.y, 27, 0x08091a, 0.72).setScrollFactor(0).setDepth(96).setStrokeStyle(1, 0x8ab4f8, 0.55).setInteractive({ useHandCursor: true })
-      const label = this.add.text(control.x, control.y, control.label, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '21px' }).setOrigin(0.5).setScrollFactor(0).setDepth(97)
-      button.on('pointerdown', () => { this.touchMove = control.move; button.setFillStyle(0x1b3762, 0.88) })
-      button.on('pointerup', () => { this.touchMove = null; button.setFillStyle(0x08091a, 0.72) })
-      button.on('pointerout', () => { if (this.touchMove === control.move) { this.touchMove = null }; button.setFillStyle(0x08091a, 0.72) })
+      const button = this.add.circle(control.x, control.y, 32, 0x08091a, 0.78).setScrollFactor(0).setDepth(96).setStrokeStyle(2, 0x8ab4f8, 0.62).setInteractive({ useHandCursor: true })
+      const label = this.add.text(control.x, control.y, control.label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '24px' }).setOrigin(0.5).setScrollFactor(0).setDepth(97)
+      button.on('pointerdown', () => { this.touchMove = control.move; button.setFillStyle(0x1b3762, 0.92) })
+      button.on('pointerup', () => { this.touchMove = null; button.setFillStyle(0x08091a, 0.78) })
+      button.on('pointerout', () => { if (this.touchMove === control.move) { this.touchMove = null }; button.setFillStyle(0x08091a, 0.78) })
       this.touchButtons.push(button, label)
     })
 
-    const interact = this.add.text(width - 96, height - 96, 'ACT', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px', backgroundColor: '#0a0a2ecc', padding: { x: 18, y: 14 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
-    const menu = this.add.text(width - 94, height - 38, 'MENU', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', backgroundColor: '#08091acc', padding: { x: 14, y: 9 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    const interact = this.add.text(width - 106, height - 104, 'ACT', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '22px', backgroundColor: '#0a0a2ecc', padding: { x: 24, y: 18 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    const menu = this.add.text(width - 104, height - 38, 'MENU', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '16px', backgroundColor: '#08091acc', padding: { x: 18, y: 10 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
     interact.on('pointerdown', () => this.interact())
     menu.on('pointerdown', () => this.openMenu())
     this.touchButtons.push(interact, menu)

@@ -2,13 +2,38 @@ html,
 body,
 #root {
   margin: 0;
+  width: 100%;
   min-height: 100%;
 }
 
 body {
   background: #08090f;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.demo-shell {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(82, 217, 255, 0.12), transparent 34rem),
+    linear-gradient(180deg, #0c1020 0%, #08090f 58%, #05060b 100%);
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  box-sizing: border-box;
 }
 
 #game-container {
+  display: block;
+  width: min(100vw, calc(100dvh * 1.5), 960px);
+  max-height: min(100dvh, 640px);
+  aspect-ratio: 3 / 2;
+  border-radius: clamp(0px, 1.4vw, 16px);
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+#game-container canvas {
   display: block;
 }

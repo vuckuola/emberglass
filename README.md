@@ -1,73 +1,40 @@
-# React + TypeScript + Vite
+# Emberglass Public Demo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Emberglass is a compact Phaser + React + Vite JRPG demo slice built for a public showcase. The demo covers title/load flow, exploration in Luma Quay, save/load, touch and keyboard controls, field combat, Moonwake Shrine, a guardian boss, and the demo-complete payoff.
 
-Currently, two official plugins are available:
+## Run Locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open the local Vite URL and use the browser viewport you intend to demo. The game canvas scales to the available window while preserving the 960x640 design area.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Demo Controls
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Move: `WASD`, arrow keys, or the on-screen touch pad.
+- Interact/confirm: `Enter`, `Space`, tap objects, or `ACT`.
+- Menu: `M`, `Esc`, or `MENU`.
+- Title reset: press `R` on the title screen to clear the demo save.
+- Battle commands: number keys `1`-`5`, mouse, or tap.
+
+## Presenter Route
+
+1. Start a new game and collect the supply chest.
+2. Talk to Elder Maelin, inspect the eastern marker, then trigger the field battle.
+3. Return to the elder, receive the Warding Ember, and enter Moonwake Shrine.
+4. Attune the shrine font, challenge the guardian, and finish the boss flow.
+5. Save at the Skywell and return to title to show continue/reset readiness.
+
+## Release Candidate Checks
+
+Run these before publishing a demo build:
+
+```bash
+npx tsc --noEmit
+npm run build
+node qa-runtime.mjs
 ```
+
+The production build lazy-loads the Phaser game bootstrap from the React shell so the first app chunk stays small while the playable slice remains intact.

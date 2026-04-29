@@ -34,6 +34,13 @@
 - Added an authored first-session demo-start banner so new players know the intended route and scope.
 - Added a deterministic demo-complete flag and end-of-slice thank-you card after the Moonwake Guardian route.
 
+## Phase 14 Release-Candidate Notes
+
+- Production boot lazy-loads the Phaser game module after the React shell mounts, reducing the initial Vite entry chunk without changing scene flow.
+- The browser shell uses a responsive, safe-area-aware canvas container for desktop, tablet, and phone demos while preserving the 960x640 game coordinate system.
+- Overworld HUD text, prompts, and touch controls have larger hit targets and clearer contrast for small-screen presentation.
+- Publish handoff validation: `npx tsc --noEmit`, `npm run build`, and `node qa-runtime.mjs`.
+
 ## Known Limitations
 
 - The slice is intentionally small and represents a public-demo vertical slice rather than a full chapter.

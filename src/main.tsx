@@ -1,8 +1,6 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import Phaser from 'phaser'
 import App from './App.tsx'
-import { GAME_CONFIG } from './game/config'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
@@ -12,8 +10,5 @@ createRoot(document.getElementById('root')!).render(
 )
 
 requestAnimationFrame(() => {
-  new Phaser.Game({
-    ...GAME_CONFIG,
-    parent: 'game-container',
-  })
+  void import('./game/startGame').then(({ startGame }) => startGame('game-container'))
 })

@@ -9,5 +9,12 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   width: 960,
   height: 640,
   pixelArt: true,
+  backgroundColor: '#08090f',
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: 960,
+    height: 640,
+  },
   scene: [BootScene, TitleScene, OverworldScene, BattleScene],
 }

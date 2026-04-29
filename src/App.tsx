@@ -1,9 +1,8 @@
 function App() {
   return (
-    <div
-      id="game-container"
-      style={{ margin: '0 auto', width: '960px', height: '640px' }}
-    />
+    <main className="demo-shell" aria-label="Emberglass public demo">
+      <div id="game-container" />
+    </main>
   )
 }
 
