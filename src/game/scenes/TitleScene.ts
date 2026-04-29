@@ -11,6 +11,7 @@ export class TitleScene extends Phaser.Scene {
   private selectedIndex = 0
   private transitionLocked = false
   private notice?: Phaser.GameObjects.Text
+  private saveSummary?: Phaser.GameObjects.Text
 
   constructor() {
     super('TitleScene')
@@ -21,6 +22,7 @@ export class TitleScene extends Phaser.Scene {
     audioManager.playMusic('title')
     this.transitionLocked = false
     this.notice = undefined
+    this.saveSummary = undefined
 
     this.drawGradientBackground(width, height)
     this.createStarfield(width, height)
@@ -77,6 +79,8 @@ export class TitleScene extends Phaser.Scene {
       this.buttons.push(button)
     })
 
+    this.createSaveSummary(width, startY)
+
     this.cursor = this.add.text(width / 2 - 120, startY, '◈', {
       color: '#ff8a32',
       fontFamily: 'Arial, sans-serif',
@@ -111,7 +115,7 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-R', () => this.resetDemoSave())
 
     this.add
-      .text(width / 2, height - 42, 'WASD/Arrows: Select  •  Enter: Confirm  •  R: Reset demo save', {
+      .text(width / 2, height - 42, 'WASD/Arrows: Select  •  Enter/Tap: Confirm  •  R: Reset demo save', {
         color: '#5f6684',
         fontFamily: 'Arial, sans-serif',
         fontSize: '14px',
@@ -449,14 +453,15 @@ export class TitleScene extends Phaser.Scene {
       return
     }
 
-    audioManager.playSfx(label === 'Continue' && !SaveSystem.getSlotInfo(0)?.exists ? 'ui_cancel' : 'ui_confirm')
+    const slotInfo = SaveSystem.getSlotInfo(0)
+    audioManager.playSfx(label === 'Continue' && !slotInfo?.exists ? 'ui_cancel' : 'ui_confirm')
     if (label === 'New Game') {
       this.beginGameTransition({ newGame: true })
       return
     }
 
     if (label === 'Continue') {
-      if (SaveSystem.getSlotInfo(0)?.exists) {
+      if (slotInfo?.exists) {
         this.beginGameTransition({ continueGame: true })
         return
       }
@@ -474,7 +479,7 @@ export class TitleScene extends Phaser.Scene {
           this.updateSelection()
         },
       })
-      this.showTitleNotice('No save found. Choose New Game to begin the showcase slice.')
+      this.showTitleNotice('No save found. Choose New Game to begin the showcase slice; progress saves at the blue skywell.')
       return
     }
 
@@ -493,7 +498,36 @@ export class TitleScene extends Phaser.Scene {
 
     SaveSystem.delete(0)
     audioManager.playSfx('ui_cancel')
+    this.saveSummary?.setText('No save yet • New Game starts at Luma Quay')
     this.showTitleNotice('Demo save reset. New Game now starts from a fresh Luma Quay state.')
+  }
+
+  private createSaveSummary(width: number, startY: number) {
+    const slotInfo = SaveSystem.getSlotInfo(0)
+    const summary = slotInfo?.exists
+      ? `Continue: ${slotInfo.mapName ?? 'Luma Quay'} • ${this.formatTimestamp(slotInfo.timestamp)} • ${this.formatPlayTime(slotInfo.playTime)}`
+      : 'No save yet • New Game starts at Luma Quay'
+
+    this.saveSummary = this.add
+      .text(width / 2, startY + 48 + 25, summary, {
+        color: slotInfo?.exists ? '#8ab4f8' : '#5f6684',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '13px',
+      })
+      .setOrigin(0.5)
+  }
+
+  private formatTimestamp(timestamp?: number) {
+    if (!timestamp) {
+      return 'unsaved'
+    }
+
+    return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  }
+
+  private formatPlayTime(playTime?: number) {
+    const minutes = Math.max(0, Math.floor((playTime ?? 0) / 60))
+    return minutes > 0 ? `${minutes}m played` : 'fresh save'
   }
 
   private lockForTransition() {

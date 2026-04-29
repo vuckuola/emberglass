@@ -69,6 +69,8 @@ export class OverworldScene extends Phaser.Scene {
   private areaText?: Phaser.GameObjects.Text
   private menuOverlay?: MenuOverlay
   private toast?: Phaser.GameObjects.Text
+  private touchMove: { x: number; y: number } | null = null
+  private touchButtons: Phaser.GameObjects.GameObject[] = []
 
   constructor() {
     super('OverworldScene')
@@ -85,6 +87,13 @@ export class OverworldScene extends Phaser.Scene {
     this.saveNoticeShown = false
     this.busy = false
     this.toast = undefined
+    this.touchMove = null
+    this.touchButtons = []
+    this.objectiveText = undefined
+    this.inventoryText = undefined
+    this.promptText = undefined
+    this.areaText = undefined
+    this.menuOverlay = undefined
 
     const continuedSave = this.initData.continueGame ? SaveSystem.load(0) : null
     this.saveData = continuedSave ?? this.createDefaultSaveData()
@@ -111,6 +120,7 @@ export class OverworldScene extends Phaser.Scene {
     }) as Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
 
     this.createHud()
+    this.createTouchControls()
     this.refreshHud()
     this.cameras.main.fadeIn(420, 5, 6, 18)
     this.showAreaBanner('Luma Quay', 'A harbor village holding its breath beneath emberlit glass.')
@@ -138,19 +148,19 @@ export class OverworldScene extends Phaser.Scene {
     let velocityX = 0
     let velocityY = 0
 
-    if (this.cursors.left.isDown || this.keys.a.isDown) {
+    if (this.cursors.left.isDown || this.keys.a.isDown || (this.touchMove?.x ?? 0) < 0) {
       velocityX -= PLAYER_SPEED
       this.facing = 'left'
     }
-    if (this.cursors.right.isDown || this.keys.d.isDown) {
+    if (this.cursors.right.isDown || this.keys.d.isDown || (this.touchMove?.x ?? 0) > 0) {
       velocityX += PLAYER_SPEED
       this.facing = 'right'
     }
-    if (this.cursors.up.isDown || this.keys.w.isDown) {
+    if (this.cursors.up.isDown || this.keys.w.isDown || (this.touchMove?.y ?? 0) < 0) {
       velocityY -= PLAYER_SPEED
       this.facing = 'up'
     }
-    if (this.cursors.down.isDown || this.keys.s.isDown) {
+    if (this.cursors.down.isDown || this.keys.s.isDown || (this.touchMove?.y ?? 0) > 0) {
       velocityY += PLAYER_SPEED
       this.facing = 'down'
     }
@@ -276,6 +286,31 @@ export class OverworldScene extends Phaser.Scene {
     this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 32, 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', backgroundColor: '#08091acc', padding: { x: 12, y: 7 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
   }
 
+  private createTouchControls() {
+    const { width, height } = this.scale
+    const controls = [
+      { label: '◀', x: 58, y: height - 86, move: { x: -1, y: 0 } },
+      { label: '▶', x: 142, y: height - 86, move: { x: 1, y: 0 } },
+      { label: '▲', x: 100, y: height - 128, move: { x: 0, y: -1 } },
+      { label: '▼', x: 100, y: height - 44, move: { x: 0, y: 1 } },
+    ]
+
+    controls.forEach((control) => {
+      const button = this.add.circle(control.x, control.y, 27, 0x08091a, 0.72).setScrollFactor(0).setDepth(96).setStrokeStyle(1, 0x8ab4f8, 0.55).setInteractive({ useHandCursor: true })
+      const label = this.add.text(control.x, control.y, control.label, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '21px' }).setOrigin(0.5).setScrollFactor(0).setDepth(97)
+      button.on('pointerdown', () => { this.touchMove = control.move; button.setFillStyle(0x1b3762, 0.88) })
+      button.on('pointerup', () => { this.touchMove = null; button.setFillStyle(0x08091a, 0.72) })
+      button.on('pointerout', () => { if (this.touchMove === control.move) { this.touchMove = null }; button.setFillStyle(0x08091a, 0.72) })
+      this.touchButtons.push(button, label)
+    })
+
+    const interact = this.add.text(width - 96, height - 96, 'ACT', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px', backgroundColor: '#0a0a2ecc', padding: { x: 18, y: 14 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    const menu = this.add.text(width - 94, height - 38, 'MENU', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', backgroundColor: '#08091acc', padding: { x: 14, y: 9 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    interact.on('pointerdown', () => this.interact())
+    menu.on('pointerdown', () => this.openMenu())
+    this.touchButtons.push(interact, menu)
+  }
+
   private movePlayer(deltaX: number, deltaY: number) {
     if (!this.player) {
       return
@@ -318,7 +353,7 @@ export class OverworldScene extends Phaser.Scene {
       this.persist()
       audioManager.playSfx('save_point')
       this.cameras.main.flash(180, 159, 243, 255, false)
-      this.showToast(this.flag('slice_complete') ? 'Progress saved. Luma Quay rests easier.' : 'Progress saved.')
+      this.showToast(this.flag('slice_complete') ? 'Progress saved at the Skywell. Luma Quay rests easier.' : 'Progress saved at the Skywell.')
     }
   }
 
@@ -376,7 +411,9 @@ export class OverworldScene extends Phaser.Scene {
     this.time.delayedCall(230, () => audioManager.playSfx('equipment_gain'))
     this.showToast('Supply chest: Potion x2, Ether x1, Wind Charm equipped to Nara')
     this.persist()
-    this.refreshHud()
+    if (this.objectiveText && this.inventoryText) {
+      this.refreshHud()
+    }
   }
 
   private talkGuide() {
@@ -422,7 +459,9 @@ export class OverworldScene extends Phaser.Scene {
       this.showToast(this.flag('shrine_gate_seen') ? 'Elder Maelin: Beyond Moonwake lies the first true answer. Tonight, Luma Quay will keep your names.' : 'Elder Maelin: The shrine gate is awake. Let it see the ember you carry.')
     }
     this.persist()
-    this.refreshHud()
+    if (this.objectiveText && this.inventoryText) {
+      this.refreshHud()
+    }
   }
 
   private inspectMarker() {
@@ -735,7 +774,7 @@ export class OverworldScene extends Phaser.Scene {
     container.add(this.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 610 } }))
     container.add(this.add.text(width / 2 - 310, height / 2 - 86, `Status / Equipment\n${relicLines}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 5 }))
     container.add(this.add.text(width / 2 + 64, height / 2 - 86, `Inventory\n${inventoryLines.join('\n')}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 7 }))
-    container.add(this.add.text(width / 2 - 310, height / 2 + 184, 'Controls: Move WASD/Arrows • Interact Enter/Space • Menu M/Esc • Shop trades shards first, then sells potions.', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 620 } }))
+    container.add(this.add.text(width / 2 - 310, height / 2 + 184, 'Controls: Move WASD/Arrows or touch pad • Interact Enter/Space/ACT • Menu M/Esc • Shop trades shards first, then sells potions.', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 620 } }))
     this.menuOverlay = { container }
   }
 
@@ -776,8 +815,8 @@ export class OverworldScene extends Phaser.Scene {
                             ? 'Challenge inner seal'
                         : isAt(FIELD_BATTLE_TILE)
                           ? 'Enter guardian field'
-                          : 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc'
-    this.promptText?.setText(prompt.startsWith('Move') ? prompt : `${prompt}  [Enter]`)
+                          : 'Move WASD/Arrows or touch pad • Interact Enter/Space/ACT • Menu M/Esc'
+    this.promptText?.setText(prompt.startsWith('Move') ? prompt : `${prompt}  [Enter/ACT]`)
   }
 
   private createDefaultSaveData(): SaveData {
@@ -808,6 +847,11 @@ export class OverworldScene extends Phaser.Scene {
     if (!SaveSystem.autoSave(this.saveData)) {
       audioManager.playSfx('ui_cancel')
       this.showToast('Save failed. Progress remains playable, but browser storage may be full or blocked.')
+      return
+    }
+
+    if (this.objectiveText && this.inventoryText) {
+      this.refreshHud()
     }
   }
 
@@ -839,9 +883,9 @@ export class OverworldScene extends Phaser.Scene {
   private addInventory(itemId: string, quantity: number) {
     const item = this.saveData.inventory.find((entry) => entry.itemId === itemId)
     if (item) {
-      item.quantity += quantity
+      item.quantity = Math.max(0, item.quantity + quantity)
     } else {
-      this.saveData.inventory.push({ itemId, quantity })
+      this.saveData.inventory.push({ itemId, quantity: Math.max(0, quantity) })
     }
   }
 

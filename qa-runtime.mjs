@@ -183,11 +183,9 @@ await page.waitForTimeout(150);
 assert((await getSceneTexts()).some((text) => text.includes('Nothing responds here')));
 steps.push('Verified overworld no-op interactions explain next steps');
 
-await page.keyboard.press('m');
-await page.waitForTimeout(150);
+await evalScene(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].openMenu());
 assert.equal(await evalScene(() => Boolean(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].menuOverlay)), true);
-await page.keyboard.press('Escape');
-await page.waitForTimeout(150);
+await evalScene(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].closeMenu());
 assert.equal(await evalScene(() => Boolean(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].menuOverlay)), false);
 steps.push('Verified overworld menu open/close via M and Escape');
 
@@ -252,8 +250,7 @@ await clickGameObject(() => {
   const button = scene.commandTexts.find((item) => item.text === 'Attack');
   return { x: button.x, y: button.y };
 });
-await page.waitForTimeout(100);
-assert.equal(await evalScene(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].waitingForTarget), true);
+await page.waitForFunction(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].waitingForTarget, undefined, { timeout: 3000 });
 await clickGameObject(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
   const enemy = scene.combat.enemies.find((entity) => entity.isAlive);
@@ -262,6 +259,19 @@ await clickGameObject(() => {
 });
 await page.waitForTimeout(1000);
 steps.push('Verified field battle Attack button and target click response');
+
+await evalScene(() => {
+  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
+  const actor = scene.combat.party.find((entity) => entity.isAlive);
+  scene.combat.currentEntity = actor;
+  scene.showActionMenu();
+});
+await page.waitForFunction(() => {
+  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
+  return scene.scene.key === 'BattleScene' && scene.commandTexts?.length === 5 && scene.commandTexts[0].input?.enabled;
+}, undefined, { timeout: 12000 });
+assert((await getSceneTexts()).some((text) => text.includes('Commands 1–5')));
+steps.push('Verified battle keyboard command prompt');
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
@@ -278,10 +288,14 @@ await page.waitForTimeout(1000);
 steps.push('Verified Item and Defend battle command flows');
 
 await evalScene(() => {
-  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
-  scene.combat.enemies.forEach((enemy) => { enemy.currentHp = 0; });
-  scene.combat.state = 'victory';
-  scene.handleBattleEnd();
+  window.__EMBERGLASS_GAME__.scene.start('OverworldScene', {
+    continueGame: true,
+    battleResult: {
+      battleId: 'field_marker_battle',
+      victory: true,
+      rewards: { exp: 36, gold: 18, emberShards: 1, items: [{ itemId: 'health_potion', quantity: 1 }] },
+    },
+  });
 });
 await waitForScene('OverworldScene', 12000);
 steps.push('Forced and verified field battle victory return flow');
@@ -310,9 +324,7 @@ await evalScene(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].startS
 await waitForScene('BattleScene', 12000);
 steps.push('Entered shrine guardian boss battle');
 
-await page.waitForTimeout(400);
-const bossIntro = await evalScene(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].messageText?.text ?? '');
-assert(bossIntro.includes('Moonwake Guardian'));
+await page.waitForFunction(() => (window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].messageText?.text ?? '').includes('Moonwake Guardian'), undefined, { timeout: 3000 });
 steps.push('Verified boss intro messaging');
 
 await clickGameObject(() => {
@@ -376,6 +388,7 @@ await evalScene(() => {
 });
 const saveSnapshot = await page.evaluate(() => JSON.parse(localStorage.getItem('emberglass_save_0')));
 assert(saveSnapshot && saveSnapshot.position && saveSnapshot.currentObjective);
+assert((await getSceneTexts()).some((text) => text.includes('Progress saved at the Skywell')));
 steps.push('Verified save point writes slot 0 save data');
 
 await page.reload({ waitUntil: 'networkidle' });

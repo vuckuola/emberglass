@@ -63,6 +63,7 @@ export class BattleScene extends Phaser.Scene {
   private waitingForTarget = false
   private actionLocked = false
   private battleEnding = false
+  private commandKeys?: Record<'one' | 'two' | 'three' | 'four' | 'five', Phaser.Input.Keyboard.Key>
 
   constructor() {
     super('BattleScene')
@@ -85,6 +86,13 @@ export class BattleScene extends Phaser.Scene {
     this.waitingForTarget = false
     this.actionLocked = false
     this.battleEnding = false
+    this.commandKeys = this.input.keyboard?.addKeys({
+      one: Phaser.Input.Keyboard.KeyCodes.ONE,
+      two: Phaser.Input.Keyboard.KeyCodes.TWO,
+      three: Phaser.Input.Keyboard.KeyCodes.THREE,
+      four: Phaser.Input.Keyboard.KeyCodes.FOUR,
+      five: Phaser.Input.Keyboard.KeyCodes.FIVE,
+    }) as Record<'one' | 'two' | 'three' | 'four' | 'five', Phaser.Input.Keyboard.Key> | undefined
 
     this.drawBackground(width, height)
     this.saveData = SaveSystem.load(0)
@@ -106,6 +114,18 @@ export class BattleScene extends Phaser.Scene {
       .setDepth(100)
 
     this.showBattleIntro(() => this.startTurn())
+  }
+
+  update() {
+    if (!this.commandKeys || this.actionLocked || this.battleEnding || this.waitingForTarget || !this.combat?.currentEntity.isPlayer) {
+      return
+    }
+
+    const selectedIndex = [this.commandKeys.one, this.commandKeys.two, this.commandKeys.three, this.commandKeys.four, this.commandKeys.five]
+      .findIndex((key) => Phaser.Input.Keyboard.JustDown(key))
+    if (selectedIndex >= 0) {
+      this.selectCommand(COMMANDS[selectedIndex])
+    }
   }
 
   private showBattleIntro(onComplete: () => void) {
@@ -328,7 +348,7 @@ export class BattleScene extends Phaser.Scene {
       this.commandTexts.push(text)
     })
 
-    this.add.text(width - 260, panelY + 24, 'Target with mouse', {
+    this.add.text(width - 330, panelY + 24, 'Commands 1–5 • Target with mouse/tap', {
       color: '#8ab4f8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
