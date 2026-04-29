@@ -22,7 +22,20 @@ npm run demo:serve
 - `npm run dev` starts the local development server.
 - `npm run build` type-checks and creates the production bundle in `dist/`.
 - `npm run demo:serve` serves the built demo locally with Vite preview.
+- `npm run demo:preview` rebuilds and serves the production bundle for a final local/LAN pass.
 - `npm run demo:check` runs the required public-demo handoff checks.
+
+## Public Drop Path
+
+For a clean handoff or presenter machine, use the locked install and final ship check:
+
+```bash
+npm ci
+npm run ship:check
+npm run demo:preview
+```
+
+Deploy the generated `dist/` folder to any static host. See `DEPLOY_DEMO.md` for the complete preview/deploy handoff checklist.
 
 ## Demo Controls
 
@@ -46,10 +59,11 @@ npm run demo:serve
 - Confirm audio can start after the first click/key press.
 - Present in Chrome or Edge at desktop/tablet size when possible.
 - Keep `SHOWCASE_NOTES.md` open for the route, limitations, and handoff notes.
+- Keep `DEPLOY_DEMO.md` available for static-host and presenter-machine setup.
 - Run the full validation command before publishing or zipping a build.
 
 ```bash
-npm run demo:check
+npm run ship:check
 ```
 
 ## Known Limitations

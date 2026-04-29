@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "demo:serve": "vite preview --host 0.0.0.0",
-    "demo:check": "npm run typecheck && npm run build && node qa-runtime.mjs"
+    "demo:preview": "npm run build && vite preview --host 0.0.0.0",
+    "demo:check": "npm run typecheck && npm run build && node qa-runtime.mjs",
+    "ship:check": "npm run demo:check"
   },
   "dependencies": {
     "phaser": "^3.80.1",

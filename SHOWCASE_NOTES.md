@@ -11,6 +11,7 @@
 
 - Run `npm run demo:check` before publishing or recording.
 - Launch with `npm run demo:serve` after `npm run build` for a production-like local pass.
+- Use `npm run demo:preview` when you want the one-command rebuild + production-like preview path.
 - Use a clean save by pressing `R` on the title screen, then confirm `Continue` is unavailable before starting.
 - Click or press a key once early so browser audio policies allow playback.
 - Keep the browser at a stable 16:9-ish desktop/tablet viewport when presenting live.
@@ -45,14 +46,16 @@ node qa-runtime.mjs
 Or run all public-demo checks together:
 
 ```bash
-npm run demo:check
+npm run ship:check
 ```
 
 - Confirm `dist/` is generated from a clean build.
+- Confirm the public-drop preview starts with `npm run demo:preview` on the presenter machine.
 - Confirm no console-breaking runtime errors appear during the presenter route.
 - Confirm keyboard and touch controls are both usable at the target viewport.
 - Confirm title `Continue`, save/reset, battle victory, shrine boss, and demo-complete flows still work.
 - Package the repository or `dist/` with `README.md`, this file, and `QA_RUNTIME_REPORT.md` for handoff context.
+- Include `DEPLOY_DEMO.md` when sending a presenter/deploy bundle.
 
 ## Phase 14 Release-Candidate Notes
 
@@ -66,6 +69,12 @@ npm run demo:check
 - `package.json` exposes `typecheck`, `demo:serve`, and `demo:check` scripts for handoff clarity.
 - `README.md` now separates quick start, build/preview, controls, presenter route, readiness checks, and limitations.
 - These notes are the presenter-facing checklist for public demo delivery.
+
+## Phase 16 Public-Drop Notes
+
+- `DEPLOY_DEMO.md` documents the final static-host and presenter-machine command path.
+- `demo:preview` provides a rebuild-and-preview workflow for production-like local review.
+- `ship:check` aliases the full public-demo validation path for final handoff confidence.
 
 ## Known Limitations
 
