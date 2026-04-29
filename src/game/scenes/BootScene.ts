@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { preloadGeneratedAssets } from '../assets/generatedAssets'
 
 export class BootScene extends Phaser.Scene {
   private progressBar?: Phaser.GameObjects.Rectangle
@@ -39,6 +40,8 @@ export class BootScene extends Phaser.Scene {
         this.progressBar.width = barWidth * value
       }
     })
+
+    preloadGeneratedAssets(this)
   }
 
   create() {

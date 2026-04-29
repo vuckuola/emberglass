@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
 import { BOSSES } from '../data/bosses'
 import { CHARACTERS, type CharacterData, type CharacterStats } from '../data/characters'
 import { ENEMIES, type EnemySkill } from '../data/enemies'
@@ -13,6 +14,7 @@ type BattleInitData = {
 
 type EntityView = {
   rect: Phaser.GameObjects.Rectangle
+  sprite?: Phaser.GameObjects.Image
   label: Phaser.GameObjects.Text
   hpFill: Phaser.GameObjects.Rectangle
   mpFill: Phaser.GameObjects.Rectangle
@@ -80,6 +82,11 @@ export class BattleScene extends Phaser.Scene {
 
   private drawBackground(width: number, height: number) {
     this.cameras.main.setBackgroundColor('#0a0a1a')
+    if (hasTexture(this, GENERATED_ASSETS.battleBg)) {
+      this.add.image(width / 2, height / 2, GENERATED_ASSETS.battleBg).setDisplaySize(width, height)
+      return
+    }
+
     const graphics = this.add.graphics()
     graphics.fillGradientStyle(0x0a0a1a, 0x0a0a1a, 0x121236, 0x080814, 1)
     graphics.fillRect(0, 0, width, height)
@@ -178,8 +185,19 @@ export class BattleScene extends Phaser.Scene {
       .rectangle(x, y, entity.isPlayer ? 58 : 68, entity.isPlayer ? 72 : 58, color)
       .setStrokeStyle(2, 0xffffff, 0.25)
       .setInteractive({ useHandCursor: true })
+      .setAlpha(this.getEntityAssetKey(entity) ? 0.18 : 1)
 
     rect.on('pointerdown', () => this.tryTarget(entity))
+
+    const assetKey = this.getEntityAssetKey(entity)
+    const sprite = assetKey
+      ? this.add
+          .image(x, y - (entity.isPlayer ? 4 : 0), assetKey)
+          .setInteractive({ useHandCursor: true })
+          .setDepth(2)
+      : undefined
+    sprite?.setScale(entity.isPlayer ? 1.25 : 1.05)
+    sprite?.on('pointerdown', () => this.tryTarget(entity))
 
     const label = this.add
       .text(x, y - 54, entity.name, {
@@ -194,13 +212,24 @@ export class BattleScene extends Phaser.Scene {
     this.add.rectangle(x, y + 60, 60, 6, 0x10182b).setOrigin(0.5)
     const mpFill = this.add.rectangle(x - 30, y + 60, 60, 6, 0x3f8cff).setOrigin(0, 0.5)
 
-    this.entityViews.set(entity, { rect, label, hpFill, mpFill, color })
+    this.entityViews.set(entity, { rect, sprite, label, hpFill, mpFill, color })
+  }
+
+  private getEntityAssetKey(entity: BattleEntity): string | undefined {
+    const key = entity.isPlayer
+      ? GENERATED_ASSETS.heroes[entity.id as keyof typeof GENERATED_ASSETS.heroes]
+      : GENERATED_ASSETS.enemies[entity.id as keyof typeof GENERATED_ASSETS.enemies]
+    return key && hasTexture(this, key) ? key : undefined
   }
 
   private createBottomPanel(width: number, height: number) {
     const panelY = height - 140
-    this.add.rectangle(0, panelY, 960, 140, 0x0a0a2e, 0.96).setOrigin(0)
-    this.add.rectangle(0, panelY, 960, 2, 0x8ab4f8, 0.35).setOrigin(0)
+    if (hasTexture(this, GENERATED_ASSETS.uiPanel)) {
+      this.add.image(width / 2, panelY + 70, GENERATED_ASSETS.uiPanel).setDisplaySize(width - 24, 132).setAlpha(0.96)
+    } else {
+      this.add.rectangle(0, panelY, 960, 140, 0x0a0a2e, 0.96).setOrigin(0)
+      this.add.rectangle(0, panelY, 960, 2, 0x8ab4f8, 0.35).setOrigin(0)
+    }
 
     this.currentNameText = this.add.text(32, panelY + 22, '', {
       color: '#f0c040',
@@ -515,6 +544,9 @@ export class BattleScene extends Phaser.Scene {
       view.hpFill.fillColor = hpRatio > 0.35 ? 0x36d65f : 0xd94747
       view.mpFill.width = 60 * mpRatio
       view.rect.setAlpha(entity.isAlive ? 1 : 0.35)
+      if (view.sprite) {
+        view.sprite.setAlpha(entity.isAlive ? 1 : 0.35)
+      }
       view.label.setAlpha(entity.isAlive ? 1 : 0.45)
     }
 
@@ -591,10 +623,16 @@ export class BattleScene extends Phaser.Scene {
     }
 
     this.tweens.add({
-      targets: view.rect,
+      targets: view.sprite ?? view.rect,
       duration: 80,
-      onStart: () => view.rect.setFillStyle(0xffffff),
-      onComplete: () => view.rect.setFillStyle(view.color),
+      onStart: () => {
+        view.sprite?.setTint(0xffffff)
+        view.rect.setFillStyle(0xffffff)
+      },
+      onComplete: () => {
+        view.sprite?.clearTint()
+        view.rect.setFillStyle(view.color)
+      },
     })
   }
 

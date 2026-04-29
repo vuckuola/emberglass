@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
 import { ENEMIES } from '../data/enemies'
 import { SaveSystem, type SaveData } from '../systems/SaveSystem'
 
@@ -15,7 +16,7 @@ type OverworldInitData = { newGame?: boolean; continueGame?: boolean }
 
 export class OverworldScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
-  private player?: Phaser.GameObjects.Rectangle
+  private player?: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle
   private playerOutline?: Phaser.GameObjects.Rectangle
   private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
@@ -40,16 +41,15 @@ export class OverworldScene extends Phaser.Scene {
     this.saveNoticeShown = false
     this.busy = false
 
+    this.createBackdrop()
     this.createMap()
     this.createObjects()
 
     const saved = this.initData.continueGame ? SaveSystem.load(0) : null
     const startX = saved?.position.x ?? TILE_SIZE * 2.5
     const startY = saved?.position.y ?? TILE_SIZE * 2.5
-    this.playerOutline = this.add
-      .rectangle(startX, startY, 36, 52, 0x4a2316)
-      .setDepth(10)
-    this.player = this.add.rectangle(startX, startY, 32, 48, 0xff8a32).setDepth(11)
+    this.playerOutline = this.add.rectangle(startX, startY, 38, 54, 0x1b1020, 0.45).setDepth(10)
+    this.player = this.createPlayer(startX, startY)
     this.cursors = this.input.keyboard?.createCursorKeys()
     this.keys = this.input.keyboard?.addKeys({
       w: Phaser.Input.Keyboard.KeyCodes.W,
@@ -124,17 +124,37 @@ export class OverworldScene extends Phaser.Scene {
           (tileX >= 11 && tileX <= 12 && tileY === 11)
 
         const isWall = isBorder || isInteriorWall
-        const color = isWall ? 0x0a1a1a : 0x0a2a2a
-        this.add
-          .rectangle(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE, color)
-          .setOrigin(0)
-          .setStrokeStyle(1, 0x123838, 0.35)
+        if (hasTexture(this, GENERATED_ASSETS.tileset)) {
+          const frameX = isWall ? 16 : (tileX + tileY) % 5 === 0 ? 32 : 0
+          this.add
+            .tileSprite(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE, GENERATED_ASSETS.tileset)
+            .setOrigin(0)
+            .setTilePosition(frameX, 0)
+            .setDepth(0)
+        } else {
+          const color = isWall ? 0x0a1a1a : 0x0a2a2a
+          this.add
+            .rectangle(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE, color)
+            .setOrigin(0)
+            .setStrokeStyle(1, 0x123838, 0.35)
+        }
 
         if (isWall) {
           this.walls.add(this.tileKey(tileX, tileY))
         }
       }
     }
+  }
+
+  private createBackdrop() {
+    if (!hasTexture(this, GENERATED_ASSETS.overworldBg)) {
+      return
+    }
+
+    this.add
+      .image((MAP_WIDTH * TILE_SIZE) / 2, (MAP_HEIGHT * TILE_SIZE) / 2, GENERATED_ASSETS.overworldBg)
+      .setDisplaySize(MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE)
+      .setDepth(-10)
   }
 
   private createObjects() {
@@ -151,15 +171,31 @@ export class OverworldScene extends Phaser.Scene {
       duration: 1100,
     })
 
-    this.add
-      .rectangle(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), 32, 26, 0x8a5a21)
-      .setStrokeStyle(3, 0xf0c040, 0.8)
-      .setDepth(4)
+    if (hasTexture(this, GENERATED_ASSETS.chest)) {
+      this.add.image(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), GENERATED_ASSETS.chest).setScale(1.25).setDepth(4)
+    } else {
+      this.add
+        .rectangle(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), 32, 26, 0x8a5a21)
+        .setStrokeStyle(3, 0xf0c040, 0.8)
+        .setDepth(4)
+    }
 
-    this.add
-      .rectangle(this.tileCenter(NPC_TILE.x), this.tileCenter(NPC_TILE.y), 34, 44, 0x3278d4)
-      .setStrokeStyle(2, 0x8ab4f8, 0.9)
-      .setDepth(4)
+    if (hasTexture(this, GENERATED_ASSETS.npc)) {
+      this.add.sprite(this.tileCenter(NPC_TILE.x), this.tileCenter(NPC_TILE.y), GENERATED_ASSETS.npc, 0).setDepth(4)
+    } else {
+      this.add
+        .rectangle(this.tileCenter(NPC_TILE.x), this.tileCenter(NPC_TILE.y), 34, 44, 0x3278d4)
+        .setStrokeStyle(2, 0x8ab4f8, 0.9)
+        .setDepth(4)
+    }
+  }
+
+  private createPlayer(x: number, y: number): Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle {
+    if (hasTexture(this, GENERATED_ASSETS.heroes.nara)) {
+      return this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setDepth(11)
+    }
+
+    return this.add.rectangle(x, y, 32, 48, 0xff8a32).setDepth(11)
   }
 
   private movePlayer(deltaX: number, deltaY: number) {
