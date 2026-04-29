@@ -76,6 +76,14 @@ npm run ship:check
 - `demo:preview` provides a rebuild-and-preview workflow for production-like local review.
 - `ship:check` aliases the full public-demo validation path for final handoff confidence.
 
+## Phase 18: Showcase Polish + New Assets
+
+- **Visual polish:** Gold-accented HUD, styled toast/dialog panels, banner queue system, contextual interaction prompts, menu overlay with ornate gold dividers and diamond decorations in OverworldScene.
+- **Battle polish:** Entity ellipse shadows, wider 3-color HP bars (90px), MP bar track, Georgia serif labels, red hit flash, death dissolve particles, victory sparkles, gold turn indicator glow, numbered command labels (1-5) in BattleScene.
+- **New generated assets:** 5 concept sheets (tileset, hero, NPCs, props, UI) generated via GPT-5.4-image, cropped and integrated into the game pipeline.
+- **Version:** v0.18.0 (title screen, package.json).
+- **Live:** https://vuckuola.github.io/emberglass/
+
 ## Known Limitations
 
 - The slice is intentionally small and represents a public-demo vertical slice rather than a full chapter.
