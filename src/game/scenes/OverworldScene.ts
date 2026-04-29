@@ -20,8 +20,11 @@ const TIDE_BELL_TILE = { x: 2, y: 7 }
 const MURAL_TILE = { x: 12, y: 5 }
 const WATCH_LANTERN_TILE = { x: 14, y: 9 }
 const SHRINE_GATE_TILE = { x: 18, y: 6 }
+const SHRINE_FONT_TILE = { x: 18, y: 8 }
+const SHRINE_SEAL_TILE = { x: 18, y: 10 }
 const FIELD_BATTLE_TILE = { x: 17, y: 12 }
 const FIELD_BATTLE_ID = 'field_marker_battle'
+const SHRINE_BOSS_BATTLE_ID = 'moonwake_guardian_battle'
 const CHEST_ID = 'quay_supply_chest'
 
 const OBJECTIVES = {
@@ -30,7 +33,9 @@ const OBJECTIVES = {
   winBattle: 'Defeat the field guardian beyond the marker.',
   returnToElder: 'Return to Elder Maelin with the ember shard.',
   visitShrineGate: 'Follow the opened east path to the Moonwake Shrine gate.',
-  complete: 'Save at the skywell. Luma Quay is safe for now.',
+  attuneShrineFont: 'Enter Moonwake Shrine and attune the pilgrim font.',
+  faceShrineGuardian: 'Break the inner seal and face the Moonwake Guardian.',
+  complete: 'Save at the skywell. Moonwake Shrine has answered.',
 } as const
 
 type Direction = 'up' | 'down' | 'left' | 'right'
@@ -223,6 +228,10 @@ export class OverworldScene extends Phaser.Scene {
     this.drawMarker(MURAL_TILE, 0xc88dff, 'Glass Mural')
     this.drawMarker(WATCH_LANTERN_TILE, 0xffd36e, 'Watch Lantern')
     this.drawMarker(SHRINE_GATE_TILE, this.flag('slice_complete') ? 0x9ff36e : 0x5d536d, 'Shrine Gate')
+    if (this.flag('shrine_gate_seen')) {
+      this.drawMarker(SHRINE_FONT_TILE, this.flag('shrine_font_attuned') ? 0x75d6ff : 0x8ab4f8, 'Pilgrim Font')
+      this.drawMarker(SHRINE_SEAL_TILE, this.flag('shrine_guardian_won') ? 0xfff1a8 : 0xc88dff, this.flag('shrine_guardian_won') ? 'Awakened Seal' : 'Inner Seal')
+    }
     this.drawMarker(FIELD_BATTLE_TILE, this.flag('field_battle_won') ? 0x45e67a : 0xd94747, this.flag('field_battle_won') ? 'Cleared Field' : 'Guardian Field')
   }
 
@@ -338,6 +347,10 @@ export class OverworldScene extends Phaser.Scene {
       this.lightWatchLantern()
     } else if (isAt(SHRINE_GATE_TILE)) {
       this.inspectShrineGate()
+    } else if (isAt(SHRINE_FONT_TILE)) {
+      this.attuneShrineFont()
+    } else if (isAt(SHRINE_SEAL_TILE)) {
+      this.startShrineGuardianBattle()
     } else if (isAt(FIELD_BATTLE_TILE)) {
       this.startFieldBattle()
     }
@@ -468,11 +481,26 @@ export class OverworldScene extends Phaser.Scene {
       this.setObjective(OBJECTIVES.returnToElder)
       audioManager.playResonancePulse('objective')
     }
+    if (result.battleId === SHRINE_BOSS_BATTLE_ID) {
+      this.setFlag('shrine_guardian_won')
+      this.setObjective(OBJECTIVES.complete)
+      this.addInventory('skywell_shard', 1)
+      this.saveData.party[0].equipment.relic = 'skywell_shard'
+      this.saveData.party.forEach((member) => {
+        member.level = Math.max(member.level, 4)
+      })
+      audioManager.playResonancePulse('event')
+    }
     this.persist()
     this.time.delayedCall(250, () => {
-      this.showEventBanner('Guardian Felled', 'The field exhales. Far east, a shrine bell answers once.')
+      this.showEventBanner(
+        result.battleId === SHRINE_BOSS_BATTLE_ID ? 'Moonwake Guardian Defeated' : 'Guardian Felled',
+        result.battleId === SHRINE_BOSS_BATTLE_ID
+          ? 'The shrine opens a silver route toward the Skywell. Nara equips the Skywell Shard.'
+          : 'The field exhales. Far east, a shrine bell answers once.',
+      )
       audioManager.playSfx('reward_gain')
-      this.showToast(`Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
+      this.showToast(result.battleId === SHRINE_BOSS_BATTLE_ID ? `Climax reward: ${rewards.gold}g, Skywell Shard, party level 4. Save at the skywell.` : `Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
       this.refreshHud()
     })
   }
@@ -518,15 +546,70 @@ export class OverworldScene extends Phaser.Scene {
     }
     if (!this.flag('shrine_gate_seen')) {
       this.setFlag('shrine_gate_seen')
-      this.setObjective(OBJECTIVES.complete)
+      this.setObjective(OBJECTIVES.attuneShrineFont)
       audioManager.playResonancePulse('event')
       this.showAreaBanner('Moonwake Shrine Approach', 'Beyond the gate, old glass ruins breathe with patient light.')
-      this.showEventBanner('To Be Continued', 'The route forward is clear: Moonwake Shrine waits past Luma Quay.')
+      this.showEventBanner('Moonwake Shrine', 'A narrow pilgrim route opens. The inner seal waits beyond the font.')
     } else {
-      this.showToast('Moonwake Gate: The way ahead is open, bright, and much older than the village.')
+      this.showToast(this.flag('shrine_guardian_won') ? 'Moonwake Gate: The guardian vow is fulfilled. The shrine keeps a road of silver fire.' : 'Moonwake Gate: The approach descends to a font and an inner seal. Prepare before touching it.')
     }
     this.persist()
     this.refreshHud()
+  }
+
+  private attuneShrineFont() {
+    if (!this.flag('shrine_gate_seen')) {
+      this.showToast('The shrine approach is sealed. Inspect the Moonwake Gate first.')
+      return
+    }
+    if (!this.flag('shrine_font_attuned')) {
+      this.setFlag('shrine_font_attuned')
+      this.setObjective(OBJECTIVES.faceShrineGuardian)
+      this.saveData.party.forEach((member) => {
+        const character = CHARACTERS[member.characterId]
+        member.currentHp = Math.max(member.currentHp, character?.baseStats.hp ?? member.currentHp)
+        member.currentMp = Math.max(member.currentMp, character?.baseStats.mp ?? member.currentMp)
+      })
+      this.addInventory('mana_potion', 1)
+      audioManager.playSfx('save_point')
+      this.time.delayedCall(260, () => audioManager.playResonancePulse('objective'))
+      this.showEventBanner('Pilgrim Font Attuned', 'HP and MP restored. Ether x1 recovered from the moonlit basin.')
+      this.showToast('Io: The seal is not a lock. It is a witness. It wants us ready.')
+    } else {
+      this.showToast(this.flag('shrine_guardian_won') ? 'Pilgrim Font: The water reflects a road climbing into the Skywell.' : 'Pilgrim Font: Your reflection steadies. The inner seal awaits south.')
+    }
+    this.persist()
+    this.refreshHud()
+  }
+
+  private startShrineGuardianBattle() {
+    if (!this.flag('shrine_gate_seen')) {
+      this.showToast('The inner shrine is unreachable until the Moonwake Gate opens.')
+      return
+    }
+    if (!this.flag('shrine_font_attuned')) {
+      this.showToast('Inner Seal: A cold pressure turns you back. Attune the pilgrim font first.')
+      return
+    }
+    if (this.flag('shrine_guardian_won')) {
+      this.showToast('Inner Seal: Broken glass floats upward, forming a map toward the Skywell.')
+      return
+    }
+    this.busy = true
+    this.saveCurrentPosition()
+    this.persist()
+    audioManager.playSfx('shrine_beat')
+    this.showEventBanner('Inner Seal Broken', 'The Moonwake Guardian descends to test the ember vow.')
+    this.time.delayedCall(1000, () => {
+      this.cameras.main.fadeOut(420, 6, 8, 22)
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+        this.scene.start('BattleScene', {
+          battleId: SHRINE_BOSS_BATTLE_ID,
+          enemyIds: ['moonwake_guardian'],
+          isBoss: true,
+        })
+      })
+    })
   }
 
   private showToast(message: string) {
@@ -647,6 +730,10 @@ export class OverworldScene extends Phaser.Scene {
                       ? 'Tend watch lantern'
                       : isAt(SHRINE_GATE_TILE)
                         ? 'Inspect shrine gate'
+                        : isAt(SHRINE_FONT_TILE)
+                          ? 'Attune pilgrim font'
+                          : isAt(SHRINE_SEAL_TILE)
+                            ? 'Challenge inner seal'
                         : isAt(FIELD_BATTLE_TILE)
                           ? 'Enter guardian field'
                           : 'Move WASD/Arrows • Interact Enter/Space • Menu M/Esc'

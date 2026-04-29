@@ -15,6 +15,14 @@ type BattleInitData = {
   isBoss?: boolean
 }
 
+const BOSS_BATTLE_REWARDS: Record<string, { emberShards: number; items: Array<{ itemId: string; quantity: number }>; rewardLine: string }> = {
+  moonwake_guardian_battle: {
+    emberShards: 0,
+    items: [{ itemId: 'health_elixir', quantity: 1 }],
+    rewardLine: 'Rewards: Skywell Shard unlocked, Elixir x1\nThe Moonwake route opens beyond the seal.',
+  },
+}
+
 type EntityView = {
   rect: Phaser.GameObjects.Rectangle
   sprite?: Phaser.GameObjects.Image
@@ -84,7 +92,20 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(100)
 
-    this.showMessage('Battle Start!\nRelics are active.', 1000, () => this.startTurn())
+    this.showBattleIntro(() => this.startTurn())
+  }
+
+  private showBattleIntro(onComplete: () => void) {
+    if (!this.initData.isBoss) {
+      this.showMessage('Battle Start!\nRelics are active.', 1000, onComplete)
+      return
+    }
+
+    const boss = BOSSES.find((entry) => entry.id === this.initData.enemyIds?.[0])
+    const intro = boss?.introDialogue.join('\n') ?? 'A shrine guardian bars the way.'
+    this.cameras.main.flash(360, 210, 180, 255, false)
+    audioManager.playSfx('shrine_beat')
+    this.showMessage(`${boss?.name ?? 'Guardian'}\n${intro}`, 2600, onComplete)
   }
 
   private drawBackground(width: number, height: number) {
@@ -557,6 +578,12 @@ export class BattleScene extends Phaser.Scene {
       return
     }
 
+    if (this.initData.isBoss) {
+      audioManager.playSfx('ui_cancel')
+      this.showMessage('The seal refuses retreat!', 800, () => this.showActionMenu())
+      return
+    }
+
     if (Math.random() < 0.5) {
       this.combat.state = 'escaped'
       audioManager.playSfx('ui_confirm')
@@ -582,12 +609,13 @@ export class BattleScene extends Phaser.Scene {
 
     if (this.combat.state === 'victory') {
       const reward = this.combat.getReward()
-      const emberShards = this.initData.battleId ? 1 : 0
-      const itemRewards = [{ itemId: 'health_potion', quantity: 1 }]
+      const bossReward = this.initData.battleId ? BOSS_BATTLE_REWARDS[this.initData.battleId] : undefined
+      const emberShards = bossReward?.emberShards ?? (this.initData.battleId ? 1 : 0)
+      const itemRewards = bossReward?.items ?? [{ itemId: 'health_potion', quantity: 1 }]
       audioManager.playMusic('victory')
       audioManager.playSfx('victory_fanfare')
       this.cameras.main.flash(450, 255, 241, 168, false)
-      this.showMessage(`Victory!\nEXP +${reward.exp}   Gold +${reward.gold}\nRewards: Ember Shard x${emberShards}, Potion x1\nPress onward to claim your prize.`, 2800, () => {
+      this.showMessage(`Victory!\nEXP +${reward.exp}   Gold +${reward.gold}\n${bossReward?.rewardLine ?? `Rewards: Ember Shard x${emberShards}, Potion x1\nPress onward to claim your prize.`}`, bossReward ? 3600 : 2800, () => {
         this.scene.start('OverworldScene', {
           continueGame: true,
           battleResult: {

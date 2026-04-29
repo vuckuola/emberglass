@@ -24,6 +24,37 @@ export interface Boss {
 
 export const BOSSES: Boss[] = [
   {
+    id: "moonwake_guardian",
+    name: "Moonwake Guardian",
+    region: "moonwake",
+    stats: { hp: 260, mp: 70, atk: 17, def: 14, spd: 10, mag: 17 },
+    phases: [
+      {
+        hpThreshold: 55,
+        newSkill: { id: "crescent_vow", name: "Crescent Vow", power: 20, element: "light", chance: 0.4 },
+        behaviorChange: "The guardian raises its crescent blade and the shrine floor shines like open water.",
+      },
+      {
+        hpThreshold: 25,
+        behaviorChange: "Cracks race through the inner seal as the guardian commits to one final test.",
+      },
+    ],
+    skills: [
+      { id: "moonlit_cleave", name: "Moonlit Cleave", power: 18, element: "light", chance: 0.42 },
+      { id: "tideglass_surge", name: "Tideglass Surge", power: 16, element: "water", chance: 0.33 },
+      { id: "vowbreaker", name: "Vowbreaker", power: 21, element: "arcane", chance: 0.25 },
+    ],
+    weaknesses: ["dark"],
+    resists: ["light"],
+    expReward: 240,
+    goldReward: 180,
+    spritePath: "assets/sprites/bosses/moonwake_guardian.png",
+    introDialogue: [
+      "The font has named you pilgrims. The seal names you trespassers.",
+      "Prove the ember vow can carry a road beyond Luma Quay.",
+    ],
+  },
+  {
     id: "thornheart",
     name: "Thornheart",
     region: "verdant",
