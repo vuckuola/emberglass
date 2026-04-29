@@ -1,13 +1,16 @@
 {
   "name": "emberglass",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.15.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "demo:serve": "vite preview --host 0.0.0.0",
+    "demo:check": "npm run typecheck && npm run build && node qa-runtime.mjs"
   },
   "dependencies": {
     "phaser": "^3.80.1",

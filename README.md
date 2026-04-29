@@ -1,15 +1,28 @@
 # Emberglass Public Demo
 
-Emberglass is a compact Phaser + React + Vite JRPG demo slice built for a public showcase. The demo covers title/load flow, exploration in Luma Quay, save/load, touch and keyboard controls, field combat, Moonwake Shrine, a guardian boss, and the demo-complete payoff.
+Emberglass is a compact Phaser + React + Vite JRPG vertical slice built for a public showcase. The demo covers title/load flow, exploration in Luma Quay, save/load, keyboard/touch controls, field combat, Moonwake Shrine, a guardian boss, and the demo-complete payoff.
 
-## Run Locally
+## Quick Start
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the local Vite URL and use the browser viewport you intend to demo. The game canvas scales to the available window while preserving the 960x640 design area.
+Open the Vite local URL in Chrome or Edge for the most reliable presenter build. The game canvas scales to the available window while preserving the 960x640 design area.
+
+## Build & Preview
+
+```bash
+npm run typecheck
+npm run build
+npm run demo:serve
+```
+
+- `npm run dev` starts the local development server.
+- `npm run build` type-checks and creates the production bundle in `dist/`.
+- `npm run demo:serve` serves the built demo locally with Vite preview.
+- `npm run demo:check` runs the required public-demo handoff checks.
 
 ## Demo Controls
 
@@ -27,14 +40,21 @@ Open the local Vite URL and use the browser viewport you intend to demo. The gam
 4. Attune the shrine font, challenge the guardian, and finish the boss flow.
 5. Save at the Skywell and return to title to show continue/reset readiness.
 
-## Release Candidate Checks
+## Demo Readiness Checklist
 
-Run these before publishing a demo build:
+- Use a clean browser profile or press `R` on the title screen before a fresh run.
+- Confirm audio can start after the first click/key press.
+- Present in Chrome or Edge at desktop/tablet size when possible.
+- Keep `SHOWCASE_NOTES.md` open for the route, limitations, and handoff notes.
+- Run the full validation command before publishing or zipping a build.
 
 ```bash
-npx tsc --noEmit
-npm run build
-node qa-runtime.mjs
+npm run demo:check
 ```
 
-The production build lazy-loads the Phaser game bootstrap from the React shell so the first app chunk stays small while the playable slice remains intact.
+## Known Limitations
+
+- This is a public-demo vertical slice, not a complete chapter.
+- Settings and credits are informational title prompts rather than full menus.
+- Save support uses autosave slot `0` only.
+- Browser audio may require an initial user gesture before playback.
