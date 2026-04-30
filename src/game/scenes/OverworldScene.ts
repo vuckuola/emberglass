@@ -175,6 +175,7 @@ type InventoryCounts = { potion: number; ether: number; emberShard: number }
 type MenuOverlay = { container: Phaser.GameObjects.Container }
 type MiniMapOverlay = { container: Phaser.GameObjects.Container; graphics: Phaser.GameObjects.Graphics; visible: boolean }
 type BossHud = { container: Phaser.GameObjects.Container; bar: Phaser.GameObjects.Graphics; nameText: Phaser.GameObjects.Text }
+type HudPanel = { graphics: Phaser.GameObjects.Graphics; nameText: Phaser.GameObjects.Text; hpText: Phaser.GameObjects.Text; mpText: Phaser.GameObjects.Text; goldText: Phaser.GameObjects.Text; companionTexts: Phaser.GameObjects.Text[]; swordTexts: Phaser.GameObjects.Text[]; portraits: Phaser.GameObjects.Arc[] }
 type TreasureChest = { id: string; tile: { x: number; y: number }; base: Phaser.GameObjects.Rectangle; lid: Phaser.GameObjects.Rectangle; trim: Phaser.GameObjects.Rectangle; opened: boolean }
 type GroundLoot = {
   x: number
@@ -202,13 +203,15 @@ export class OverworldScene extends Phaser.Scene {
   private initData: OverworldInitData = {}
   private saveData!: SaveData
   private objectiveText?: Phaser.GameObjects.Text
+  private objectivePanel?: Phaser.GameObjects.Rectangle
+  private hudPanel?: HudPanel
   private inventoryText?: Phaser.GameObjects.Text
   private promptText?: Phaser.GameObjects.Text
   private areaText?: Phaser.GameObjects.Text
   private menuOverlay?: MenuOverlay
   private miniMap?: MiniMapOverlay
   private helpOverlay?: Phaser.GameObjects.Container
-  private toast?: Phaser.GameObjects.Text
+  private toast?: Phaser.GameObjects.Container
   private touchMove: { x: number; y: number } | null = null
   private touchButtons: Phaser.GameObjects.GameObject[] = []
   private activeBanners: Phaser.GameObjects.GameObject[] = []
@@ -242,6 +245,7 @@ export class OverworldScene extends Phaser.Scene {
   private skillBar?: Phaser.GameObjects.Container
   private skillCooldownGraphics: Phaser.GameObjects.Graphics[] = []
   private skillTexts: Phaser.GameObjects.Text[] = []
+  private skillSlotFrames: Phaser.GameObjects.Rectangle[] = []
   private killCounterText?: Phaser.GameObjects.Text
   private comboText?: Phaser.GameObjects.Text
   private dashReadyText?: Phaser.GameObjects.Text
@@ -1299,30 +1303,30 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createHud() {
-    const shade = this.add.rectangle(0, 0, this.scale.width, 118, 0x02040b, 0.34).setOrigin(0).setScrollFactor(0).setDepth(89)
-    shade.setName('premium-hud-top-shade')
-    const panel = this.add.rectangle(12, 12, 548, 92, 0x0b0e1a, 0.9).setOrigin(0).setScrollFactor(0).setDepth(90)
-    panel.setStrokeStyle(2, 0xf3e1b0, 0.68)
-    this.add.rectangle(18, 18, 4, 80, 0xffd36e, 0.86).setOrigin(0).setScrollFactor(0).setDepth(91)
-    const cornerSize = 10
-    const g = this.add.graphics().setScrollFactor(0).setDepth(90.1)
-    g.lineStyle(2, 0xf0c040, 0.5)
-    g.beginPath(); g.moveTo(14, 18 + cornerSize); g.lineTo(14, 18); g.lineTo(14 + cornerSize, 18); g.strokePath()
-    g.beginPath(); g.moveTo(552, 18 + cornerSize); g.lineTo(552, 18); g.lineTo(552 - cornerSize, 18); g.strokePath()
-    g.beginPath(); g.moveTo(14, 86 - cornerSize); g.lineTo(14, 86); g.lineTo(14 + cornerSize, 86); g.strokePath()
-    g.beginPath(); g.moveTo(552, 92 - cornerSize); g.lineTo(552, 92); g.lineTo(552 - cornerSize, 92); g.strokePath()
-
-    this.add.text(34, 23, 'CURRENT VOW', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setScrollFactor(0).setDepth(91)
-    this.objectiveText = this.add.text(34, 40, '', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '16px', fontStyle: 'bold', wordWrap: { width: 500 }, backgroundColor: '#05071399', padding: { x: 5, y: 2 }, shadow: { offsetX: 1, offsetY: 2, color: '#000000', blur: 2, fill: true } }).setScrollFactor(0).setDepth(91)
-    this.inventoryText = this.add.text(34, 76, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px' }).setScrollFactor(0).setDepth(91)
-    this.levelText = this.add.text(468, 22, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(91)
-    this.killCounterText = this.add.text(576, 24, 'Kills: 0', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setScrollFactor(0).setDepth(91)
+    const hudGraphics = this.add.graphics().setScrollFactor(0).setDepth(90)
+    const nameText = this.add.text(54, 22, 'Nara Lv.3', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '15px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(92)
+    const hpText = this.add.text(180, 42, '', { color: '#f8fff9', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(92)
+    const mpText = this.add.text(180, 58, '', { color: '#eff6ff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(92)
+    const goldText = this.add.text(198, 22, '', { color: '#ffd166', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(92)
+    const companionTexts = [this.add.text(50, 100, 'Kael', { color: '#d7fbe8', fontFamily: 'Arial, sans-serif', fontSize: '11px' }), this.add.text(50, 128, 'Io', { color: '#dbeafe', fontFamily: 'Arial, sans-serif', fontSize: '11px' })]
+    const swordTexts = [this.add.text(28, 100, '⚔', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '10px' }), this.add.text(28, 128, '⚔', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '10px' })]
+    const portraits = [this.add.circle(25, 105, 10, 0x55d27a, 0.94), this.add.circle(25, 133, 10, 0x60a5fa, 0.94)]
+    ;[...companionTexts, ...swordTexts, ...portraits].forEach((entry) => entry.setScrollFactor(0).setDepth(92))
+    this.hudPanel = { graphics: hudGraphics, nameText, hpText, mpText, goldText, companionTexts, swordTexts, portraits }
+    this.add.circle(30, 30, 15, 0xff8a3d, 0.95).setStrokeStyle(2, 0xfff1a8, 0.7).setScrollFactor(0).setDepth(92)
+    this.add.text(30, 30, 'N', { color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(93)
+    this.objectivePanel = this.add.rectangle(this.scale.width / 2, 18, 430, 32, 0x050713, 0.72).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90).setStrokeStyle(1, 0x9ff3ff, 0.32)
+    this.objectiveText = this.add.text(this.scale.width / 2, 34, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '14px', wordWrap: { width: 400 } }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
+    this.inventoryText = this.add.text(16, 156, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '11px', backgroundColor: '#05071388', padding: { x: 8, y: 4 } }).setScrollFactor(0).setDepth(91)
+    this.levelText = this.add.text(0, 0, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '1px' }).setVisible(false)
+    this.killCounterText = this.add.text(this.scale.width - 24, 24, 'Kills: 0', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setOrigin(1, 0).setScrollFactor(0).setDepth(91)
     this.comboText = this.add.text(this.scale.width - 24, 24, '', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px', fontStyle: 'bold', shadow: { offsetX: 1, offsetY: 2, color: '#000000', blur: 3, fill: true } }).setOrigin(1, 0).setScrollFactor(0).setDepth(96)
     this.dashReadyText = this.add.text(this.scale.width - 24, 54, 'DASH READY', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '11px', fontStyle: 'bold' }).setOrigin(1, 0).setScrollFactor(0).setDepth(96).setAlpha(0)
     const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
     areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
-    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'Move • E Interact • Space/Click Attack • Shift Dash • Q Potion', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '14px', backgroundColor: '#08091aaa', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'WASD: Move | Space: Attack | 1-4: Skills | F: Block | Q: Potion | E: Interact', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px', backgroundColor: '#08091acc', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.tweens.add({ targets: this.promptText, alpha: 0, delay: 10000, duration: 900 })
     this.createSkillBar()
     this.playerHpBarBg = this.add.graphics().setDepth(22)
     this.playerHpBar = this.add.graphics().setDepth(23)
@@ -1986,23 +1990,29 @@ export class OverworldScene extends Phaser.Scene {
   private showToast(message: string) {
     const { width } = this.scale
     this.toast?.destroy()
+    const lower = message.toLowerCase()
+    const color = lower.includes('failed') || lower.includes("can't") || lower.includes('not enough') ? '#ff8a8a' : lower.includes('no health') || lower.includes('already') || lower.includes('low') ? '#ffb86b' : lower.includes('purchased') || lower.includes('yields') || lower.includes('restored') || lower.includes('complete') ? '#86efac' : '#ffffff'
     const panelW = Math.min(message.length * 9 + 48, 740)
     const panelH = Math.max(Math.ceil(message.length / 70) * 22 + 32, 40)
-    const glow = this.add.rectangle(width / 2, 126, panelW + 14, panelH + 12, 0xffd36e, 0.1).setScrollFactor(0).setDepth(99.8)
-    const panel = this.add.rectangle(width / 2, 126, panelW, panelH, 0x0a0e1e, 0.94).setScrollFactor(0).setDepth(100).setStrokeStyle(1, 0xd4a84b, 0.72)
-    const accent = this.add.rectangle(width / 2 - panelW / 2 + 3, 126, 3, panelH - 8, 0xd4a84b, 0.8).setScrollFactor(0).setDepth(100.1)
-    const text = this.add.text(width / 2, 126, message, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: panelW - 32 } }).setOrigin(0.5).setScrollFactor(0).setDepth(101)
-    this.toast = text
-    this.tweens.add({ targets: [glow, panel, accent, text], y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => { if (this.toast === text) { this.toast = undefined }; glow.destroy(); panel.destroy(); accent.destroy(); text.destroy() } })
+    const container = this.add.container(width / 2, 82).setScrollFactor(0).setDepth(125).setAlpha(0)
+    const glow = this.add.rectangle(0, 0, panelW + 14, panelH + 12, 0xffd36e, 0.1)
+    const panel = this.add.rectangle(0, 0, panelW, panelH, 0x0a0e1e, 0.94).setStrokeStyle(1, 0xd4a84b, 0.72)
+    const accent = this.add.rectangle(-panelW / 2 + 3, 0, 3, panelH - 8, 0xd4a84b, 0.8)
+    const text = this.add.text(0, 0, message, { color, fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: panelW - 32 } }).setOrigin(0.5)
+    container.add([glow, panel, accent, text])
+    this.toast = container
+    this.tweens.add({ targets: container, y: 104, alpha: 1, duration: 180, ease: 'Sine.easeOut' })
+    this.tweens.add({ targets: container, y: 88, alpha: 0, delay: 3000, duration: 520, onComplete: () => { if (this.toast === container) { this.toast = undefined }; container.destroy() } })
   }
 
   private showRewardToast(message: string) {
     const { width } = this.scale
     this.toast?.destroy()
-    const panel = this.add.rectangle(width / 2, 128, 760, 48, 0x231525, 0.94).setScrollFactor(0).setDepth(101).setStrokeStyle(2, 0xffd36e, 0.72)
-    const text = this.add.text(width / 2, 128, message, { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '18px', wordWrap: { width: 700 } }).setOrigin(0.5).setScrollFactor(0).setDepth(102)
-    this.toast = text
-    this.tweens.add({ targets: [panel, text], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { if (this.toast === text) { this.toast = undefined }; panel.destroy(); text.destroy() } })
+    const container = this.add.container(width / 2, 128).setScrollFactor(0).setDepth(125)
+    container.add(this.add.rectangle(0, 0, 760, 48, 0x231525, 0.94).setStrokeStyle(2, 0xffd36e, 0.72))
+    container.add(this.add.text(0, 0, message, { color: '#86efac', fontFamily: 'Arial, sans-serif', fontSize: '18px', wordWrap: { width: 700 } }).setOrigin(0.5))
+    this.toast = container
+    this.tweens.add({ targets: container, y: '-=10', alpha: 0, delay: 3000, duration: 520, onComplete: () => { if (this.toast === container) { this.toast = undefined }; container.destroy() } })
   }
 
   private showAreaBanner(title: string, subtitle: string) {
@@ -2296,11 +2306,12 @@ export class OverworldScene extends Phaser.Scene {
       if (Math.abs(tile.x - playerTile.x) > radius || Math.abs(tile.y - playerTile.y) > radius) return
       graphics.fillStyle(color, 1).fillCircle(width / 2 + (tile.x - playerTile.x) * scaleX, height / 2 + (tile.y - playerTile.y) * scaleY, size)
     }
-    ;[GUIDE_TILE, ELDER_TILE, MERCHANT_TILE, ALLY_TILE].forEach((tile) => dot(tile, 0x45e67a))
+    ;[GUIDE_TILE, ELDER_TILE, MERCHANT_TILE, ALLY_TILE].forEach((tile) => dot(tile, 0xfacc15))
+    this.companions.filter((companion) => companion.state !== 'dead').forEach((companion) => dot(this.worldToTile(companion.x, companion.y), 0x60a5fa, 2.4))
     this.treasureChests.filter((chest) => !chest.opened).forEach((chest) => dot(chest.tile, 0xffd166, 2.2))
     this.groundLoot.forEach((loot) => dot(this.worldToTile(loot.x, loot.y), 0xffd166, 1.8))
     this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => dot(this.worldToTile(enemy.x, enemy.y), 0xef4444, enemy.isBoss ? 3.6 : 2.4))
-    dot(playerTile, 0xffffff, 3)
+    dot(playerTile, 0x45e67a, 3)
     graphics.lineStyle(1, 0xd4a84b, 0.72).strokeRoundedRect(0.5, 0.5, width - 1, height - 1, 8)
   }
 
@@ -2320,12 +2331,16 @@ export class OverworldScene extends Phaser.Scene {
     this.skillBar = this.add.container(x, y).setScrollFactor(0).setDepth(96)
     this.skillCooldownGraphics = []
     this.skillTexts = []
+    this.skillSlotFrames = []
     skills.forEach((skill, index) => {
       const slotX = index * 76
-      this.skillBar!.add(this.add.rectangle(slotX, 0, 58, 58, 0x0b0e1a, 0.92).setStrokeStyle(2, 0xf3e1b0, 0.55))
+      const frame = this.add.rectangle(slotX, 0, 58, 58, 0x0b0e1a, 0.92).setStrokeStyle(2, index === 0 ? 0xfff1a8 : 0xf3e1b0, index === 0 ? 0.95 : 0.55)
+      this.skillSlotFrames.push(frame)
+      this.skillBar!.add(frame)
       this.skillBar!.add(this.add.circle(slotX, -4, 16, skill.color, 0.9))
       this.skillBar!.add(this.add.text(slotX, -12, `${index + 1}`, { color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: '14px', fontStyle: 'bold' }).setOrigin(0.5))
       this.skillBar!.add(this.add.text(slotX, 15, `${skill.mpCost} MP`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5))
+      this.skillBar!.add(this.add.text(slotX, 38, `${index + 1}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5))
       const cooldown = this.add.graphics()
       const text = this.add.text(slotX, -3, '', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '15px', fontStyle: 'bold' }).setOrigin(0.5)
       this.skillCooldownGraphics.push(cooldown)
@@ -2345,25 +2360,19 @@ export class OverworldScene extends Phaser.Scene {
       const disabled = hero.currentMp < skill.mpCost || remaining > 0
       graphics.clear()
       if (disabled) graphics.fillStyle(0x02030a, 0.62).fillRect(index * 76 - 29, -29, 58, 58)
-      if (remaining > 0) graphics.fillStyle(0x111827, 0.78).fillRect(index * 76 - 29, -29, 58, 58 * (remaining / skill.cooldown))
-      this.skillTexts[index]?.setText(remaining > 0 ? `${Math.ceil(remaining / 1000)}` : hero.currentMp < skill.mpCost ? 'MP' : '')
+      if (remaining > 0) graphics.fillStyle(0x111827, 0.78).slice(index * 76, 0, 30, -90, -90 + 360 * (remaining / skill.cooldown), true).fillPath()
+      this.skillSlotFrames[index]?.setStrokeStyle(2, index === 0 ? 0xfff1a8 : 0xf3e1b0, index === 0 ? 0.95 : 0.55)
+      this.skillTexts[index]?.setText(remaining > 0 ? `${Math.ceil(remaining / 1000)}` : hero.currentMp < skill.mpCost ? `${skill.mpCost} MP` : '')
     })
   }
 
   private openHelpOverlay() {
-    if (this.helpOverlay) return
-    this.busy = true
+    if (this.helpOverlay) { this.helpOverlay.destroy(); this.helpOverlay = undefined; return }
     const { width, height } = this.scale
-    const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(230)
-    overlay.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.68))
-    overlay.add(this.add.rectangle(width / 2, height / 2, 520, 310, 0x10162d, 0.96).setStrokeStyle(2, 0x8ab4f8, 0.75))
-    overlay.add(this.add.text(width / 2, height / 2 - 116, 'Keyboard Shortcuts', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }).setOrigin(0.5))
-    overlay.add(this.add.text(width / 2 - 190, height / 2 - 68, 'WASD / Arrows — Move\nEnter / Space — Interact\nM — Menu\nT — Toggle Map\nH — Help (this screen)\nEsc — Close', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', lineSpacing: 10 }))
-    overlay.add(this.add.text(width / 2, height / 2 + 114, 'Press any key or click to close', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px' }).setOrigin(0.5))
-    const close = () => { overlay.destroy(); this.helpOverlay = undefined; this.busy = false }
+    const overlay = this.add.container(width / 2, height - 58).setScrollFactor(0).setDepth(230)
+    overlay.add(this.add.rectangle(0, 0, 640, 34, 0x050713, 0.9).setStrokeStyle(1, 0x8ab4f8, 0.35))
+    overlay.add(this.add.text(0, 0, 'WASD: Move | Space: Attack | 1-4: Skills | F: Block | Q: Potion | E: Interact', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px' }).setOrigin(0.5))
     this.helpOverlay = overlay
-    this.input.keyboard?.once('keydown', close)
-    this.input.once('pointerdown', close)
   }
 
   private dismissBanners() {
@@ -3011,9 +3020,14 @@ export class OverworldScene extends Phaser.Scene {
     const hero = this.saveData.party[0]
     const restoredHp = Math.max(1, Math.floor(this.getPlayerCombatStats().hp * 0.5))
     hero.currentHp = restoredHp
-    this.cameras.main.flash(600, 180, 20, 20, false)
-    this.showEventBanner('Defeat', 'Nara falls back to the quay save crystal. Gold and items are safe.')
-    this.time.delayedCall(900, () => {
+    const { width, height } = this.scale
+    const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(240).setAlpha(0)
+    overlay.add(this.add.rectangle(width / 2, height / 2, width, height, 0x2a0508, 0.62))
+    overlay.add(this.add.ellipse(width / 2, height / 2, width * 1.15, height * 0.82, 0x000000, 0.18).setStrokeStyle(56, 0x7f1d1d, 0.48))
+    overlay.add(this.add.text(width / 2, height / 2 - 22, 'DEFEATED', { color: '#ffb4b4', fontFamily: 'Georgia, serif', fontSize: '42px', fontStyle: 'bold' }).setOrigin(0.5))
+    overlay.add(this.add.text(width / 2, height / 2 + 28, 'Reviving at skywell...', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px' }).setOrigin(0.5))
+    this.tweens.add({ targets: overlay, alpha: 1, duration: 420, ease: 'Sine.easeOut' })
+    this.time.delayedCall(2000, () => {
       if (this.player) {
         this.player.setPosition(this.tileCenter(SAVE_TILE.x), this.tileCenter(SAVE_TILE.y))
         this.companions.forEach((companion) => {
@@ -3025,7 +3039,8 @@ export class OverworldScene extends Phaser.Scene {
         this.showFloatingText(this.player.x, this.player.y - 34, `HP restored to ${restoredHp}`, '#86efac')
         this.tweens.add({ targets: this.player, alpha: 0.25, yoyo: true, repeat: 5, duration: 120 })
       }
-      this.time.delayedCall(760, () => { this.busy = false })
+      this.tweens.add({ targets: overlay, alpha: 0, duration: 520, onComplete: () => overlay.destroy() })
+      this.time.delayedCall(560, () => { this.busy = false })
       this.refreshHud(); this.updatePlayerBars(); this.persist()
     })
   }
@@ -3152,7 +3167,9 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private setObjective(objective: string) {
+    const changed = this.saveData.currentObjective !== objective
     this.saveData.currentObjective = objective
+    if (changed) this.flashObjectiveBanner()
   }
 
   private setFlag(flag: string) {
@@ -3255,15 +3272,10 @@ export class OverworldScene extends Phaser.Scene {
   private refreshHud() {
     const counts = this.getInventoryCounts()
     const hero = this.saveData.party[0]
-    const companionHp = this.saveData.party.slice(1, 3).map((member) => {
-      const character = CHARACTERS[member.characterId]
-      if (!character) return null
-      const stats = this.scaleCharacterStats(character, member.level)
-      return `${character.name} HP:${member.currentHp}/${stats.hp}`
-    }).filter((line): line is string => Boolean(line)).join('  ')
-    this.objectiveText?.setText(`Objective: ${this.saveData.currentObjective}`)
-    this.inventoryText?.setText(`Gold ${this.saveData.gold}  |  Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}  |  Home ${this.homeProgress()}/3${this.saveData.pet.unlocked ? '  Pip' : ''}${companionHp ? `  |  ${companionHp}` : ''}`)
+    this.objectiveText?.setText(`▶ ${this.saveData.currentObjective}`)
+    this.inventoryText?.setText(`Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}  |  Home ${this.homeProgress()}/3${this.saveData.pet.unlocked ? '  Pip' : ''}`)
     this.levelText?.setText(`Lv.${hero.level}`)
+    this.updateTopLeftHud()
     this.updateXpBar()
     this.killCounterText?.setText(`Kills: ${this.killCount}`)
     this.updateSkillHud()
@@ -3273,10 +3285,49 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.playerXpBar) return
     const xpForLevel = 180
     const progress = (this.saveData.battleRewards.exp % xpForLevel) / xpForLevel
-    this.playerXpBar.clear()
-    this.playerXpBar.fillStyle(0x050509, 0.82).fillRoundedRect(344, 57, 190, 8, 3)
-    this.playerXpBar.fillStyle(0xffd166, 0.95).fillRoundedRect(346, 59, 186 * progress, 4, 2)
-    this.playerXpBar.lineStyle(1, 0xfff1a8, 0.44).strokeRoundedRect(344, 57, 190, 8, 3)
+    this.playerXpBar.clear().fillStyle(0x111827, 0.9).fillRoundedRect(54, 73, 186, 5, 2).fillStyle(0xa855f7, 0.95).fillRoundedRect(54, 73, 186 * progress, 5, 2)
+  }
+
+  private updateTopLeftHud() {
+    if (!this.hudPanel) return
+    const hudPanel = this.hudPanel
+    const hero = this.saveData.party[0]
+    const stats = this.getPlayerCombatStats()
+    const hpPct = Phaser.Math.Clamp(hero.currentHp / stats.hp, 0, 1)
+    const mpPct = Phaser.Math.Clamp(hero.currentMp / stats.mp, 0, 1)
+    const graphics = hudPanel.graphics
+    graphics.clear()
+    graphics.fillStyle(0x050713, 0.84).fillRoundedRect(12, 12, 242, 72, 10)
+    graphics.lineStyle(1, 0xffffff, 0.16).strokeRoundedRect(12, 12, 242, 72, 10)
+    graphics.fillStyle(0x111827, 0.95).fillRoundedRect(54, 39, 126, 8, 3).fillStyle(0x22c55e, 0.96).fillRoundedRect(54, 39, 126 * hpPct, 8, 3)
+    graphics.fillStyle(0x111827, 0.95).fillRoundedRect(54, 55, 126, 7, 3).fillStyle(0x3b82f6, 0.96).fillRoundedRect(54, 55, 126 * mpPct, 7, 3)
+    graphics.fillStyle(0x050713, 0.76).fillRoundedRect(12, 91, 168, 56, 9)
+    graphics.lineStyle(1, 0xffffff, 0.13).strokeRoundedRect(12, 91, 168, 56, 9)
+    hudPanel.nameText.setText(`Nara Lv.${hero.level}`)
+    hudPanel.hpText.setText(`${hero.currentHp}/${stats.hp}`)
+    hudPanel.mpText.setText(`${hero.currentMp}/${stats.mp}`)
+    hudPanel.goldText.setText(`🪙 ${this.saveData.gold}g`)
+    this.saveData.party.slice(1, 3).forEach((member, index) => {
+      const character = CHARACTERS[member.characterId]
+      if (!character) return
+      const companionStats = this.scaleCharacterStats(character, member.level)
+      const pct = Phaser.Math.Clamp(member.currentHp / companionStats.hp, 0, 1)
+      const y = index === 0 ? 111 : 139
+      const inCombat = this.mapEnemies.some((enemy) => !enemy.dead && this.player && Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) < enemy.aggroRange)
+      graphics.fillStyle(0x111827, 0.95).fillRoundedRect(50, y + 4, 92, 5, 2).fillStyle(0x22c55e, 0.96).fillRoundedRect(50, y + 4, 92 * pct, 5, 2)
+      hudPanel.companionTexts[index]?.setText(character.name)
+      hudPanel.swordTexts[index]?.setVisible(inCombat)
+      const portrait = hudPanel.portraits[index]
+      if (portrait && pct < 0.3 && !this.tweens.isTweening(portrait)) this.tweens.add({ targets: portrait, fillColor: 0xef4444, alpha: 0.45, yoyo: true, duration: 180, repeat: 1 })
+    })
+  }
+
+  private flashObjectiveBanner() {
+    if (!this.objectivePanel || !this.objectiveText) return
+    this.objectivePanel.setAlpha(1).setScale(1.03)
+    this.objectiveText.setAlpha(1).setScale(1.03)
+    this.tweens.add({ targets: [this.objectivePanel, this.objectiveText], scale: 1, duration: 220, ease: 'Back.easeOut' })
+    this.tweens.add({ targets: this.objectivePanel, alpha: 0.72, delay: 260, duration: 360 })
   }
 
   private homeProgress() {
