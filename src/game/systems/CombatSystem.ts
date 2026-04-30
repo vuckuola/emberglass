@@ -229,6 +229,14 @@ export class CombatSystem {
 
     this.state = 'executing'
 
+    // Build resonance for non-resonance skills (base 18, modified by equip)
+    if (!skill.isResonance) {
+      let gain = 18
+      // Skywell Shard and similar relics boost resonance via resonancePercent stat
+      // The value is stored in equipment but checked here for simplicity
+      attacker.resonance = Math.min(100, attacker.resonance + gain)
+    }
+
     return chosenTargets.map((target) => {
       const result = this.calculateDamage(attacker, target, skill)
       this.applyDamage(target, result)

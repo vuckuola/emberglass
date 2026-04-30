@@ -123,6 +123,9 @@ export class OverworldScene extends Phaser.Scene {
   private discoveredAreas = new Set<string>()
   private dustCooldown = 0
   private pipBobTween?: Phaser.Tweens.Tween
+  private homeWarmthUsedThisVisit = false
+  private homeGardenUsedThisVisit = false
+  private lastForageTime = 0
 
   constructor() {
     super('OverworldScene')
@@ -152,6 +155,9 @@ export class OverworldScene extends Phaser.Scene {
     this.discoveredAreas = new Set()
     this.dustCooldown = 0
     this.pipBobTween = undefined
+    this.homeWarmthUsedThisVisit = false
+    this.homeGardenUsedThisVisit = false
+    this.lastForageTime = this.time.now
     this.objectiveText = undefined
     this.inventoryText = undefined
     this.promptText = undefined
@@ -194,6 +200,7 @@ export class OverworldScene extends Phaser.Scene {
     if (!continuedSave && !this.initData.continueGame) {
       this.time.delayedCall(850, () => this.showFirstSessionGuide())
     }
+    this.notifyWorkshopBuff()
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE)
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
   }
@@ -250,6 +257,8 @@ export class OverworldScene extends Phaser.Scene {
     this.updateMiraNpcFacing()
     this.updateAreaPop()
     this.checkSavePoint()
+    this.checkHomeBenefits()
+    this.checkPetForage()
     this.updateInteractionPrompt()
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.m) || Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
@@ -919,11 +928,80 @@ export class OverworldScene extends Phaser.Scene {
     const tile = this.worldToTile(this.player.x, this.player.y)
     if (tile.x === SAVE_TILE.x && tile.y === SAVE_TILE.y && !this.saveNoticeShown) {
       this.saveNoticeShown = true
+      this.restorePartyMissingPercent(0.5, 0.3)
       this.persist()
       audioManager.playSfx('save_point')
       this.cameras.main.flash(180, 159, 243, 255, false)
-      this.showToast(this.flag('slice_complete') ? 'Progress saved at the Skywell. Luma Quay rests easier.' : 'Progress saved at the Skywell.')
+      this.showToast('The save crystal hums. Strength returns.')
     }
+  }
+
+  private checkHomeBenefits() {
+    if (!this.player) {
+      return
+    }
+
+    const tile = this.worldToTile(this.player.x, this.player.y)
+    const distanceFromHome = Phaser.Math.Distance.Between(tile.x, tile.y, HOME_TILE.x, HOME_TILE.y)
+    if (distanceFromHome > 3) {
+      this.homeWarmthUsedThisVisit = false
+      this.homeGardenUsedThisVisit = false
+      return
+    }
+
+    if (tile.x !== HOME_TILE.x || tile.y !== HOME_TILE.y) {
+      return
+    }
+
+    if (this.saveData.home.warmth === 1 && !this.homeWarmthUsedThisVisit) {
+      this.homeWarmthUsedThisVisit = true
+      this.restorePartyMissingPercent(0.3, 0.2)
+      audioManager.playSfx('save_point')
+      this.showToast('The hearth embraces you. HP and MP partially restored.')
+      this.persist()
+    }
+
+    if (this.saveData.home.garden === 1 && !this.homeGardenUsedThisVisit) {
+      this.homeGardenUsedThisVisit = true
+      const itemId = this.rollGardenItem()
+      if (itemId) {
+        this.addInventory(itemId, 1)
+        audioManager.playSfx('reward_gain')
+        this.showToast(`The garden yields a ${this.getItemName(itemId)}.`)
+        this.persist()
+      }
+    }
+  }
+
+  private checkPetForage() {
+    if (!this.saveData.pet.unlocked || !this.saveData.pet.forageReady || this.time.now - this.lastForageTime < 45000) {
+      return
+    }
+
+    const itemId = this.rollPetForageItem()
+    this.lastForageTime = this.time.now
+    this.saveData.pet.forageReady = false
+    this.addInventory(itemId, 1)
+    audioManager.playSfx('reward_gain')
+    this.showToast(`Pip returns with a ${this.getItemName(itemId)}!`)
+    this.persist()
+    this.time.delayedCall(60000, () => {
+      if (!this.saveData?.pet.unlocked) {
+        return
+      }
+      this.saveData.pet.forageReady = true
+      this.persist()
+    })
+  }
+
+  private notifyWorkshopBuff() {
+    if (this.saveData.home.workshop !== 1 || this.flag('workshopBuffNotified')) {
+      return
+    }
+
+    this.setFlag('workshopBuffNotified')
+    this.time.delayedCall(900, () => this.showToast('The workshop hums with purpose. All allies gain ATK +2, DEF +1.'))
+    this.persist()
   }
 
   private interact() {
@@ -1106,6 +1184,7 @@ export class OverworldScene extends Phaser.Scene {
       return
     }
     const rewards = result.rewards ?? { exp: 0, gold: 0, emberShards: 0, items: [] }
+    const previousLevels = new Map(this.saveData.party.map((member) => [member.characterId, member.level]))
     this.saveData.gold += rewards.gold
     this.saveData.battleRewards.exp += rewards.exp
     this.saveData.battleRewards.gold += rewards.gold
@@ -1150,6 +1229,9 @@ export class OverworldScene extends Phaser.Scene {
       this.saveData.party.forEach((member) => { member.level = Math.max(member.level, 6) })
     }
     this.persist()
+    const levelUps = this.saveData.party
+      .filter((member) => member.level > (previousLevels.get(member.characterId) ?? member.level))
+      .map((member) => ({ name: CHARACTERS[member.characterId]?.name ?? member.characterId, level: member.level }))
     this.time.delayedCall(250, () => {
       this.showEventBanner(
         this.getBattleResultTitle(result.battleId),
@@ -1158,11 +1240,27 @@ export class OverworldScene extends Phaser.Scene {
       audioManager.playSfx(result.battleId === SHRINE_BOSS_BATTLE_ID ? 'equipment_gain' : 'reward_gain')
       this.time.delayedCall(320, () => audioManager.playSfx('reward_gain'))
       this.showRewardToast(`Rewards secured: ${rewards.gold}g, EXP ${rewards.exp}, new route objective updated.`)
+      this.showLevelUpCeremony(levelUps)
       this.refreshHud()
       if (result.battleId === FINAL_BOSS_BATTLE_ID) {
         this.time.delayedCall(3050, () => this.showDemoCompletionCard())
       }
     })
+  }
+
+  private showLevelUpCeremony(levelUps: Array<{ name: string; level: number }>) {
+    levelUps.forEach((levelUp, index) => {
+      this.time.delayedCall(800 * index, () => {
+        audioManager.playSfx('level_up')
+        this.flashHudGold()
+        this.showToast(`${levelUp.name} ascends to Level ${levelUp.level}!`)
+      })
+    })
+  }
+
+  private flashHudGold() {
+    const flash = this.add.rectangle(0, 0, this.scale.width, 118, 0xffd36e, 0.28).setOrigin(0).setScrollFactor(0).setDepth(96)
+    this.tweens.add({ targets: flash, alpha: 0, duration: 520, ease: 'Sine.easeOut', onComplete: () => flash.destroy() })
   }
 
   private getBattleResultTitle(battleId?: string) {
@@ -1758,6 +1856,55 @@ export class OverworldScene extends Phaser.Scene {
     } else {
       this.saveData.inventory.push({ itemId, quantity: Math.max(0, quantity) })
     }
+  }
+
+  private restorePartyMissingPercent(hpPercent: number, mpPercent: number) {
+    this.saveData.party.forEach((member) => {
+      const character = CHARACTERS[member.characterId]
+      if (!character) {
+        return
+      }
+      const stats = this.scaleCharacterStats(character, member.level)
+      const missingHp = Math.max(0, stats.hp - member.currentHp)
+      const missingMp = Math.max(0, stats.mp - member.currentMp)
+      member.currentHp = Math.min(stats.hp, member.currentHp + Math.ceil(missingHp * hpPercent))
+      member.currentMp = Math.min(stats.mp, member.currentMp + Math.ceil(missingMp * mpPercent))
+    })
+  }
+
+  private scaleCharacterStats(character: (typeof CHARACTERS)[string], level: number) {
+    const levelUps = Math.max(0, level - 1)
+    return {
+      hp: character.baseStats.hp + character.growth.hp * levelUps,
+      mp: character.baseStats.mp + character.growth.mp * levelUps,
+      atk: character.baseStats.atk + character.growth.atk * levelUps,
+      def: character.baseStats.def + character.growth.def * levelUps,
+      spd: character.baseStats.spd + character.growth.spd * levelUps,
+      mag: character.baseStats.mag + character.growth.mag * levelUps,
+    }
+  }
+
+  private rollGardenItem(): string | null {
+    if (Math.random() >= 0.4) {
+      return null
+    }
+    const roll = Math.random()
+    if (roll < 0.5) return 'health_potion'
+    if (roll < 0.8) return 'mana_potion'
+    return 'antidote'
+  }
+
+  private rollPetForageItem(): string {
+    const roll = Math.random()
+    if (roll < 0.35) return 'health_potion'
+    if (roll < 0.6) return 'mana_potion'
+    if (roll < 0.75) return 'ember_shard'
+    if (roll < 0.9) return 'antidote'
+    return 'burn_salve'
+  }
+
+  private getItemName(itemId: string) {
+    return ITEMS_BY_ID[itemId]?.name ?? itemId.replace(/_/g, ' ')
   }
 
   private getInventoryCounts(): InventoryCounts {

@@ -44,6 +44,8 @@ type EntityView = {
   label: Phaser.GameObjects.Text
   hpFill: Phaser.GameObjects.Rectangle
   mpFill: Phaser.GameObjects.Rectangle
+  resonanceTrack?: Phaser.GameObjects.Rectangle
+  resonanceFill?: Phaser.GameObjects.Rectangle
   color: number
   spotlight: Phaser.GameObjects.Ellipse
 }
@@ -82,6 +84,7 @@ export class BattleScene extends Phaser.Scene {
   private deathEffectDone = new Set<BattleEntity>()
   private turnIndicator?: Phaser.GameObjects.Ellipse
   private commandKeys?: Record<'one' | 'two' | 'three' | 'four' | 'five', Phaser.Input.Keyboard.Key>
+  private resonanceFlashReady = new Set<BattleEntity>()
 
   constructor() {
     super('BattleScene')
@@ -99,6 +102,7 @@ export class BattleScene extends Phaser.Scene {
     this.commandTexts = []
     this.optionTexts = []
     this.timelineDots = []
+    this.resonanceFlashReady = new Set()
     this.selectedSkill = undefined
     this.validTargets = []
     this.waitingForTarget = false
@@ -149,7 +153,7 @@ export class BattleScene extends Phaser.Scene {
   private showBattleIntro(onComplete: () => void) {
     if (!this.initData.isBoss) {
       audioManager.playSfx('scene_whoosh')
-      this.showMessage('Battle Start!\nRelics are active.', 1100, onComplete)
+      this.showMessage(`Battle Start!\nRelics are active.${this.getMiraIntroLine()}`, 1300, onComplete)
       return
     }
 
@@ -162,7 +166,11 @@ export class BattleScene extends Phaser.Scene {
     this.cameras.main.flash(420, 210, 180, 255, false)
     this.cameras.main.shake(260, 0.006)
     audioManager.playSfx('boss_sting')
-    this.showMessage(`${boss?.name ?? 'Guardian'}\n${intro}`, 3000, onComplete)
+    this.showMessage(`${boss?.name ?? 'Guardian'}\n${intro}${this.getMiraIntroLine()}`, 3300, onComplete)
+  }
+
+  private getMiraIntroLine() {
+    return this.saveData?.flags.mira_recruited ? '\nMira\'s arcane link bolsters the party. MAG +3.' : ''
   }
 
   private drawBackground(width: number, height: number) {
@@ -282,6 +290,15 @@ export class BattleScene extends Phaser.Scene {
       })
     })
 
+    if (this.saveData?.home.workshop === 1) {
+      adjusted.atk += 2
+      adjusted.def += 1
+    }
+
+    if (this.saveData?.flags.mira_recruited) {
+      adjusted.mag += 3
+    }
+
     return adjusted
   }
 
@@ -352,8 +369,15 @@ export class BattleScene extends Phaser.Scene {
     this.add.rectangle(x - mpTrackW / 2, mpY, mpTrackW, mpBarH, 0x0a0a1a, 0.8).setOrigin(0, 0.5).setDepth(10)
     this.add.rectangle(x - mpTrackW / 2, mpY, mpTrackW, mpBarH, 0x101828, 0.6).setOrigin(0, 0.5).setStrokeStyle(1, 0x1a2040, 0.4).setDepth(10.1)
     const mpFill = this.add.rectangle(x - mpTrackW / 2 + 1, mpY, mpTrackW - 2, mpBarH - 2, 0x3f8cff).setOrigin(0, 0.5).setDepth(10.2)
+    const resonanceY = y + 70
+    const resonanceTrack = entity.isPlayer
+      ? this.add.rectangle(x - 36, resonanceY, 72, 5, 0x052a2a, 0.72).setOrigin(0, 0.5).setDepth(10).setVisible(false)
+      : undefined
+    const resonanceFill = entity.isPlayer
+      ? this.add.rectangle(x - 36, resonanceY, 0, 3, 0x00e5cc).setOrigin(0, 0.5).setDepth(10.2).setVisible(false)
+      : undefined
 
-    this.entityViews.set(entity, { rect, sprite, label, hpFill, mpFill, color, spotlight })
+    this.entityViews.set(entity, { rect, sprite, label, hpFill, mpFill, resonanceTrack, resonanceFill, color, spotlight })
   }
 
   private getEntityAssetKey(entity: BattleEntity): string | undefined {
@@ -540,16 +564,17 @@ export class BattleScene extends Phaser.Scene {
     }
 
     const actor = this.combat.currentEntity
-    actor.skills.forEach((skill, index) => {
+    actor.skills.filter((skill) => !skill.isResonance || actor.resonance >= 100).forEach((skill, index) => {
+      const canUse = actor.currentMp >= skill.mpCost && (!skill.isResonance || actor.resonance >= 100)
       const text = this.add
         .text(32, this.scale.height - 38 - index * 26, `${skill.name}  MP ${skill.mpCost}`, {
-          color: actor.currentMp >= skill.mpCost ? '#d7d9e8' : '#74788f',
+          color: canUse ? '#d7d9e8' : '#74788f',
           fontFamily: 'Arial, sans-serif',
           fontSize: '17px',
         })
-        .setInteractive({ useHandCursor: actor.currentMp >= skill.mpCost })
+        .setInteractive({ useHandCursor: canUse })
       text.on('pointerdown', () => {
-        if (actor.currentMp >= skill.mpCost) {
+        if (canUse) {
           audioManager.playSfx('ui_blip')
           this.beginTargetSelection(skill)
         }
@@ -783,6 +808,21 @@ export class BattleScene extends Phaser.Scene {
       view.hpFill.width = Math.max(0, 86 * hpRatio)
       view.hpFill.fillColor = hpRatio > 0.35 ? 0x36d65f : hpRatio > 0.15 ? 0xd4a020 : 0xd94747
       view.mpFill.width = Math.max(0, 64 * mpRatio)
+      if (view.resonanceTrack && view.resonanceFill) {
+        const resonanceRatio = Phaser.Math.Clamp(entity.resonance / 100, 0, 1)
+        const visible = entity.resonance > 0
+        view.resonanceTrack.setVisible(visible)
+        view.resonanceFill.setVisible(visible)
+        view.resonanceFill.width = Math.max(0, 72 * resonanceRatio)
+        if (entity.resonance >= 100 && !this.resonanceFlashReady.has(entity)) {
+          this.resonanceFlashReady.add(entity)
+          view.resonanceFill.setFillStyle(0xffd36e)
+          this.tweens.add({ targets: view.resonanceFill, alpha: 0.35, yoyo: true, duration: 140, repeat: 3, onComplete: () => view.resonanceFill?.setFillStyle(0x00e5cc).setAlpha(1) })
+        } else if (entity.resonance < 100) {
+          this.resonanceFlashReady.delete(entity)
+          view.resonanceFill.setFillStyle(0x00e5cc).setAlpha(1)
+        }
+      }
       view.rect.setAlpha(entity.isAlive ? 1 : 0.35)
       view.spotlight.setAlpha(entity.isAlive ? 1 : 0.2)
       if (entity !== this.combat?.currentEntity) {
