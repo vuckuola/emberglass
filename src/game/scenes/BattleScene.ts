@@ -75,8 +75,8 @@ export class BattleScene extends Phaser.Scene {
   private currentNameText?: Phaser.GameObjects.Text
   private messageText?: Phaser.GameObjects.Text
   private selectedSkill?: Skill
+  private selectedItemId?: string
   private validTargets: BattleEntity[] = []
-  private potions = 3
   private saveData: SaveData | null = null
   private waitingForTarget = false
   private actionLocked = false
@@ -104,6 +104,7 @@ export class BattleScene extends Phaser.Scene {
     this.timelineDots = []
     this.resonanceFlashReady = new Set()
     this.selectedSkill = undefined
+    this.selectedItemId = undefined
     this.validTargets = []
     this.waitingForTarget = false
     this.actionLocked = false
@@ -118,7 +119,6 @@ export class BattleScene extends Phaser.Scene {
 
     this.drawBackground(width, height)
     this.saveData = SaveSystem.load(0)
-    this.potions = this.getInventoryQuantity('health_potion')
     this.createBattle()
     this.createEntityViews()
     this.createBottomPanel(width, height)
@@ -564,10 +564,14 @@ export class BattleScene extends Phaser.Scene {
     }
 
     const actor = this.combat.currentEntity
-    actor.skills.filter((skill) => !skill.isResonance || actor.resonance >= 100).forEach((skill, index) => {
-      const canUse = actor.currentMp >= skill.mpCost && (!skill.isResonance || actor.resonance >= 100)
+    const actorLevel = this.getPartyMemberLevel(actor.id)
+    actor.skills.forEach((skill, index) => {
+      const learned = (skill.minLevel ?? 1) <= actorLevel
+      const resonanceReady = !skill.isResonance || actor.resonance >= 100
+      const canUse = learned && actor.currentMp >= skill.mpCost && resonanceReady
+      const requirement = learned ? `MP ${skill.mpCost}` : `Lv.${skill.minLevel ?? 1}`
       const text = this.add
-        .text(32, this.scale.height - 38 - index * 26, `${skill.name}  MP ${skill.mpCost}`, {
+        .text(32, this.scale.height - 38 - index * 26, `${skill.name}  ${requirement}`, {
           color: canUse ? '#d7d9e8' : '#74788f',
           fontFamily: 'Arial, sans-serif',
           fontSize: '17px',
@@ -584,25 +588,32 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private showItemOptions() {
-    const text = this.add
-      .text(32, this.scale.height - 38, `Health Potion x${this.potions}`, {
-        color: this.potions > 0 ? '#d7d9e8' : '#74788f',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '17px',
-      })
-      .setInteractive({ useHandCursor: this.potions > 0 })
+    const battleItems = ['health_potion', 'mana_potion', 'health_elixir', 'mana_elixir', 'antidote', 'burn_salve']
+    battleItems.forEach((itemId, index) => {
+      const item = ITEMS_BY_ID[itemId]
+      const quantity = this.getInventoryQuantity(itemId)
+      const canUse = quantity > 0
+      const text = this.add
+        .text(32, this.scale.height - 38 - index * 26, `${item.name} x${quantity}`, {
+          color: canUse ? '#d7d9e8' : '#74788f',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '17px',
+        })
+        .setInteractive({ useHandCursor: canUse })
 
-    text.on('pointerdown', () => {
-      if (!this.combat || this.potions <= 0) {
-        return
-      }
-      this.selectedSkill = undefined
-      audioManager.playSfx('ui_blip')
-      this.waitingForTarget = true
-      this.validTargets = this.combat.party.filter((entity) => entity.isAlive)
-      this.highlightTargets(this.validTargets)
+      text.on('pointerdown', () => {
+        if (!this.combat || !canUse) {
+          return
+        }
+        this.selectedSkill = undefined
+        this.selectedItemId = itemId
+        audioManager.playSfx('ui_blip')
+        this.waitingForTarget = true
+        this.validTargets = this.combat.party.filter((entity) => entity.isAlive)
+        this.highlightTargets(this.validTargets)
+      })
+      this.optionTexts.push(text)
     })
-    this.optionTexts.push(text)
   }
 
   private beginTargetSelection(skill: Skill) {
@@ -633,7 +644,7 @@ export class BattleScene extends Phaser.Scene {
     this.setCommandsEnabled(false)
 
     if (!this.selectedSkill) {
-      this.usePotion(target)
+      this.useBattleItem(target)
       return
     }
 
@@ -645,18 +656,30 @@ export class BattleScene extends Phaser.Scene {
     this.afterAction(targets, results)
   }
 
-  private usePotion(target: BattleEntity) {
-    if (!this.combat || this.potions <= 0) {
+  private useBattleItem(target: BattleEntity) {
+    if (!this.combat || !this.selectedItemId || this.getInventoryQuantity(this.selectedItemId) <= 0) {
       return
     }
 
-    this.potions -= 1
-    this.addInventory('health_potion', -1)
+    const item = ITEMS_BY_ID[this.selectedItemId]
+    this.addInventory(this.selectedItemId, -1)
     this.persistSave()
     audioManager.playSfx('item_use')
-    const healed = Math.min(45, target.maxHp - target.currentHp)
-    target.currentHp = Math.min(target.maxHp, target.currentHp + 45)
-    this.showFloatingNumber(target, healed || 0, true)
+    if (item.effect.healHp) {
+      const healed = Math.min(item.effect.healHp, target.maxHp - target.currentHp)
+      target.currentHp = Math.min(target.maxHp, target.currentHp + item.effect.healHp)
+      this.showFloatingNumber(target, healed || 0, true)
+    }
+    if (item.effect.healMp) {
+      const restored = Math.min(item.effect.healMp, target.maxMp - target.currentMp)
+      target.currentMp = Math.min(target.maxMp, target.currentMp + item.effect.healMp)
+      this.showFloatingNumber(target, restored || 0, true)
+    }
+    if (item.effect.cureStatus) {
+      target.statusEffects.delete(item.effect.cureStatus)
+      this.showFloatingNumber(target, 0, true)
+    }
+    this.selectedItemId = undefined
     this.combat.finishAction()
     this.afterAction([target], [])
   }
@@ -1009,7 +1032,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private getInventoryQuantity(itemId: string): number {
-    return this.saveData?.inventory.find((item) => item.itemId === itemId)?.quantity ?? 3
+    return this.saveData?.inventory.find((item) => item.itemId === itemId)?.quantity ?? 0
+  }
+
+  private getPartyMemberLevel(characterId: string): number {
+    return this.saveData?.party.find((member) => member.characterId === characterId)?.level ?? 1
   }
 
   private addInventory(itemId: string, quantity: number) {

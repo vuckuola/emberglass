@@ -1661,24 +1661,71 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private openShop() {
-    const counts = this.getInventoryCounts()
-    if (counts.emberShard > 0) {
-      this.addInventory('ember_shard', -1)
-      this.addInventory('mana_potion', 1)
-      this.saveData.gold += 15
-      audioManager.playSfx('merchant_trade')
-      this.showToast('Peddler: Ember Shard traded for Ether x1 and 15g.')
-    } else if (this.saveData.gold >= 25) {
-      this.saveData.gold -= 25
-      this.addInventory('health_potion', 1)
-      audioManager.playSfx('merchant_trade')
-      this.showToast('Peddler: Potion purchased for 25g.')
-    } else {
-      audioManager.playSfx('ui_cancel')
-      this.showToast('Peddler: Bring 25g for potions, or an Ember Shard for ether.')
+    if (this.menuOverlay) {
+      return
     }
-    this.persist()
-    this.refreshHud()
+
+    this.busy = true
+    audioManager.playSfx('ui_menu_open')
+    const { width, height } = this.scale
+    const container = this.add.container(0, 0).setScrollFactor(0).setDepth(130)
+    const shopItems = [
+      { itemId: 'health_potion', price: 25 },
+      { itemId: 'mana_potion', price: 35 },
+      { itemId: 'antidote', price: 20 },
+      { itemId: 'burn_salve', price: 20 },
+      { itemId: 'wind_charm', price: 95 },
+      { itemId: 'ember_charm', price: 95 },
+      { itemId: 'arcane_charm', price: 95 },
+    ].filter((entry) => ITEMS_BY_ID[entry.itemId]?.type !== 'charm' || !this.hasInventoryItem(entry.itemId))
+
+    container.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.6))
+    container.add(this.add.rectangle(width / 2, height / 2, 500, 380, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.75))
+    container.add(this.add.text(width / 2, height / 2 - 160, 'Quay Merchant', { color: '#f0c040', fontFamily: 'Georgia, serif', fontSize: '30px' }).setOrigin(0.5))
+    const goldText = this.add.text(width / 2 - 210, height / 2 - 122, `Your Gold: ${this.saveData.gold}`, { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '18px' })
+    container.add(goldText)
+
+    shopItems.forEach((entry, index) => {
+      const item = ITEMS_BY_ID[entry.itemId]
+      const y = height / 2 - 82 + index * 34
+      const row = this.add.text(width / 2 - 210, y, `${item.name} — ${entry.price}g`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px' })
+      container.add(row)
+      const buy = this.add.text(width / 2 + 150, y, 'Buy', { color: this.saveData.gold >= entry.price ? '#8fffb0' : '#74788f', fontFamily: 'Arial, sans-serif', fontSize: '17px' })
+        .setInteractive({ useHandCursor: true })
+      buy.on('pointerdown', () => {
+        if (ITEMS_BY_ID[entry.itemId]?.type === 'charm' && this.hasInventoryItem(entry.itemId)) {
+          audioManager.playSfx('ui_cancel')
+          this.showToast('Peddler: You already own that charm.')
+          return
+        }
+
+        if (this.saveData.gold < entry.price) {
+          audioManager.playSfx('ui_cancel')
+          this.showToast('Peddler: Not enough gold for that.')
+          return
+        }
+
+        this.saveData.gold -= entry.price
+        this.addInventory(entry.itemId, 1)
+        this.autoEquipCharm(entry.itemId)
+        this.persist()
+        goldText.setText(`Your Gold: ${this.saveData.gold}`)
+        audioManager.playSfx('merchant_trade')
+        this.showToast(`Purchased ${item.name} for ${entry.price}g.`)
+        if (item.type === 'charm') {
+          row.setColor('#74788f')
+          buy.setText('Owned').setColor('#74788f').disableInteractive()
+        }
+      })
+      container.add(buy)
+    })
+
+    const close = this.add.text(width / 2, height / 2 + 152, 'Close', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+    close.on('pointerdown', () => this.closeMenu())
+    container.add(close)
+    this.menuOverlay = { container }
   }
 
   private openMenu() {
@@ -1846,6 +1893,22 @@ export class OverworldScene extends Phaser.Scene {
   private addEvent(eventId: string) {
     if (!this.saveData.completedEvents.includes(eventId)) {
       this.saveData.completedEvents.push(eventId)
+    }
+  }
+
+  private hasInventoryItem(itemId: string): boolean {
+    return this.saveData.inventory.some((entry) => entry.itemId === itemId && entry.quantity > 0) ||
+      this.saveData.party.some((member) => Object.values(member.equipment).includes(itemId))
+  }
+
+  private autoEquipCharm(itemId: string) {
+    if (ITEMS_BY_ID[itemId]?.type !== 'charm') {
+      return
+    }
+
+    const member = this.saveData.party.find((partyMember) => !partyMember.equipment.charm)
+    if (member) {
+      member.equipment.charm = itemId
     }
   }
 

@@ -31,4 +31,6 @@ export interface Skill {
   statusEffect?: string
   statusChance?: number
   duration?: number
+  minLevel?: number
+  cureStatus?: string
 }

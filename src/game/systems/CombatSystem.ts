@@ -240,6 +240,7 @@ export class CombatSystem {
     return chosenTargets.map((target) => {
       const result = this.calculateDamage(attacker, target, skill)
       this.applyDamage(target, result)
+      this.applyCureStatus(target, skill)
       this.applySecondaryEffect(target, skill)
       return result
     })
@@ -574,6 +575,16 @@ export class CombatSystem {
     }
 
     target.statusEffects.set(statusEffect, skill.duration ?? 3)
+  }
+
+  private applyCureStatus(target: BattleEntity, skill: Skill): void {
+    if (!skill.cureStatus) {
+      return
+    }
+
+    skill.cureStatus.split(',').map((status) => status.trim()).filter(Boolean).forEach((status) => {
+      target.statusEffects.delete(status)
+    })
   }
 
   private getSkillStatusEffect(skill: Skill): string | null {

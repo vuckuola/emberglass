@@ -237,6 +237,7 @@ await evalScene(() => {
   scene.talkElder();
   scene.inspectMarker();
   scene.openShop();
+  scene.closeMenu();
   scene.ringTideBell();
   scene.inspectMural();
   scene.lightWatchLantern();
