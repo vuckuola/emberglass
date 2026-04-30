@@ -147,6 +147,26 @@ type MapEnemy = {
   battleId?: string
 }
 
+type PartyCompanion = {
+  characterId: string
+  name: string
+  container: Phaser.GameObjects.Container
+  body: Phaser.GameObjects.Rectangle
+  nameText: Phaser.GameObjects.Text
+  hpBar: Phaser.GameObjects.Graphics
+  hpBarBg: Phaser.GameObjects.Graphics
+  mpBar: Phaser.GameObjects.Graphics
+  x: number
+  y: number
+  partyIndex: number
+  state: 'follow' | 'idle' | 'dead'
+  offsetX: number
+  offsetY: number
+  attackCooldown: number
+  lastAttackTime: number
+  hitFlashTimer: number
+}
+
 type InventoryCounts = { potion: number; ether: number; emberShard: number }
 type MenuOverlay = { container: Phaser.GameObjects.Container }
 type MiniMapOverlay = { container: Phaser.GameObjects.Container; graphics: Phaser.GameObjects.Graphics; visible: boolean }
@@ -194,6 +214,8 @@ export class OverworldScene extends Phaser.Scene {
   private homeVisuals: Phaser.GameObjects.GameObject[] = []
   private npcActors: Partial<Record<'guide' | 'elder' | 'peddler' | 'mira', Phaser.GameObjects.GameObject>> = {}
   private miraCompanion?: Phaser.GameObjects.Container
+  private companions: PartyCompanion[] = []
+  private companionHudGraphics?: Phaser.GameObjects.Graphics
   private lastArea: string | null = null
   private discoveredAreas = new Set<string>()
   private dustCooldown = 0
@@ -252,6 +274,15 @@ export class OverworldScene extends Phaser.Scene {
     this.homeVisuals = []
     this.npcActors = {}
     this.miraCompanion = undefined
+    this.companions.forEach((companion) => {
+      companion.container.destroy()
+      companion.hpBar.destroy()
+      companion.hpBarBg.destroy()
+      companion.mpBar.destroy()
+    })
+    this.companions = []
+    this.companionHudGraphics?.destroy()
+    this.companionHudGraphics = undefined
     this.lastArea = null
     this.discoveredAreas = new Set()
     this.dustCooldown = 0
@@ -307,6 +338,7 @@ export class OverworldScene extends Phaser.Scene {
     this.player = this.createPlayer(startX, startY)
     this.createPetFollower(startX - 28, startY + 18)
     this.createMiraCompanion(startX + 28, startY + 18)
+    this.companions = [this.createCompanion(1), this.createCompanion(2)].filter((companion): companion is PartyCompanion => Boolean(companion))
     this.cursors = this.input.keyboard?.createCursorKeys()
     this.keys = this.input.keyboard?.addKeys({
       w: Phaser.Input.Keyboard.KeyCodes.W,
@@ -399,6 +431,7 @@ export class OverworldScene extends Phaser.Scene {
     this.updateWalkDust(delta, isMoving)
     this.updatePetFollower(isMoving)
     this.updateMiraCompanion()
+    this.updateCompanions()
     this.updateMiraNpcFacing()
     this.updateMiniMap()
     this.updateAreaPop()
@@ -930,6 +963,86 @@ export class OverworldScene extends Phaser.Scene {
     const offset = this.getFollowerOffset(false)
     this.miraCompanion!.x += (this.player.x + offset.x - this.miraCompanion!.x) * 0.07
     this.miraCompanion!.y += (this.player.y + offset.y - this.miraCompanion!.y) * 0.07
+  }
+
+  private createCompanion(partyIndex: number): PartyCompanion | null {
+    if (!this.player) return null
+    const member = this.saveData.party[partyIndex]
+    if (!member) return null
+    const character = CHARACTERS[member.characterId]
+    if (!character) return null
+
+    const isKael = member.characterId === 'kael'
+    const offsetX = partyIndex === 1 ? -40 : -20
+    const offsetY = partyIndex === 1 ? -20 : -40
+    const x = this.player.x + offsetX
+    const y = this.player.y + offsetY
+    const container = this.add.container(x, y).setDepth(10.5).setName(`companion:${member.characterId}`)
+    const body = this.add.rectangle(0, 0, isKael ? 30 : 26, isKael ? 30 : 26, isKael ? 0x5c8a4d : 0x7fb3ff, 0.94)
+      .setStrokeStyle(2, isKael ? 0xb8d8a8 : 0xe0f2fe, 0.78)
+    const nameText = this.add.text(0, -25, character.name, { color: isKael ? '#d9f7c8' : '#dbeafe', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 3, y: 1 } }).setOrigin(0.5)
+    const hpBarBg = this.add.graphics().setDepth(10.55)
+    const hpBar = this.add.graphics().setDepth(10.56)
+    const mpBar = this.add.graphics().setDepth(10.57)
+    container.add([body, nameText])
+
+    const companion: PartyCompanion = {
+      characterId: member.characterId,
+      name: character.name,
+      container,
+      body,
+      nameText,
+      hpBar,
+      hpBarBg,
+      mpBar,
+      x,
+      y,
+      partyIndex,
+      state: member.currentHp <= 0 ? 'dead' : 'follow',
+      offsetX,
+      offsetY,
+      attackCooldown: 900,
+      lastAttackTime: 0,
+      hitFlashTimer: 0,
+    }
+    this.updateCompanionBars(companion)
+    return companion
+  }
+
+  private updateCompanions() {
+    if (!this.player) return
+    this.companions.forEach((companion) => {
+      const member = this.saveData.party[companion.partyIndex]
+      if (!member) return
+      companion.state = member.currentHp <= 0 ? 'dead' : 'follow'
+      if (companion.state === 'dead') {
+        companion.container.setAlpha(0.3)
+        this.updateCompanionBars(companion)
+        return
+      }
+
+      companion.container.setAlpha(1)
+      const targetX = this.player!.x + companion.offsetX
+      const targetY = this.player!.y + companion.offsetY
+      const nextX = Phaser.Math.Linear(companion.x, targetX, 0.08)
+      const nextY = Phaser.Math.Linear(companion.y, targetY, 0.08)
+      if (!this.isWallAtWorld(nextX, companion.y)) companion.x = Phaser.Math.Clamp(nextX, 8, MAP_WIDTH * TILE_SIZE - 8)
+      if (!this.isWallAtWorld(companion.x, nextY)) companion.y = Phaser.Math.Clamp(nextY, 8, MAP_HEIGHT * TILE_SIZE - 8)
+      companion.container.setPosition(companion.x, companion.y)
+      this.updateCompanionBars(companion)
+    })
+  }
+
+  private updateCompanionBars(companion: PartyCompanion) {
+    const member = this.saveData.party[companion.partyIndex]
+    const character = member ? CHARACTERS[member.characterId] : undefined
+    if (!member || !character) return
+    const stats = this.scaleCharacterStats(character, member.level)
+    const width = 32
+    const x = companion.x - width / 2
+    companion.hpBarBg.clear().fillStyle(0x050509, 0.75).fillRect(x, companion.y - 20, width, 3)
+    companion.hpBar.clear().fillStyle(0x4ade80, 1).fillRect(x, companion.y - 20, width * Phaser.Math.Clamp(member.currentHp / stats.hp, 0, 1), 3)
+    companion.mpBar.clear().fillStyle(0x60a5fa, 1).fillRect(x, companion.y - 16, width * Phaser.Math.Clamp(member.currentMp / stats.mp, 0, 1), 3)
   }
 
   private getFollowerOffset(forPip: boolean) {
@@ -2541,7 +2654,15 @@ export class OverworldScene extends Phaser.Scene {
     hero.currentHp = Math.max(1, Math.floor(this.getPlayerCombatStats().hp * 0.5))
     this.showEventBanner('Defeat', 'Nara falls back to the quay save crystal. Gold and items are safe.')
     this.time.delayedCall(900, () => {
-      if (this.player) this.player.setPosition(this.tileCenter(SAVE_TILE.x), this.tileCenter(SAVE_TILE.y))
+      if (this.player) {
+        this.player.setPosition(this.tileCenter(SAVE_TILE.x), this.tileCenter(SAVE_TILE.y))
+        this.companions.forEach((companion) => {
+          companion.x = this.player!.x + companion.offsetX
+          companion.y = this.player!.y + companion.offsetY
+          companion.container.setPosition(companion.x, companion.y)
+          this.updateCompanionBars(companion)
+        })
+      }
       this.busy = false
       this.refreshHud(); this.updatePlayerBars(); this.persist()
     })
@@ -2747,8 +2868,14 @@ export class OverworldScene extends Phaser.Scene {
   private refreshHud() {
     const counts = this.getInventoryCounts()
     const hero = this.saveData.party[0]
+    const companionHp = this.saveData.party.slice(1, 3).map((member) => {
+      const character = CHARACTERS[member.characterId]
+      if (!character) return null
+      const stats = this.scaleCharacterStats(character, member.level)
+      return `${character.name} HP:${member.currentHp}/${stats.hp}`
+    }).filter((line): line is string => Boolean(line)).join('  ')
     this.objectiveText?.setText(`Objective: ${this.saveData.currentObjective}`)
-    this.inventoryText?.setText(`Gold ${this.saveData.gold}  |  Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}  |  Home ${this.homeProgress()}/3${this.saveData.pet.unlocked ? '  Pip' : ''}`)
+    this.inventoryText?.setText(`Gold ${this.saveData.gold}  |  Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}  |  Home ${this.homeProgress()}/3${this.saveData.pet.unlocked ? '  Pip' : ''}${companionHp ? `  |  ${companionHp}` : ''}`)
     this.levelText?.setText(`Lv.${hero.level}`)
     this.updateXpBar()
     this.killCounterText?.setText(`Kills: ${this.killCount}`)
