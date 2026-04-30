@@ -130,8 +130,12 @@ export class CombatSystem {
     return Math.max(1, Math.round(attackerAtk * 1.5 - targetDef * 0.5))
   }
 
-  static calculateRealtimeEnemyDamage(enemyAtk: number, playerDef: number): number {
-    return Math.max(1, Math.round(enemyAtk * 1.2 - playerDef * 0.4))
+  static calculateRealtimeEnemyDamage(enemyAtk: number, playerDef: number, damageMultiplier = 1): number {
+    return Math.max(1, Math.round((enemyAtk * 1.2 - playerDef * 0.4) * damageMultiplier))
+  }
+
+  static canUseRealtimeSkill(currentMp: number, mpCost: number, now: number, nextReadyAt: number): boolean {
+    return currentMp >= mpCost && now >= nextReadyAt
   }
 
   party: BattleEntity[]

@@ -143,13 +143,25 @@ type MapEnemy = {
 type InventoryCounts = { potion: number; ether: number; emberShard: number }
 type MenuOverlay = { container: Phaser.GameObjects.Container }
 type MiniMapOverlay = { container: Phaser.GameObjects.Container; graphics: Phaser.GameObjects.Graphics; visible: boolean }
+type GroundLoot = {
+  x: number
+  y: number
+  itemId: string
+  quantity: number
+  sprite: Phaser.GameObjects.Arc
+  label: Phaser.GameObjects.Text
+  bobTween: Phaser.Tweens.Tween
+  kind: 'item' | 'gold' | 'exp'
+  expireTween?: Phaser.Tweens.Tween
+}
+type RealtimeSkill = { name: string; mpCost: number; cooldown: number; color: number; effect: 'emberSlash' | 'tidalHeal' | 'stoneGuard' | 'windStep' }
 
 export class OverworldScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private player?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle
   private playerShadow?: Phaser.GameObjects.Ellipse
   private petFollower?: Phaser.GameObjects.Arc | Phaser.GameObjects.Image | Phaser.GameObjects.Container
-  private keys?: Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
+  private keys?: Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'f' | 'one' | 'two' | 'three' | 'four' | 'escape', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
   private facing: Direction = 'down'
   private saveNoticeShown = false
@@ -185,6 +197,19 @@ export class OverworldScene extends Phaser.Scene {
   private nextDashAt = 0
   private nextPlayerAttackAt = 0
   private killCount = 0
+  private groundLoot: GroundLoot[] = []
+  private respawnTimer?: Phaser.Time.TimerEvent
+  private skillBar?: Phaser.GameObjects.Container
+  private skillCooldownGraphics: Phaser.GameObjects.Graphics[] = []
+  private skillTexts: Phaser.GameObjects.Text[] = []
+  private killCounterText?: Phaser.GameObjects.Text
+  private levelText?: Phaser.GameObjects.Text
+  private shieldArc?: Phaser.GameObjects.Arc
+  private isBlocking = false
+  private stoneGuardUntil = 0
+  private skillReadyAt = [0, 0, 0, 0]
+  private comboCount = 0
+  private lastComboHitAt = 0
   private pipBobTween?: Phaser.Tweens.Tween
   private homeWarmthUsedThisVisit = false
   private homeGardenUsedThisVisit = false
@@ -218,11 +243,26 @@ export class OverworldScene extends Phaser.Scene {
     this.discoveredAreas = new Set()
     this.dustCooldown = 0
     this.mapEnemies = []
+    this.groundLoot.forEach((loot) => this.destroyGroundLoot(loot))
+    this.groundLoot = []
+    this.respawnTimer?.destroy()
+    this.respawnTimer = undefined
     this.playerInvulnerableUntil = 0
     this.dashUntil = 0
     this.nextDashAt = 0
     this.nextPlayerAttackAt = 0
     this.killCount = 0
+    this.skillReadyAt = [0, 0, 0, 0]
+    this.stoneGuardUntil = 0
+    this.isBlocking = false
+    this.comboCount = 0
+    this.lastComboHitAt = 0
+    this.skillCooldownGraphics = []
+    this.skillTexts = []
+    this.skillBar = undefined
+    this.killCounterText = undefined
+    this.levelText = undefined
+    this.shieldArc = undefined
     this.pipBobTween = undefined
     this.homeWarmthUsedThisVisit = false
     this.homeGardenUsedThisVisit = false
@@ -264,8 +304,13 @@ export class OverworldScene extends Phaser.Scene {
       m: Phaser.Input.Keyboard.KeyCodes.M,
       t: Phaser.Input.Keyboard.KeyCodes.T,
       h: Phaser.Input.Keyboard.KeyCodes.H,
+      f: Phaser.Input.Keyboard.KeyCodes.F,
+      one: Phaser.Input.Keyboard.KeyCodes.ONE,
+      two: Phaser.Input.Keyboard.KeyCodes.TWO,
+      three: Phaser.Input.Keyboard.KeyCodes.THREE,
+      four: Phaser.Input.Keyboard.KeyCodes.FOUR,
       escape: Phaser.Input.Keyboard.KeyCodes.ESC,
-    }) as Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
+    }) as Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'f' | 'one' | 'two' | 'three' | 'four' | 'escape', Phaser.Input.Keyboard.Key>
 
     this.spawnEnemiesForStage()
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => { if (!pointer.event.defaultPrevented && !this.menuOverlay) this.performPlayerAttack(pointer.worldX, pointer.worldY) })
@@ -325,10 +370,12 @@ export class OverworldScene extends Phaser.Scene {
       velocityY *= Math.SQRT1_2
     }
 
+    this.isBlocking = this.keys.f.isDown && (velocityX !== 0 || velocityY !== 0 || !this.menuOverlay)
+
     if (Phaser.Input.Keyboard.JustDown(this.keys.shift)) {
       this.startDash()
     }
-    const speedMultiplier = this.time.now < this.dashUntil ? 2 : 1
+    const speedMultiplier = (this.time.now < this.dashUntil ? 2 : 1) * (this.isBlocking ? 0.4 : 1)
     this.movePlayer(velocityX * seconds * speedMultiplier, velocityY * seconds * speedMultiplier)
     const isMoving = velocityX !== 0 || velocityY !== 0
     this.updatePlayerAnimation(isMoving)
@@ -343,6 +390,9 @@ export class OverworldScene extends Phaser.Scene {
     this.checkHomeBenefits()
     this.checkPetForage()
     this.updateMapEnemies(delta)
+    this.updateGroundLoot()
+    this.updateShieldVisual()
+    this.updateSkillHud()
     this.updatePlayerBars()
     this.updateInteractionPrompt()
 
@@ -365,7 +415,12 @@ export class OverworldScene extends Phaser.Scene {
       this.useHealthPotion()
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.keys.space)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.one)) this.useRealtimeSkill(0)
+    if (Phaser.Input.Keyboard.JustDown(this.keys.two)) this.useRealtimeSkill(1)
+    if (Phaser.Input.Keyboard.JustDown(this.keys.three)) this.useRealtimeSkill(2)
+    if (Phaser.Input.Keyboard.JustDown(this.keys.four)) this.useRealtimeSkill(3)
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.space) && !this.isBlocking) {
       this.performPlayerAttack()
     }
 
@@ -958,10 +1013,13 @@ export class OverworldScene extends Phaser.Scene {
     this.add.text(34, 23, 'CURRENT VOW', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setScrollFactor(0).setDepth(91)
     this.objectiveText = this.add.text(34, 40, '', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '16px', fontStyle: 'bold', wordWrap: { width: 500 } }).setScrollFactor(0).setDepth(91)
     this.inventoryText = this.add.text(34, 76, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px' }).setScrollFactor(0).setDepth(91)
+    this.levelText = this.add.text(468, 22, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(91)
+    this.killCounterText = this.add.text(576, 24, 'Kills: 0', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setScrollFactor(0).setDepth(91)
     const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
     areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
     this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'Move • E Interact • Space/Click Attack • Shift Dash • Q Potion', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '14px', backgroundColor: '#08091aaa', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.createSkillBar()
     this.playerHpBarBg = this.add.graphics().setDepth(22)
     this.playerHpBar = this.add.graphics().setDepth(23)
     this.playerMpBar = this.add.graphics().setDepth(23)
@@ -1880,6 +1938,52 @@ export class OverworldScene extends Phaser.Scene {
     graphics.fillStyle(0xffffff, 0.86).fillRect(94, 18, 50, 1)
   }
 
+  private getRealtimeSkills(): RealtimeSkill[] {
+    return [
+      { name: 'Ember Slash', mpCost: 8, cooldown: 3000, color: 0xff7a3d, effect: 'emberSlash' },
+      { name: 'Tidal Heal', mpCost: 12, cooldown: 6000, color: 0x45e67a, effect: 'tidalHeal' },
+      { name: 'Stone Guard', mpCost: 10, cooldown: 8000, color: 0x9ca3af, effect: 'stoneGuard' },
+      { name: 'Wind Step', mpCost: 6, cooldown: 2000, color: 0x9ff3ff, effect: 'windStep' },
+    ]
+  }
+
+  private createSkillBar() {
+    const skills = this.getRealtimeSkills()
+    const x = this.scale.width / 2 - 114
+    const y = this.scale.height - 92
+    this.skillBar = this.add.container(x, y).setScrollFactor(0).setDepth(96)
+    this.skillCooldownGraphics = []
+    this.skillTexts = []
+    skills.forEach((skill, index) => {
+      const slotX = index * 76
+      this.skillBar!.add(this.add.rectangle(slotX, 0, 58, 58, 0x0b0e1a, 0.92).setStrokeStyle(2, 0xf3e1b0, 0.55))
+      this.skillBar!.add(this.add.circle(slotX, -4, 16, skill.color, 0.9))
+      this.skillBar!.add(this.add.text(slotX, -12, `${index + 1}`, { color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: '14px', fontStyle: 'bold' }).setOrigin(0.5))
+      this.skillBar!.add(this.add.text(slotX, 15, `${skill.mpCost} MP`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5))
+      const cooldown = this.add.graphics()
+      const text = this.add.text(slotX, -3, '', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '15px', fontStyle: 'bold' }).setOrigin(0.5)
+      this.skillCooldownGraphics.push(cooldown)
+      this.skillTexts.push(text)
+      this.skillBar!.add(cooldown)
+      this.skillBar!.add(text)
+    })
+  }
+
+  private updateSkillHud() {
+    if (!this.skillBar) return
+    const hero = this.saveData.party[0]
+    const skills = this.getRealtimeSkills()
+    this.skillCooldownGraphics.forEach((graphics, index) => {
+      const skill = skills[index]
+      const remaining = Math.max(0, this.skillReadyAt[index] - this.time.now)
+      const disabled = hero.currentMp < skill.mpCost || remaining > 0
+      graphics.clear()
+      if (disabled) graphics.fillStyle(0x02030a, 0.62).fillRect(index * 76 - 29, -29, 58, 58)
+      if (remaining > 0) graphics.fillStyle(0x111827, 0.78).fillRect(index * 76 - 29, -29, 58, 58 * (remaining / skill.cooldown))
+      this.skillTexts[index]?.setText(remaining > 0 ? `${Math.ceil(remaining / 1000)}` : hero.currentMp < skill.mpCost ? 'MP' : '')
+    })
+  }
+
   private openHelpOverlay() {
     if (this.helpOverlay) return
     this.busy = true
@@ -1977,7 +2081,10 @@ export class OverworldScene extends Phaser.Scene {
     this.mapEnemies.forEach((enemy) => this.destroyEnemy(enemy))
     this.mapEnemies = []
     if (this.saveData.stage === 'homecoming') return
+    this.spawnRegularEnemiesForStage()
+  }
 
+  private spawnRegularEnemiesForStage() {
     const regularByStage: Record<SaveData['stage'], Array<{ id: string; x: number; y: number }>> = {
       quay: [
         { id: 'vinecrawler', x: 23, y: 8 }, { id: 'vinecrawler', x: 28, y: 9 }, { id: 'moss_knight', x: 31, y: 6 }, { id: 'sporefiend', x: 34, y: 11 },
@@ -2055,7 +2162,7 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private performPlayerAttack(pointerX?: number, pointerY?: number) {
-    if (!this.player || this.time.now < this.nextPlayerAttackAt) return
+    if (!this.player || this.isBlocking || this.time.now < this.nextPlayerAttackAt) return
     this.nextPlayerAttackAt = this.time.now + 320
     if (pointerX !== undefined && pointerY !== undefined) this.updateFacingFromVector(pointerX - this.player.x, pointerY - this.player.y)
     const angle = this.facingToAngle()
@@ -2071,15 +2178,68 @@ export class OverworldScene extends Phaser.Scene {
     })
   }
 
-  private damageEnemy(enemy: MapEnemy) {
+  private damageEnemy(enemy: MapEnemy, multiplier = 1) {
     const heroStats = this.getPlayerCombatStats()
-    const damage = CombatSystem.calculateRealtimePlayerDamage(heroStats.atk, enemy.stats.def)
+    const damage = Math.max(1, Math.round(CombatSystem.calculateRealtimePlayerDamage(heroStats.atk, enemy.stats.def) * multiplier))
     enemy.currentHp = Math.max(0, enemy.currentHp - damage)
     enemy.hitFlashTimer = 120
     enemy.sprite.setFillStyle(0xffffff)
     this.showFloatingText(enemy.x, enemy.y - 22, `${damage}`, damage > heroStats.atk * 1.5 ? '#ffd166' : '#ffffff')
+    this.registerComboHit(enemy.x, enemy.y)
     this.updateEnemyBars(enemy)
     if (enemy.currentHp <= 0) this.killEnemy(enemy)
+  }
+
+  private useRealtimeSkill(index: number) {
+    if (!this.player) return
+    const skill = this.getRealtimeSkills()[index]
+    const hero = this.saveData.party[0]
+    if (!skill || !CombatSystem.canUseRealtimeSkill(hero.currentMp, skill.mpCost, this.time.now, this.skillReadyAt[index])) return
+    hero.currentMp = Math.max(0, hero.currentMp - skill.mpCost)
+    this.skillReadyAt[index] = this.time.now + skill.cooldown
+    if (skill.effect === 'emberSlash') this.performEmberSlash()
+    if (skill.effect === 'tidalHeal') this.performTidalHeal()
+    if (skill.effect === 'stoneGuard') this.performStoneGuard()
+    if (skill.effect === 'windStep') this.performWindStep()
+    this.refreshHud(); this.updatePlayerBars(); this.persist()
+  }
+
+  private performEmberSlash() {
+    if (!this.player) return
+    const angle = this.facingToAngle()
+    const arc = this.add.arc(this.player.x + Math.cos(angle) * 42, this.player.y + Math.sin(angle) * 42, 52, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0xff7a3d, 0.5).setDepth(26).setStrokeStyle(8, 0xfff1a8, 0.85)
+    this.tweens.add({ targets: arc, alpha: 0, scale: 1.25, duration: 240, onComplete: () => arc.destroy() })
+    this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
+      const distance = Phaser.Math.Distance.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
+      const enemyAngle = Phaser.Math.Angle.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
+      if (distance <= 82 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 3) this.damageEnemy(enemy, 2)
+    })
+  }
+
+  private performTidalHeal() {
+    if (!this.player) return
+    const hero = this.saveData.party[0]
+    const maxHp = this.getPlayerCombatStats().hp
+    const heal = Math.ceil(maxHp * 0.3)
+    hero.currentHp = Math.min(maxHp, hero.currentHp + heal)
+    this.showFloatingText(this.player.x, this.player.y - 34, `+${heal} HP`, '#86efac')
+    this.cameras.main.flash(140, 60, 220, 120, false)
+  }
+
+  private performStoneGuard() {
+    if (!this.player) return
+    this.stoneGuardUntil = this.time.now + 4000
+    const ring = this.add.circle(this.player.x, this.player.y, 30, 0x9ca3af, 0.2).setDepth(24).setStrokeStyle(3, 0xe5e7eb, 0.9)
+    this.tweens.add({ targets: ring, scale: 1.7, alpha: 0, duration: 520, onComplete: () => ring.destroy() })
+  }
+
+  private performWindStep() {
+    if (!this.player) return
+    const angle = this.facingToAngle()
+    const targetX = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * 120, this.player.width / 2, MAP_WIDTH * TILE_SIZE - this.player.width / 2)
+    const targetY = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * 120, this.player.height / 2, MAP_HEIGHT * TILE_SIZE - this.player.height / 2)
+    if (!this.collidesAt(targetX, targetY)) this.player.setPosition(targetX, targetY)
+    this.cameras.main.flash(80, 159, 243, 255, false)
   }
 
   private tryEnemyAttack(enemy: MapEnemy) {
@@ -2088,10 +2248,16 @@ export class OverworldScene extends Phaser.Scene {
     enemy.sprite.setFillStyle(0xff4d4d)
     this.time.delayedCall(300, () => {
       if (enemy.dead || !this.player || this.time.now < this.playerInvulnerableUntil || Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) > enemy.attackRange + 12) return
-      const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, this.getPlayerCombatStats().def)
+      const blocking = this.isBlocking
+      const guarded = this.time.now < this.stoneGuardUntil
+      const multiplier = (blocking ? 0.4 : 1) * (guarded ? 0.5 : 1)
+      const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, this.getPlayerCombatStats().def, multiplier)
       const hero = this.saveData.party[0]
       hero.currentHp = Math.max(0, hero.currentHp - damage)
       this.cameras.main.flash(100, 180, 20, 20, false)
+      if (enemy.isBoss) this.cameras.main.shake(200, 0.003)
+      if (blocking) this.showBlockFlash()
+      this.showDamageDirection(enemy.x, enemy.y)
       this.showFloatingText(this.player.x, this.player.y - 26, `-${damage}`, '#ff6b6b')
       this.refreshHud()
       this.updatePlayerBars()
@@ -2103,13 +2269,13 @@ export class OverworldScene extends Phaser.Scene {
     enemy.dead = true
     enemy.state = 'dead'
     this.killCount += 1
-    this.saveData.gold += enemy.goldReward
-    this.saveData.battleRewards.exp += enemy.expReward
-    this.saveData.battleRewards.gold += enemy.goldReward
-    if (Math.random() < 0.35) this.addInventory('health_potion', 1)
-    this.showFloatingText(enemy.x, enemy.y - 34, `+${enemy.goldReward}g`, '#ffd166')
+    this.spawnDeathExplosion(enemy.x, enemy.y)
+    this.spawnGroundLoot(enemy.x, enemy.y, 'gold', 'gold', enemy.goldReward)
+    this.spawnGroundLoot(enemy.x + 12, enemy.y, 'exp', 'exp', enemy.expReward)
+    if (Math.random() < 0.35) this.spawnGroundLoot(enemy.x - 12, enemy.y, 'item', 'health_potion', 1)
     this.tweens.add({ targets: [enemy.sprite, enemy.nameText], alpha: 0, duration: 260, onComplete: () => this.destroyEnemy(enemy) })
     if (enemy.battleId) this.completeOverworldBattle(enemy.battleId)
+    this.checkRespawnTimer()
     this.refreshHud()
     this.persist()
   }
@@ -2123,6 +2289,89 @@ export class OverworldScene extends Phaser.Scene {
 
   private destroyEnemy(enemy: MapEnemy) {
     enemy.sprite.destroy(); enemy.hpBar.destroy(); enemy.hpBarBg.destroy(); enemy.nameText.destroy()
+  }
+
+  private spawnGroundLoot(x: number, y: number, kind: GroundLoot['kind'], itemId: string, quantity: number) {
+    const color = kind === 'exp' ? 0x60a5fa : kind === 'gold' ? 0xffd166 : 0xffb84d
+    const radius = kind === 'gold' ? 6 : 8
+    const sprite = this.add.circle(x, y, radius, color, 0.95).setDepth(17).setStrokeStyle(2, 0xffffff, 0.6)
+    const labelText = kind === 'gold' ? `+${quantity}g` : kind === 'exp' ? `+${quantity} EXP` : this.getItemName(itemId)
+    const label = this.add.text(x, y - 20, labelText, { color: kind === 'exp' ? '#bfdbfe' : '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '11px', fontStyle: 'bold' }).setOrigin(0.5).setDepth(18)
+    const bobTween = this.tweens.add({ targets: [sprite, label], y: '+=3', yoyo: true, repeat: -1, duration: 760, ease: 'Sine.easeInOut' })
+    const loot: GroundLoot = { x, y, itemId, quantity, sprite, label, bobTween, kind }
+    loot.expireTween = this.tweens.add({ targets: [sprite, label], alpha: 0, delay: 14500, duration: 500, onComplete: () => this.destroyGroundLoot(loot) })
+    this.groundLoot.push(loot)
+  }
+
+  private updateGroundLoot() {
+    if (!this.player) return
+    this.groundLoot.slice().forEach((loot) => {
+      if (Phaser.Math.Distance.Between(this.player!.x, this.player!.y, loot.sprite.x, loot.sprite.y) <= 40) this.pickupGroundLoot(loot)
+    })
+  }
+
+  private pickupGroundLoot(loot: GroundLoot) {
+    if (!this.player) return
+    if (loot.kind === 'gold') {
+      this.saveData.gold += loot.quantity
+      this.saveData.battleRewards.gold += loot.quantity
+      this.showFloatingText(this.player.x, this.player.y - 32, `+${loot.quantity}g`, '#ffd166')
+    } else if (loot.kind === 'exp') {
+      this.gainRealtimeExp(loot.quantity)
+      this.showFloatingText(this.player.x, this.player.y - 32, `+${loot.quantity} EXP`, '#93c5fd')
+    } else {
+      this.addInventory(loot.itemId, loot.quantity)
+      this.showFloatingText(this.player.x, this.player.y - 32, `+${loot.quantity} ${this.getItemName(loot.itemId)}`, '#fff1a8')
+    }
+    audioManager.playSfx('reward_gain')
+    this.destroyGroundLoot(loot)
+    this.refreshHud(); this.persist()
+  }
+
+  private destroyGroundLoot(loot: GroundLoot) {
+    this.groundLoot = this.groundLoot.filter((entry) => entry !== loot)
+    loot.bobTween.stop(); loot.expireTween?.stop(); loot.sprite.destroy(); loot.label.destroy()
+  }
+
+  private gainRealtimeExp(amount: number) {
+    const previousLevel = this.saveData.party[0].level
+    this.saveData.battleRewards.exp += amount
+    const nextLevel = Math.min(6, 1 + Math.floor(this.saveData.battleRewards.exp / 180))
+    if (nextLevel > previousLevel) {
+      this.saveData.party[0].level = nextLevel
+      this.showLevelUpEffect()
+    }
+  }
+
+  private checkRespawnTimer() {
+    if (this.respawnTimer || this.mapEnemies.some((enemy) => !enemy.isBoss && !enemy.dead)) return
+    this.respawnTimer = this.time.delayedCall(30000, () => {
+      this.respawnTimer = undefined
+      this.mapEnemies = this.mapEnemies.filter((enemy) => enemy.isBoss || !enemy.dead)
+      this.spawnRegularEnemiesForStage()
+      this.showToast('New threats emerge...')
+    })
+  }
+
+  private registerComboHit(x: number, y: number) {
+    this.comboCount = this.time.now - this.lastComboHitAt <= 2000 ? this.comboCount + 1 : 1
+    this.lastComboHitAt = this.time.now
+    if (this.comboCount > 1) this.showFloatingText(x, y - 44, `x${this.comboCount}`, '#fef08a')
+  }
+
+  private spawnDeathExplosion(x: number, y: number) {
+    for (let index = 0; index < 6; index += 1) {
+      const angle = (Math.PI * 2 * index) / 6
+      const particle = this.add.circle(x, y, 3, 0xffd166, 0.9).setDepth(23)
+      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * Phaser.Math.Between(18, 34), y: y + Math.sin(angle) * Phaser.Math.Between(18, 34), alpha: 0, duration: 360, onComplete: () => particle.destroy() })
+    }
+  }
+
+  private showLevelUpEffect() {
+    if (!this.player) return
+    const glow = this.add.circle(this.player.x, this.player.y, 28, 0xffd166, 0.22).setDepth(24).setStrokeStyle(4, 0xfff1a8, 0.85)
+    this.showFloatingText(this.player.x, this.player.y - 48, 'LEVEL UP!', '#fff1a8')
+    this.tweens.add({ targets: glow, scale: 2, alpha: 0, duration: 850, onComplete: () => glow.destroy() })
   }
 
   private getEnemyColor(enemy: MapEnemy) {
@@ -2208,6 +2457,33 @@ export class OverworldScene extends Phaser.Scene {
     this.playerHpBarBg.clear().fillStyle(0x050509, 0.75).fillRect(this.player.x - width / 2, this.player.y + 24, width, 4)
     this.playerHpBar.clear().fillStyle(0x4ade80, 1).fillRect(this.player.x - width / 2, this.player.y + 24, width * Phaser.Math.Clamp(hero.currentHp / stats.hp, 0, 1), 4)
     this.playerMpBar.clear().fillStyle(0x60a5fa, 1).fillRect(this.player.x - width / 2, this.player.y + 29, width * Phaser.Math.Clamp(hero.currentMp / stats.mp, 0, 1), 3)
+  }
+
+  private updateShieldVisual() {
+    if (!this.player) return
+    if (!this.isBlocking) {
+      this.shieldArc?.destroy(); this.shieldArc = undefined
+      return
+    }
+    const angle = this.facingToAngle()
+    const x = this.player.x + Math.cos(angle) * 24
+    const y = this.player.y + Math.sin(angle) * 24
+    if (!this.shieldArc) this.shieldArc = this.add.arc(x, y, 24, -55, 55, false, 0x60a5fa, 0.18).setDepth(27).setStrokeStyle(5, 0x93c5fd, 0.8)
+    this.shieldArc.setPosition(x, y).setAngle(Phaser.Math.RadToDeg(angle))
+  }
+
+  private showBlockFlash() {
+    if (!this.shieldArc) return
+    this.tweens.add({ targets: this.shieldArc, alpha: 1, yoyo: true, duration: 80 })
+    this.showFloatingText(this.shieldArc.x, this.shieldArc.y - 18, 'BLOCK', '#93c5fd')
+  }
+
+  private showDamageDirection(attackerX: number, attackerY: number) {
+    if (!this.player) return
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, attackerX, attackerY)
+    const arrow = this.add.triangle(this.player.x + Math.cos(angle) * 42, this.player.y + Math.sin(angle) * 42, 0, -8, 14, 0, 0, 8, 0xff6b6b, 0.9).setDepth(28)
+    arrow.setRotation(angle)
+    this.tweens.add({ targets: arrow, alpha: 0, duration: 520, onComplete: () => arrow.destroy() })
   }
 
   private updateFacingFromVector(x: number, y: number) {
@@ -2352,8 +2628,12 @@ export class OverworldScene extends Phaser.Scene {
 
   private refreshHud() {
     const counts = this.getInventoryCounts()
+    const hero = this.saveData.party[0]
     this.objectiveText?.setText(`Objective: ${this.saveData.currentObjective}`)
     this.inventoryText?.setText(`Gold ${this.saveData.gold}  |  Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}  |  Home ${this.homeProgress()}/3${this.saveData.pet.unlocked ? '  Pip' : ''}`)
+    this.levelText?.setText(`Lv.${hero.level}`)
+    this.killCounterText?.setText(`Kills: ${this.killCount}`)
+    this.updateSkillHud()
   }
 
   private homeProgress() {
