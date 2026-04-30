@@ -82,6 +82,11 @@ export const ITEMS: Item[] = [
     value: 40,
     description: "Warm crystal currency traded by quay merchants.",
   },
+  { id: "mira_bridge_key", name: "Mira's Bridge Key", type: "key", effect: {}, value: 0, description: "A scout's knot-key for the broken eastern bridges." },
+  { id: "hearth_ember", name: "Hearth Ember", type: "key", effect: {}, value: 0, description: "The first warm coal in Nara's restored home." },
+  { id: "skywell_lens", name: "Skywell Lens", type: "key", effect: {}, value: 0, description: "A focused map lens built at the home workshop." },
+  { id: "root_crown", name: "Root Crown", type: "relic", effect: { stat: "def", value: 4 }, value: 140, description: "A softened crown from Thornheart. DEF +4." },
+  { id: "true_map", name: "True Map", type: "relic", effect: { stat: "mag", value: 6 }, value: 240, description: "The final route made honest. MAG +6." },
   {
     id: "cartographer_staff",
     name: "Cartographer Staff",

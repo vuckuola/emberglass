@@ -48,8 +48,17 @@ const SHRINE_GATE_TILE = { x: 18, y: 6 }
 const SHRINE_FONT_TILE = { x: 18, y: 8 }
 const SHRINE_SEAL_TILE = { x: 18, y: 10 }
 const FIELD_BATTLE_TILE = { x: 17, y: 12 }
+const HOME_TILE = { x: 4, y: 12 }
+const ALLY_TILE = { x: 13, y: 6 }
+const PET_TILE = { x: 7, y: 12 }
+const ARCHIVE_TILE = { x: 11, y: 12 }
+const MID_BOSS_TILE = { x: 15, y: 10 }
+const FINAL_BOSS_TILE = { x: 18, y: 12 }
 const FIELD_BATTLE_ID = 'field_marker_battle'
 const SHRINE_BOSS_BATTLE_ID = 'moonwake_guardian_battle'
+const ARCHIVE_SKIRMISH_ID = 'archive_skirmish_battle'
+const MID_BOSS_BATTLE_ID = 'thornheart_battle'
+const FINAL_BOSS_BATTLE_ID = 'cartographers_lie_battle'
 const CHEST_ID = 'quay_supply_chest'
 
 const OBJECTIVES = {
@@ -60,7 +69,14 @@ const OBJECTIVES = {
   visitShrineGate: 'Follow the opened east path to the Moonwake Shrine gate.',
   attuneShrineFont: 'Enter Moonwake Shrine and attune the pilgrim font.',
   faceShrineGuardian: 'Break the inner seal and face the Moonwake Guardian.',
-  complete: 'Save at the skywell. Moonwake Shrine has answered.',
+  recruitMira: 'Find Mira at the broken bridge and ask her to join you.',
+  rescuePet: 'Follow the bell-chime south and rescue the emberfox kit.',
+  restoreHome: 'Restore the old quay house into a safe base.',
+  enterArchive: 'Cross into the Verdant Archive with Mira and Pip.',
+  faceMidBoss: 'Cut through the archive roots and defeat Thornheart.',
+  openSkywell: 'Use the restored home workshop to focus the Skywell Lens.',
+  finalBoss: 'Climb to the Skywell and confront the Cartographer\'s Lie.',
+  complete: 'Return home. Luma Quay has a future again.',
 } as const
 
 type OverworldInitData = {
@@ -80,6 +96,7 @@ export class OverworldScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private player?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle
   private playerShadow?: Phaser.GameObjects.Ellipse
+  private petFollower?: Phaser.GameObjects.Arc | Phaser.GameObjects.Image
   private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
   private facing: Direction = 'down'
@@ -135,6 +152,7 @@ export class OverworldScene extends Phaser.Scene {
     const startY = this.saveData.position.y
     this.playerShadow = this.add.ellipse(startX, startY + 18, 34, 14, 0x101014, 0.32).setDepth(10)
     this.player = this.createPlayer(startX, startY)
+    this.createPetFollower(startX - 28, startY + 18)
     this.cursors = this.input.keyboard?.createCursorKeys()
     this.keys = this.input.keyboard?.addKeys({
       w: Phaser.Input.Keyboard.KeyCodes.W,
@@ -204,6 +222,7 @@ export class OverworldScene extends Phaser.Scene {
     this.movePlayer(velocityX * seconds, velocityY * seconds)
     this.updatePlayerAnimation(velocityX !== 0 || velocityY !== 0)
     this.playerShadow.setPosition(this.player.x, this.player.y + 18)
+    this.updatePetFollower()
     this.checkSavePoint()
     this.updateInteractionPrompt()
 
@@ -335,6 +354,12 @@ export class OverworldScene extends Phaser.Scene {
     this.drawMarker(TIDE_BELL_TILE, GENERATED_ASSETS.objects.tideBell, 'Tide Bell')
     this.drawMarker(MURAL_TILE, GENERATED_ASSETS.objects.mural, 'Glass Mural')
     this.drawMarker(WATCH_LANTERN_TILE, GENERATED_ASSETS.objects.watchLantern, 'Watch Lantern')
+    this.drawMarker(HOME_TILE, GENERATED_ASSETS.objects.signpost, this.getHomeName())
+    this.drawNpc(ALLY_TILE, GENERATED_ASSETS.npcs.guideRin, this.flag('mira_recruited') ? 'Mira' : 'Bridge Scout')
+    this.drawMarker(PET_TILE, GENERATED_ASSETS.objects.tideBell, this.saveData.pet.unlocked ? 'Pip' : 'Bell Thicket')
+    this.drawMarker(ARCHIVE_TILE, GENERATED_ASSETS.objects.ruinMarker, 'Verdant Archive')
+    this.drawMarker(MID_BOSS_TILE, GENERATED_ASSETS.objects.guardianField, this.flag('thornheart_won') ? 'Root-Cleared Path' : 'Thornheart Roots')
+    this.drawMarker(FINAL_BOSS_TILE, GENERATED_ASSETS.objects.innerSeal, this.flag('final_boss_won') ? 'Quiet Skywell' : 'Skywell Rift')
     this.drawMarker(SHRINE_GATE_TILE, GENERATED_ASSETS.objects.shrineGate, 'Shrine Gate')
     if (this.flag('shrine_gate_seen')) {
       this.drawMarker(SHRINE_FONT_TILE, GENERATED_ASSETS.objects.pilgrimFont, 'Pilgrim Font')
@@ -385,6 +410,23 @@ export class OverworldScene extends Phaser.Scene {
       return player
     }
     return this.add.rectangle(x, y, 32, 48, 0xff8a32).setDepth(11)
+  }
+
+  private createPetFollower(x: number, y: number) {
+    if (!this.saveData.pet.unlocked) {
+      this.petFollower = undefined
+      return
+    }
+    this.petFollower = this.add.circle(x, y, 10, 0xffa43a, 0.95).setStrokeStyle(2, 0xfff1a8, 0.7).setDepth(10.5)
+    this.tweens.add({ targets: this.petFollower, y: y - 5, yoyo: true, repeat: -1, duration: 780, ease: 'Sine.easeInOut' })
+  }
+
+  private updatePetFollower() {
+    if (!this.petFollower || !this.player) {
+      return
+    }
+    this.petFollower.x += (this.player.x - 28 - this.petFollower.x) * 0.08
+    this.petFollower.y += (this.player.y + 18 - this.petFollower.y) * 0.08
   }
 
   private createGeneratedAnimations() {
@@ -533,6 +575,18 @@ export class OverworldScene extends Phaser.Scene {
       this.inspectMural()
     } else if (isAt(WATCH_LANTERN_TILE)) {
       this.lightWatchLantern()
+    } else if (isAt(HOME_TILE)) {
+      this.restoreHome()
+    } else if (isAt(ALLY_TILE)) {
+      this.recruitMira()
+    } else if (isAt(PET_TILE)) {
+      this.rescuePet()
+    } else if (isAt(ARCHIVE_TILE)) {
+      this.enterArchive()
+    } else if (isAt(MID_BOSS_TILE)) {
+      this.startMidBossBattle()
+    } else if (isAt(FINAL_BOSS_TILE)) {
+      this.startFinalBossBattle()
     } else if (isAt(SHRINE_GATE_TILE)) {
       this.inspectShrineGate()
     } else if (isAt(SHRINE_FONT_TILE)) {
@@ -691,8 +745,8 @@ export class OverworldScene extends Phaser.Scene {
     }
     if (result.battleId === SHRINE_BOSS_BATTLE_ID) {
       this.setFlag('shrine_guardian_won')
-      this.setObjective(OBJECTIVES.complete)
-      this.setFlag('demo_complete')
+      this.saveData.stage = 'shrine'
+      this.setObjective(OBJECTIVES.recruitMira)
       this.addInventory('skywell_shard', 1)
       this.saveData.party[0].equipment.relic = 'skywell_shard'
       this.saveData.party.forEach((member) => {
@@ -700,22 +754,58 @@ export class OverworldScene extends Phaser.Scene {
       })
       audioManager.playResonancePulse('event')
     }
+    if (result.battleId === ARCHIVE_SKIRMISH_ID) {
+      this.setFlag('archive_skirmish_won')
+      this.setObjective(OBJECTIVES.faceMidBoss)
+      this.addInventory('glass_lens', 1)
+    }
+    if (result.battleId === MID_BOSS_BATTLE_ID) {
+      this.setFlag('thornheart_won')
+      this.saveData.stage = 'skywell'
+      this.setObjective(OBJECTIVES.openSkywell)
+      this.addInventory('root_crown', 1)
+      this.saveData.pet.forageReady = this.saveData.pet.unlocked
+      this.saveData.party.forEach((member) => { member.level = Math.max(member.level, 5) })
+    }
+    if (result.battleId === FINAL_BOSS_BATTLE_ID) {
+      this.setFlag('final_boss_won')
+      this.setFlag('demo_complete')
+      this.saveData.stage = 'homecoming'
+      this.setObjective(OBJECTIVES.complete)
+      this.addInventory('true_map', 1)
+      this.saveData.pet.forageReady = this.saveData.pet.unlocked
+      this.saveData.party.forEach((member) => { member.level = Math.max(member.level, 6) })
+    }
     this.persist()
     this.time.delayedCall(250, () => {
       this.showEventBanner(
-        result.battleId === SHRINE_BOSS_BATTLE_ID ? 'Moonwake Guardian Defeated' : 'Guardian Felled',
-        result.battleId === SHRINE_BOSS_BATTLE_ID
-          ? 'The shrine opens a silver route toward the Skywell. Nara equips the Skywell Shard.'
-          : 'The field exhales. Far east, a shrine bell answers once.',
+        this.getBattleResultTitle(result.battleId),
+        this.getBattleResultSubtitle(result.battleId),
       )
       audioManager.playSfx(result.battleId === SHRINE_BOSS_BATTLE_ID ? 'equipment_gain' : 'reward_gain')
       this.time.delayedCall(320, () => audioManager.playSfx('reward_gain'))
-      this.showRewardToast(result.battleId === SHRINE_BOSS_BATTLE_ID ? `Climax reward: ${rewards.gold}g, Skywell Shard, party level 4. Save at the skywell.` : `Rewards secured: ${rewards.gold}g, Ember Shard x${rewards.emberShards}, Potion x1`)
+      this.showRewardToast(`Rewards secured: ${rewards.gold}g, EXP ${rewards.exp}, new route objective updated.`)
       this.refreshHud()
-      if (result.battleId === SHRINE_BOSS_BATTLE_ID) {
+      if (result.battleId === FINAL_BOSS_BATTLE_ID) {
         this.time.delayedCall(3050, () => this.showDemoCompletionCard())
       }
     })
+  }
+
+  private getBattleResultTitle(battleId?: string) {
+    if (battleId === SHRINE_BOSS_BATTLE_ID) return 'Moonwake Guardian Defeated'
+    if (battleId === ARCHIVE_SKIRMISH_ID) return 'Archive Path Cleared'
+    if (battleId === MID_BOSS_BATTLE_ID) return 'Thornheart Felled'
+    if (battleId === FINAL_BOSS_BATTLE_ID) return 'True Map Restored'
+    return 'Guardian Felled'
+  }
+
+  private getBattleResultSubtitle(battleId?: string) {
+    if (battleId === SHRINE_BOSS_BATTLE_ID) return 'The shrine opens a human route: find Mira at the broken bridge.'
+    if (battleId === ARCHIVE_SKIRMISH_ID) return 'The lesser roots retreat. Thornheart waits south with the stolen maps.'
+    if (battleId === MID_BOSS_BATTLE_ID) return 'Pip can now forage. The Skywell Lens points to the final rift.'
+    if (battleId === FINAL_BOSS_BATTLE_ID) return 'The false horizon collapses into a road back to the restored home.'
+    return 'The field exhales. Far east, a shrine bell answers once.'
   }
 
   private ringTideBell() {
@@ -750,6 +840,102 @@ export class OverworldScene extends Phaser.Scene {
       this.showToast('The watch lantern burns steady, painting the grass in warm gold.')
     }
     this.persist()
+  }
+
+  private recruitMira() {
+    if (!this.flag('shrine_guardian_won')) {
+      this.showToast('A scout watches the bridge: "Beat the shrine test first. Then I will believe the road is real."')
+      return
+    }
+    if (!this.flag('mira_recruited')) {
+      this.setFlag('mira_recruited')
+      this.saveData.stage = 'archive'
+      this.addInventory('mira_bridge_key', 1)
+      this.setObjective(OBJECTIVES.rescuePet)
+      audioManager.playSfx('objective_update')
+      this.showEventBanner('Mira Joins the Route', 'Mira, the bridge scout who stayed behind to mark safe stones, chooses to walk beside Nara.')
+      this.showToast('Mira: I know every broken plank east of here. No more heroic wandering alone, agreed?')
+    } else {
+      this.showToast('Mira: Bridge knots are set. Let us get the little bell-chime out of that thicket, then rebuild your house.')
+    }
+    this.persist()
+  }
+
+  private rescuePet() {
+    if (!this.flag('mira_recruited')) {
+      this.showToast('The thicket jingles fearfully. Someone nimble could help coax out whatever is hiding there.')
+      return
+    }
+    if (!this.saveData.pet.unlocked) {
+      this.saveData.pet = { unlocked: true, id: 'emberfox', name: 'Pip', forageReady: false, bonus: 'Finds one extra potion cache after major fights.' }
+      this.setFlag('pet_pip_rescued')
+      this.addInventory('health_potion', 1)
+      this.setObjective(OBJECTIVES.restoreHome)
+      this.createPetFollower((this.player?.x ?? this.tileCenter(PET_TILE.x)) - 28, (this.player?.y ?? this.tileCenter(PET_TILE.y)) + 18)
+      audioManager.playSfx('reward_gain')
+      this.showEventBanner('Pip Rescued', 'The emberfox kit curls around Nara\'s boots, then proudly trots behind the party.')
+      this.showToast('Pip found a buried Potion x1. Pet benefit unlocked: extra cache after major victories.')
+    } else if (this.saveData.pet.forageReady) {
+      this.saveData.pet.forageReady = false
+      this.addInventory('health_potion', 1)
+      this.showToast('Pip digs up a hidden Potion x1 and looks impossibly pleased.')
+    } else {
+      this.showToast('Pip circles you, ears bright. Benefit: after major fights, Pip can sniff out a bonus potion cache here.')
+    }
+    this.persist()
+  }
+
+  private restoreHome() {
+    const home = this.saveData.home
+    if (!this.saveData.pet.unlocked) {
+      this.showToast('Old Home: Cold rooms, cracked roof, empty bowls. Bring back warmth—and maybe someone small to fill them.')
+      return
+    }
+    if (home.warmth === 0) {
+      home.warmth = 1
+      this.addInventory('hearth_ember', 1)
+      this.setObjective(OBJECTIVES.restoreHome)
+      audioManager.playSfx('save_point')
+      this.showEventBanner('Home Restored: Hearth', 'The old stove catches. For the first time, Luma Quay smells like supper instead of smoke.')
+      this.showToast('Mira: Your mother kept spare maps under that tile. We are not letting this place go dark again.')
+    } else if (home.garden === 0) {
+      home.garden = 1
+      this.addInventory('health_elixir', 1)
+      audioManager.playSfx('reward_gain')
+      this.showEventBanner('Home Restored: Moon-Garden', 'Pip stamps the soil flat. Medicinal glassmint begins to glow.')
+      this.showToast('Garden upgrade: Health Elixir x1 harvested. Resting here now feels like coming back to people.')
+    } else if (home.workshop === 0) {
+      home.workshop = 1
+      this.addInventory('skywell_lens', 1)
+      this.setObjective(OBJECTIVES.enterArchive)
+      audioManager.playSfx('equipment_gain')
+      this.showEventBanner('Home Restored: Map Workshop', 'The workbench lens focuses the route beyond the Verdant Archive.')
+      this.showToast('Workshop upgrade: Skywell Lens crafted. The archive path can now be mapped safely.')
+    } else {
+      this.showToast(this.flag('final_boss_won') ? 'Home: Warm hearth, living garden, open maps. Everyone has somewhere to return.' : 'Home: The hearth, garden, and map workshop are ready. Cross into the archive.')
+    }
+    this.persist()
+  }
+
+  private enterArchive() {
+    if (this.saveData.home.workshop === 0) {
+      this.showToast('Verdant Archive: The paths keep rearranging. Restore the home workshop and focus a Skywell Lens first.')
+      return
+    }
+    if (!this.flag('archive_entered')) {
+      this.setFlag('archive_entered')
+      this.saveData.stage = 'archive'
+      this.setObjective(OBJECTIVES.faceMidBoss)
+      this.showAreaBanner('Verdant Archive', 'A living library of roots, ruined maps, and roads that remember footsteps.')
+      this.showToast('Mira: Stay on my chalk marks. If a tree whispers your name, absolutely do not answer.')
+      this.persist()
+      return
+    }
+    if (!this.flag('archive_skirmish_won')) {
+      this.startArchiveSkirmish()
+      return
+    }
+    this.showToast(this.flag('thornheart_won') ? 'Verdant Archive: Thornheart is gone. The Skywell route shines overhead.' : 'Verdant Archive: Lesser roots are cleared. Thornheart blocks the south passage.')
   }
 
   private inspectShrineGate() {
@@ -829,6 +1015,56 @@ export class OverworldScene extends Phaser.Scene {
           enemyIds: ['moonwake_guardian'],
           isBoss: true,
         })
+      })
+    })
+  }
+
+  private startArchiveSkirmish() {
+    this.startBattle(ARCHIVE_SKIRMISH_ID, ['glass_wasp', 'moss_knight', 'vinecrawler'], false, 'Archive Ambush', 'Map-eating roots drag lesser guardians into your path.')
+  }
+
+  private startMidBossBattle() {
+    if (!this.flag('archive_entered')) {
+      this.showToast('Thornheart roots are hidden beyond the Verdant Archive entrance.')
+      return
+    }
+    if (!this.flag('archive_skirmish_won')) {
+      this.showToast('The archive paths are still crowded. Clear the first ambush at the archive marker.')
+      return
+    }
+    if (this.flag('thornheart_won')) {
+      this.showToast('Thornheart\'s stump has become a stair of green glass pointing toward the Skywell.')
+      return
+    }
+    this.startBattle(MID_BOSS_BATTLE_ID, ['thornheart'], true, 'Thornheart Wakes', 'The archive root-crown rises to defend its stolen maps.')
+  }
+
+  private startFinalBossBattle() {
+    if (!this.flag('thornheart_won')) {
+      this.showToast('Skywell Rift: The route refuses to hold while Thornheart still grips the archive maps.')
+      return
+    }
+    if (this.flag('final_boss_won')) {
+      this.showToast('Skywell Rift: Quiet now. The false horizon has been folded into a true road home.')
+      return
+    }
+    this.startBattle(FINAL_BOSS_BATTLE_ID, ['cartographers_lie'], true, 'Skywell Rift', 'The final map tears open and a voice made of false routes answers.')
+  }
+
+  private startBattle(battleId: string, enemyIds: string[], isBoss: boolean, title: string, subtitle: string) {
+    if (this.busy) {
+      return
+    }
+    this.busy = true
+    this.saveCurrentPosition()
+    this.persist()
+    audioManager.playSfx(isBoss ? 'boss_sting' : 'scene_whoosh')
+    this.showEventBanner(title, subtitle)
+    this.cameras.main.shake(isBoss ? 360 : 180, isBoss ? 0.007 : 0.004)
+    this.time.delayedCall(isBoss ? 980 : 620, () => {
+      this.cameras.main.fadeOut(420, 6, 8, 22)
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+        this.scene.start('BattleScene', { battleId, enemyIds, isBoss })
       })
     })
   }
@@ -999,8 +1235,20 @@ export class OverworldScene extends Phaser.Scene {
                   ? 'Ring tide bell'
                   : isAt(MURAL_TILE)
                     ? 'Study glass mural'
-                    : isAt(WATCH_LANTERN_TILE)
+      : isAt(WATCH_LANTERN_TILE)
                       ? 'Tend watch lantern'
+                      : isAt(HOME_TILE)
+                        ? 'Restore home base'
+                        : isAt(ALLY_TILE)
+                          ? 'Talk to Mira'
+                          : isAt(PET_TILE)
+                            ? (this.saveData.pet.unlocked ? 'Check on Pip' : 'Rescue bell-chime')
+                            : isAt(ARCHIVE_TILE)
+                              ? 'Enter Verdant Archive'
+                              : isAt(MID_BOSS_TILE)
+                                ? 'Challenge Thornheart'
+                                : isAt(FINAL_BOSS_TILE)
+                                  ? 'Confront final rift'
                       : isAt(SHRINE_GATE_TILE)
                         ? 'Inspect shrine gate'
                         : isAt(SHRINE_FONT_TILE)
@@ -1032,6 +1280,9 @@ export class OverworldScene extends Phaser.Scene {
       position: { mapId: 'Luma Quay', x: TILE_SIZE * 2.5, y: TILE_SIZE * 2.5 },
       quests: {},
       flags: {},
+      stage: 'quay',
+      pet: { unlocked: false, id: null, name: null, forageReady: false, bonus: null },
+      home: { warmth: 0, garden: 0, workshop: 0 },
       playTime: 0,
     }
   }
@@ -1094,7 +1345,16 @@ export class OverworldScene extends Phaser.Scene {
   private refreshHud() {
     const counts = this.getInventoryCounts()
     this.objectiveText?.setText(`Objective: ${this.saveData.currentObjective}`)
-    this.inventoryText?.setText(`Gold ${this.saveData.gold}  |  Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}`)
+    this.inventoryText?.setText(`Gold ${this.saveData.gold}  |  Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}  |  Home ${this.homeProgress()}/3${this.saveData.pet.unlocked ? '  Pip' : ''}`)
+  }
+
+  private homeProgress() {
+    return this.saveData.home.warmth + this.saveData.home.garden + this.saveData.home.workshop
+  }
+
+  private getHomeName() {
+    const progress = this.homeProgress()
+    return progress === 0 ? 'Old Home' : progress === 3 ? 'Restored Home' : `Home ${progress}/3`
   }
 
   private getInteractionTile() {

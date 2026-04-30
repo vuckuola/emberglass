@@ -21,6 +21,21 @@ const BOSS_BATTLE_REWARDS: Record<string, { emberShards: number; items: Array<{ 
     items: [{ itemId: 'health_elixir', quantity: 1 }],
     rewardLine: 'Rewards: Skywell Shard unlocked, Elixir x1\nThe Moonwake route opens beyond the seal.',
   },
+  archive_skirmish_battle: {
+    emberShards: 1,
+    items: [{ itemId: 'mana_potion', quantity: 1 }, { itemId: 'glass_lens', quantity: 1 }],
+    rewardLine: 'Rewards: Ember Shard x1, Ether x1, Glass Lens\nThe archive paths stop rearranging for now.',
+  },
+  thornheart_battle: {
+    emberShards: 2,
+    items: [{ itemId: 'health_elixir', quantity: 1 }, { itemId: 'root_crown', quantity: 1 }],
+    rewardLine: 'Rewards: Ember Shard x2, Root Crown, Elixir x1\nPip can now forage for a bonus cache.',
+  },
+  cartographers_lie_battle: {
+    emberShards: 3,
+    items: [{ itemId: 'true_map', quantity: 1 }, { itemId: 'mana_elixir', quantity: 1 }],
+    rewardLine: 'Rewards: True Map, Ether Elixir, Ember Shard x3\nThe route home is finally honest.',
+  },
 }
 
 type EntityView = {

@@ -379,17 +379,87 @@ steps.push('Verified boss victory return flow');
 
 const finalState = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
 assert.equal(finalState.flags.shrine_guardian_won, true);
-assert.equal(finalState.flags.demo_complete, true);
-assert.equal(finalState.currentObjective, 'Save at the skywell. Moonwake Shrine has answered.');
+assert.equal(finalState.currentObjective, 'Find Mira at the broken bridge and ask her to join you.');
 assert.equal(finalState.party[0].equipment.relic, 'skywell_shard');
 assert(finalState.party.every((member) => member.level >= 4));
+steps.push('Verified shrine completion now opens the longer Phase 2 route');
+
+await evalScene(() => {
+  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
+  scene.recruitMira();
+  scene.rescuePet();
+  scene.restoreHome();
+  scene.restoreHome();
+  scene.restoreHome();
+  scene.enterArchive();
+});
+let phase2State = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
+assert.equal(phase2State.flags.mira_recruited, true);
+assert.equal(phase2State.pet.unlocked, true);
+assert.deepEqual(phase2State.home, { warmth: 1, garden: 1, workshop: 1 });
+assert.equal(phase2State.flags.archive_entered, true);
+assert.equal(phase2State.currentObjective, 'Cut through the archive roots and defeat Thornheart.');
+steps.push('Verified recruitable ally beat, pet unlock, home restoration loop, and archive entry');
+
+await evalScene(() => {
+  window.__EMBERGLASS_GAME__.scene.start('OverworldScene', {
+    continueGame: true,
+    battleResult: {
+      battleId: 'archive_skirmish_battle',
+      victory: true,
+      rewards: { exp: 80, gold: 60, emberShards: 1, items: [{ itemId: 'mana_potion', quantity: 1 }, { itemId: 'glass_lens', quantity: 1 }] },
+    },
+  });
+});
+await waitForScene('OverworldScene', 12000);
+await evalScene(() => {
+  window.__EMBERGLASS_GAME__.scene.start('OverworldScene', {
+    continueGame: true,
+    battleResult: {
+      battleId: 'thornheart_battle',
+      victory: true,
+      rewards: { exp: 180, gold: 120, emberShards: 2, items: [{ itemId: 'root_crown', quantity: 1 }] },
+    },
+  });
+});
+await waitForScene('OverworldScene', 12000);
+phase2State = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
+assert.equal(phase2State.flags.archive_skirmish_won, true);
+assert.equal(phase2State.flags.thornheart_won, true);
+assert.equal(phase2State.pet.forageReady, true);
+assert.equal(phase2State.currentObjective, 'Use the restored home workshop to focus the Skywell Lens.');
+steps.push('Verified archive encounter and mid-boss progression rewards');
+
+await evalScene(() => {
+  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
+  scene.startFinalBossBattle();
+});
+await waitForScene('BattleScene', 12000);
+steps.push('Entered final boss battle');
+
+await evalScene(() => {
+  window.__EMBERGLASS_GAME__.scene.start('OverworldScene', {
+    continueGame: true,
+    battleResult: {
+      battleId: 'cartographers_lie_battle',
+      victory: true,
+      rewards: { exp: 600, gold: 500, emberShards: 3, items: [{ itemId: 'true_map', quantity: 1 }] },
+    },
+  });
+});
+await waitForScene('OverworldScene', 12000);
+const clearState = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
+assert.equal(clearState.flags.final_boss_won, true);
+assert.equal(clearState.flags.demo_complete, true);
+assert.equal(clearState.stage, 'homecoming');
+assert.equal(clearState.currentObjective, 'Return home. Luma Quay has a future again.');
 await page.waitForFunction(async () => {
   const texts = Array.from(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].children.list)
     .filter((child) => child && child.type === 'Text')
     .map((child) => child.text ?? '');
   return texts.some((text) => text.includes('Thanks for Playing the Emberglass Demo'));
 }, undefined, { timeout: 7000 });
-steps.push('Verified final shrine completion rewards, equipment, level bump, and demo card');
+steps.push('Verified final boss clear, final objective, and demo card');
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
@@ -412,7 +482,7 @@ await clickGameObject(() => {
 });
 await waitForScene('OverworldScene', 12000);
 const continuedObjective = await evalScene(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData.currentObjective);
-assert.equal(continuedObjective, 'Save at the skywell. Moonwake Shrine has answered.');
+assert.equal(continuedObjective, 'Return home. Luma Quay has a future again.');
 steps.push('Verified Continue button loads persisted save');
 
 await browser.close();

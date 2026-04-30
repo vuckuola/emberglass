@@ -19,6 +19,9 @@ export interface SaveData {
   position: { mapId: string; x: number; y: number }
   quests: Record<string, string>
   flags: Record<string, boolean>
+  stage: 'quay' | 'field' | 'shrine' | 'archive' | 'skywell' | 'homecoming'
+  pet: { unlocked: boolean; id: string | null; name: string | null; forageReady: boolean; bonus: string | null }
+  home: { warmth: number; garden: number; workshop: number }
   playTime: number
 }
 
@@ -107,6 +110,9 @@ export class SaveSystem {
       : { exp: 0, gold: 0, emberShards: 0 }
     save.quests = this.isStringRecord(save.quests) ? save.quests : {}
     save.flags = this.isBooleanRecord(save.flags) ? save.flags : {}
+    save.stage = this.isValidStage(save.stage) ? save.stage : 'quay'
+    save.pet = this.isValidPet(save.pet) ? save.pet : { unlocked: false, id: null, name: null, forageReady: false, bonus: null }
+    save.home = this.isValidHome(save.home) ? save.home : { warmth: 0, garden: 0, workshop: 0 }
     save.playTime = this.isNonNegativeFiniteNumber(save.playTime) ? save.playTime : 0
 
     return true
@@ -240,6 +246,26 @@ export class SaveSystem {
       this.isNonNegativeFiniteNumber(rewards.gold) &&
       this.isNonNegativeFiniteNumber(rewards.emberShards)
     )
+  }
+
+  private static isValidStage(value: unknown): value is SaveData['stage'] {
+    return typeof value === 'string' && ['quay', 'field', 'shrine', 'archive', 'skywell', 'homecoming'].includes(value)
+  }
+
+  private static isValidPet(value: unknown): value is SaveData['pet'] {
+    if (!this.isObject(value)) {
+      return false
+    }
+    const pet = value as SaveData['pet']
+    return typeof pet.unlocked === 'boolean' && this.isNullableString(pet.id) && this.isNullableString(pet.name) && typeof pet.forageReady === 'boolean' && this.isNullableString(pet.bonus)
+  }
+
+  private static isValidHome(value: unknown): value is SaveData['home'] {
+    if (!this.isObject(value)) {
+      return false
+    }
+    const home = value as SaveData['home']
+    return [home.warmth, home.garden, home.workshop].every((entry) => Number.isInteger(entry) && entry >= 0 && entry <= 1)
   }
 
   private static isNonNegativeFiniteNumber(value: unknown): value is number {
