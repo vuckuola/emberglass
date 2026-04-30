@@ -164,6 +164,7 @@ type PartyCompanion = {
   offsetY: number
   attackCooldown: number
   lastAttackTime: number
+  lastSkillTime: number
   hitFlashTimer: number
 }
 
@@ -1003,6 +1004,7 @@ export class OverworldScene extends Phaser.Scene {
       offsetY,
       attackCooldown: 900,
       lastAttackTime: 0,
+      lastSkillTime: 0,
       hitFlashTimer: 0,
     }
     this.updateCompanionBars(companion)
@@ -1022,6 +1024,90 @@ export class OverworldScene extends Phaser.Scene {
       }
 
       companion.container.setAlpha(1)
+      const nearestEnemy = this.getNearestEnemy(companion.x, companion.y, companion.characterId === 'io' ? 200 : 180)
+
+      if (companion.characterId === 'kael' && nearestEnemy) {
+        const distance = Phaser.Math.Distance.Between(companion.x, companion.y, nearestEnemy.x, nearestEnemy.y)
+        if (distance > 50) {
+          const nextX = Phaser.Math.Linear(companion.x, nearestEnemy.x, 0.05)
+          const nextY = Phaser.Math.Linear(companion.y, nearestEnemy.y, 0.05)
+          if (!this.isWallAtWorld(nextX, companion.y)) companion.x = Phaser.Math.Clamp(nextX, 8, MAP_WIDTH * TILE_SIZE - 8)
+          if (!this.isWallAtWorld(companion.x, nextY)) companion.y = Phaser.Math.Clamp(nextY, 8, MAP_HEIGHT * TILE_SIZE - 8)
+          companion.container.setPosition(companion.x, companion.y)
+          this.updateCompanionBars(companion)
+          return
+        }
+        if (this.time.now - companion.lastAttackTime >= companion.attackCooldown) {
+          const stats = this.scaleCharacterStats(CHARACTERS.kael, member.level)
+          const damage = CombatSystem.calculateRealtimePlayerDamage(stats.atk, nearestEnemy.stats.def)
+          const angle = Phaser.Math.Angle.Between(companion.x, companion.y, nearestEnemy.x, nearestEnemy.y)
+          const swing = this.add.arc(nearestEnemy.x, nearestEnemy.y, 24, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0xff9f1c, 0.38).setDepth(25).setStrokeStyle(4, 0xffd166, 0.8)
+          this.tweens.add({ targets: swing, alpha: 0, duration: 180, onComplete: () => swing.destroy() })
+          nearestEnemy.currentHp = Math.max(0, nearestEnemy.currentHp - damage)
+          nearestEnemy.hitFlashTimer = 120
+          nearestEnemy.sprite.setFillStyle(0xffffff)
+          this.showFloatingText(nearestEnemy.x, nearestEnemy.y - 22, `${damage}`, '#ffd166')
+          this.updateEnemyBars(nearestEnemy)
+          companion.lastAttackTime = this.time.now
+          if (nearestEnemy.currentHp <= 0) this.killEnemy(nearestEnemy)
+          this.persist()
+        }
+        companion.container.setPosition(companion.x, companion.y)
+        this.updateCompanionBars(companion)
+        return
+      }
+
+      if (companion.characterId === 'io') {
+        const healTarget = this.getLowestHpPartyMember()
+        if (healTarget && healTarget.hpRatio < 0.5 && member.currentMp >= 6 && this.time.now - companion.lastSkillTime > 3000) {
+          const previousHp = healTarget.member.currentHp
+          healTarget.member.currentHp = Math.min(healTarget.maxHp, healTarget.member.currentHp + 24)
+          member.currentMp = Math.max(0, member.currentMp - 6)
+          const targetCompanion = this.companions.find((entry) => entry.partyIndex === healTarget.partyIndex)
+          const healX = healTarget.partyIndex === 0 ? this.player!.x : targetCompanion?.x ?? companion.x
+          const healY = healTarget.partyIndex === 0 ? this.player!.y : targetCompanion?.y ?? companion.y
+          this.showFloatingText(healX, healY - 28, '+24', '#86efac')
+          companion.lastSkillTime = this.time.now
+          if (previousHp <= 0 && targetCompanion) {
+            targetCompanion.state = 'follow'
+            targetCompanion.container.setAlpha(1)
+          }
+          this.refreshHud()
+          this.updatePlayerBars()
+          this.updateCompanionBars(companion)
+          this.persist()
+          companion.container.setPosition(companion.x, companion.y)
+          return
+        }
+        if (nearestEnemy && this.time.now - companion.lastAttackTime >= companion.attackCooldown) {
+          const stats = this.scaleCharacterStats(CHARACTERS.io, member.level)
+          const projectile = this.add.circle(companion.x, companion.y, 5, 0x60a5fa, 0.9).setDepth(25)
+          companion.lastAttackTime = this.time.now
+          this.tweens.add({
+            targets: projectile,
+            x: nearestEnemy.x,
+            y: nearestEnemy.y,
+            duration: 300,
+            onComplete: () => {
+              projectile.destroy()
+              if (nearestEnemy.dead) return
+              const damage = Math.max(1, Math.round(CombatSystem.calculateRealtimePlayerDamage(stats.mag, nearestEnemy.stats.def) * 0.7))
+              nearestEnemy.currentHp = Math.max(0, nearestEnemy.currentHp - damage)
+              nearestEnemy.hitFlashTimer = 120
+              nearestEnemy.sprite.setFillStyle(0xffffff)
+              this.showFloatingText(nearestEnemy.x, nearestEnemy.y - 22, `${damage}`, '#93c5fd')
+              this.updateEnemyBars(nearestEnemy)
+              if (nearestEnemy.currentHp <= 0) this.killEnemy(nearestEnemy)
+              this.persist()
+            },
+          })
+          this.persist()
+          companion.container.setPosition(companion.x, companion.y)
+          this.updateCompanionBars(companion)
+          return
+        }
+      }
+
       const targetX = this.player!.x + companion.offsetX
       const targetY = this.player!.y + companion.offsetY
       const nextX = Phaser.Math.Linear(companion.x, targetX, 0.08)
@@ -1031,6 +1117,31 @@ export class OverworldScene extends Phaser.Scene {
       companion.container.setPosition(companion.x, companion.y)
       this.updateCompanionBars(companion)
     })
+  }
+
+  private getNearestEnemy(x: number, y: number, maxDistance: number): MapEnemy | null {
+    let nearest: MapEnemy | null = null
+    let nearestDistance = maxDistance
+    this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
+      const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y)
+      if (distance <= nearestDistance) {
+        nearest = enemy
+        nearestDistance = distance
+      }
+    })
+    return nearest
+  }
+
+  private getLowestHpPartyMember(): { member: SaveData['party'][number]; partyIndex: number; maxHp: number; hpRatio: number } | null {
+    let lowest: { member: SaveData['party'][number]; partyIndex: number; maxHp: number; hpRatio: number } | null = null
+    this.saveData.party.slice(0, 3).forEach((member, partyIndex) => {
+      const character = CHARACTERS[member.characterId]
+      if (!character) return
+      const stats = this.scaleCharacterStats(character, member.level)
+      const hpRatio = stats.hp > 0 ? member.currentHp / stats.hp : 1
+      if (!lowest || hpRatio < lowest.hpRatio) lowest = { member, partyIndex, maxHp: stats.hp, hpRatio }
+    })
+    return lowest
   }
 
   private updateCompanionBars(companion: PartyCompanion) {
@@ -1237,6 +1348,21 @@ export class OverworldScene extends Phaser.Scene {
       this.persist()
       audioManager.playSfx('save_point')
       this.cameras.main.flash(180, 159, 243, 255, false)
+      let revivedCompanions = 0
+      this.companions.forEach((companion) => {
+        const member = this.saveData.party[companion.partyIndex]
+        const character = member ? CHARACTERS[member.characterId] : undefined
+        if (!member || !character || companion.state !== 'dead') return
+        const stats = this.scaleCharacterStats(character, member.level)
+        member.currentHp = Math.max(1, Math.floor(stats.hp * 0.5))
+        companion.state = 'follow'
+        companion.container.setAlpha(1)
+        revivedCompanions += 1
+      })
+      if (revivedCompanions > 0) {
+        this.persist()
+        this.showToast('The save crystal revives fallen companions.')
+      }
       this.showToast('The save crystal hums. Strength returns.')
     }
   }
@@ -2326,15 +2452,36 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.player) return
     const seconds = delta / 1000
     this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
-      const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player!.x, this.player!.y)
+      const companionTarget = Math.random() < 0.3 ? this.getNearestCompanion(enemy) : null
+      const targetX = companionTarget?.x ?? this.player!.x
+      const targetY = companionTarget?.y ?? this.player!.y
+      const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, targetX, targetY)
       enemy.state = distance <= enemy.attackRange ? 'attack' : distance <= enemy.aggroRange ? 'chase' : 'idle'
-      if (enemy.state === 'chase') this.moveEnemyToward(enemy, this.player!.x, this.player!.y, enemy.speed * seconds)
+      if (enemy.state === 'chase') this.moveEnemyToward(enemy, targetX, targetY, enemy.speed * seconds)
       if (enemy.state === 'idle') this.updateEnemyWander(enemy, delta, seconds)
-      if (enemy.state === 'attack') this.tryEnemyAttack(enemy)
+      if (enemy.state === 'attack') {
+        if (companionTarget) this.tryEnemyAttackCompanion(enemy, companionTarget)
+        else this.tryEnemyAttack(enemy)
+      }
       if (enemy.hitFlashTimer > 0) { enemy.hitFlashTimer -= delta; if (enemy.hitFlashTimer <= 0) enemy.sprite.setFillStyle(this.getEnemyColor(enemy)) }
       enemy.sprite.setPosition(enemy.x, enemy.y)
       this.updateEnemyBars(enemy)
     })
+  }
+
+  private getNearestCompanion(enemy: MapEnemy): PartyCompanion | null {
+    let nearest: PartyCompanion | null = null
+    let nearestDistance = Number.POSITIVE_INFINITY
+    this.companions.filter((companion) => companion.state !== 'dead').forEach((companion) => {
+      const member = this.saveData.party[companion.partyIndex]
+      if (!member || member.currentHp <= 0) return
+      const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, companion.x, companion.y)
+      if (distance < nearestDistance) {
+        nearest = companion
+        nearestDistance = distance
+      }
+    })
+    return nearest
   }
 
   private updateEnemyWander(enemy: MapEnemy, delta: number, seconds: number) {
@@ -2459,6 +2606,32 @@ export class OverworldScene extends Phaser.Scene {
     })
   }
 
+  private tryEnemyAttackCompanion(enemy: MapEnemy, companion: PartyCompanion) {
+    if (this.time.now - enemy.lastAttackTime < enemy.attackCooldown) return
+    enemy.lastAttackTime = this.time.now
+    enemy.sprite.setFillStyle(0xff4d4d)
+    this.time.delayedCall(300, () => {
+      if (enemy.dead || companion.state === 'dead' || Phaser.Math.Distance.Between(enemy.x, enemy.y, companion.x, companion.y) > enemy.attackRange + 12) return
+      const member = this.saveData.party[companion.partyIndex]
+      const character = member ? CHARACTERS[member.characterId] : undefined
+      if (!member || !character) return
+      const stats = this.scaleCharacterStats(character, member.level)
+      const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, stats.def)
+      member.currentHp = Math.max(0, member.currentHp - damage)
+      this.showFloatingText(companion.x, companion.y - 26, `-${damage}`, '#ff6b6b')
+      companion.body.setFillStyle(0xffffff)
+      this.time.delayedCall(120, () => companion.body.setFillStyle(companion.characterId === 'kael' ? 0x5c8a4d : 0x7fb3ff, 0.94))
+      if (member.currentHp <= 0) {
+        companion.state = 'dead'
+        companion.container.setAlpha(0.3)
+        this.showToast(`${companion.name} falls!`)
+      }
+      this.updateCompanionBars(companion)
+      this.refreshHud()
+      this.persist()
+    })
+  }
+
   private killEnemy(enemy: MapEnemy) {
     enemy.dead = true
     enemy.state = 'dead'
@@ -2534,11 +2707,12 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private gainRealtimeExp(amount: number) {
-    const previousLevel = this.saveData.party[0].level
+    const previousLevels = new Map(this.saveData.party.map((member) => [member.characterId, member.level]))
     this.saveData.battleRewards.exp += amount
     const nextLevel = Math.min(6, 1 + Math.floor(this.saveData.battleRewards.exp / 180))
-    if (nextLevel > previousLevel) {
-      this.saveData.party[0].level = nextLevel
+    const leveledUp = this.saveData.party.some((member) => nextLevel > (previousLevels.get(member.characterId) ?? member.level))
+    if (leveledUp) {
+      this.saveData.party.forEach((member) => { member.level = Math.max(member.level, nextLevel) })
       this.showLevelUpEffect()
     }
   }

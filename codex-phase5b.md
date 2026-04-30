@@ -1,86 +1,87 @@
 # Phase 5B: Companion Combat AI
 
-Emberglass Phase 5A added Kael and Io as visible companions following the player. Now add combat AI so they actually fight alongside Nara.
+Add combat AI so Kael and Io fight alongside Nara. PartyCompanion type and sprites already exist from Phase 5A.
 
-## Context
-- `PartyCompanion` type already exists with: characterId, name, container, body, hpBar, etc.
-- `this.companions: PartyCompanion[]` — array of 2 companions (Kael index 1, Io index 2)
-- `this.mapEnemies: MapEnemy[]` — all enemies on the map
-- `this.saveData.party[partyIndex]` — party member data (currentHp, currentMp, skills)
+## Current State (DO NOT recreate these)
+- `PartyCompanion` type at line 150 with: characterId, name, container, body, hpBar, hpBarBg, mpBar, x, y, partyIndex, state, offsetX, offsetY, attackCooldown, lastAttackTime, hitFlashTimer
+- `this.companions: PartyCompanion[]` at line 217
+- `createCompanion(partyIndex)` at line 968 — already creates sprites
+- `updateCompanions()` at line 1012 — currently only handles following. ADD combat AI HERE
+- `updateCompanionBars(companion)` at line 1036 — draws HP/MP bars
+- `this.mapEnemies: MapEnemy[]` — all enemies
 - `CombatSystem.calculateRealtimePlayerDamage(atk, def)` — damage formula
-- `CombatSystem.canUseRealtimeSkill(mp, cost, now, readyAt)` — skill check
-- `CHARACTERS[id]` — character data with skills, baseStats, growth
-- `scaleCharacterStats(character, level)` — stat calculation
-- `damageEnemy(enemy, multiplier)` — existing method damages an enemy
-- `killEnemy(enemy)` — existing method handles enemy death
-- Kael: tank, earth element, melee (Iron Cleave skill)
-- Io: healer/mage, light element, ranged (Mend heals, Lumen Bolt attacks)
+- `showFloatingText(x, y, text, color)` — floating damage numbers
+- `persist()` — auto-saves to localStorage
+- `killEnemy(enemy)` — handles enemy death + loot + XP
+- `refreshHud()` — updates HUD text
+- Kael = party[1], earth tank, green sprite (30x30)
+- Io = party[2], light healer, blue sprite (26x26)
 
 ## Tasks
 
-### 1. Add companion AI state machine to updateCompanions()
-For each non-dead companion, add AI behavior after following logic:
+### 1. Add lastSkillTime to PartyCompanion type (line 150 area)
+Add `lastSkillTime: number` to the type, init to 0 in createCompanion.
 
-**Kael AI (partyIndex 1):**
-- Find nearest alive enemy within aggro range (180px)
-- If enemy in range: move toward it (chase state), attack when within 50px
-- Attack = create a small arc swing visual (reuse performPlayerAttack pattern but smaller)
-- Damage = CombatSystem.calculateRealtimePlayerDamage(kaelAtk, enemy.def)
-- Attack cooldown: 1200ms
-- If no enemy nearby: follow player (follow state)
+### 2. Modify updateCompanions() — add combat AI after follow logic
+For each non-dead companion, AFTER the existing follow code:
 
-**Io AI (partyIndex 2):**
-- HEAL PRIORITY: If any party member (Nara, Kael, or Io) below 50% HP and Io has MP >= 6:
-  - Heal lowest HP party member (restore ~24 HP based on Mend skill power)
-  - Show green "+XX" floating text on healed target
-  - Deduct MP from saveData.party[2].currentMp
-  - Cooldown: 3000ms
+**Kael (characterId === 'kael'):**
+- Find nearest alive enemy within 180px using Phaser.Math.Distance.Between
+- If enemy found and distance <= 50: attack it (if cooldown ready)
+  - Create small orange arc swing visual at enemy position (Phaser.Math.Angle.Between to get angle)
+  - Damage = CombatSystem.calculateRealtimePlayerDamage(kaelAtk, enemy.stats.def)
+  - Use kael's scaled stats: scaleCharacterStats(CHARACTERS.kael, member.level).atk
+  - Apply damage: enemy.currentHp -= damage, flash white, check death
+  - Show floating text with damage
+  - Set lastAttackTime = this.time.now
+- If enemy found but distance > 50: move toward enemy (lerp x/y toward enemy, skip follow offset)
+- If no enemy: normal follow behavior (existing code)
+
+**Io (characterId === 'io'):**
+- HEAL FIRST: Check all party members (indices 0,1,2). Find whoever has lowest HP ratio (currentHp/maxHp)
+- If lowest HP ratio < 0.5 AND io.currentMp >= 6 AND time.now - lastSkillTime > 3000:
+  - Heal that member: currentHp = min(maxHp, currentHp + 24)
+  - Deduct 6 MP from io
+  - Show green "+24" floating text at healed target position
+  - Set lastSkillTime = this.time.now
+  - Call persist()
+  - If healed companion was dead (HP was 0), set state to 'follow', alpha to 1
 - ATTACK: If no heal needed, find nearest enemy within 200px:
-  - Create a small light projectile visual (blue circle that moves toward enemy)
-  - Damage = CombatSystem.calculateRealtimePlayerDamage(ioMag, enemy.def) * 0.7
-  - Cooldown: 2000ms
-- If no target: follow player
+  - Create blue circle projectile visual tweened toward enemy (duration 300ms)
+  - On tween complete: deal damage = CombatSystem.calculateRealtimePlayerDamage(ioMag, enemy.def) * 0.7
+  - ioMag from scaleCharacterStats(CHARACTERS.io, member.level).mag
+  - Show floating damage text
+  - Set lastAttackTime = this.time.now
+- If no target: normal follow behavior
 
-### 2. Enemies can target companions
-In `updateMapEnemies()`, modify enemy targeting:
-- 30% chance per enemy to target nearest companion instead of player
-- If targeting companion, enemy chases companion.x/y instead of player
+### 3. Enemies can hit companions
+In `updateMapEnemies()` method, modify enemy targeting:
+- 30% of enemies should target nearest companion instead of player
+- Add helper: `private getNearestCompanion(enemy: MapEnemy): PartyCompanion | null`
+- When targeting companion: chase companion.x/y, try attack at range
 - If enemy attacks companion: damage goes to saveData.party[companion.partyIndex].currentHp
-- Show floating damage text on companion
-- If companion HP <= 0: set companion.state = 'dead', dim the sprite, show "Kael Down!" toast
-- Companion stays dead until player uses save crystal (auto-revive at save point) or Io heals them
+- Show damage text, flash companion body white briefly (setFillStyle white, reset after 120ms)
+- If companion HP <= 0: companion.state = 'dead', container alpha 0.3, showToast "Kael/Io falls!"
+- STILL check player too — 70% of enemies target player as before
 
-### 3. Companion auto-revive at save point
-In the save point check (checkSavePoint), also revive dead companions:
-- Set companion.state = 'follow'
-- Restore HP to 50% of max
-- Show toast "Kael/Io restored at save crystal"
+### 4. Revive companions at save crystal
+In `checkSavePoint()` method, after existing save logic, add:
+- this.companions.forEach: if dead, revive to 50% HP, state = 'follow', alpha = 1
+- showToast if any companion was revived
 
-### 4. Update killEnemy() for shared XP
-Currently only party[0] gets XP. Modify to distribute XP to all party members:
-- Each party member gets the same exp from battleRewards
-- Level up check should apply to all party members, not just Nara
-- Show toast for companion level ups too
+### 5. Shared XP on kill
+In `killEnemy()`, the XP already goes to battleRewards.exp. The level-up logic uses this.
+Current code only checks party[0] level. Modify to check ALL party members.
+Find where level-ups are calculated and loop through all 3 party members.
 
-### 5. Add companion skill cooldown tracking
-Add to PartyCompanion type:
-- `lastSkillTime: number` — tracks skill cooldown
-- `lastHealTime: number` — tracks heal cooldown (Io only)
-
-### 6. Persist companion HP/MP after combat
-After companion attacks or takes damage, call `this.persist()` to save state.
-Already handled if we modify saveData.party directly and call persist.
-
-### 7. Visual feedback for companion attacks
-- Kael attack: orange-brown arc swing (similar to player but smaller, 0.8 opacity)
-- Io attack: blue projectile (small circle tweening toward enemy)
-- Io heal: green sparkle on healed target
-- Companion hit flash: briefly turn white when damaged (like enemies)
+### 6. Call persist() after companion combat actions
+After companion attacks, takes damage, or heals — call this.persist() to save state.
 
 ## CRITICAL RULES
 - Do NOT use `letterSpacing` — Phaser 3.80.1 does NOT support it
-- Do NOT create new files — all changes in OverworldScene.ts
-- Import CombatSystem is already at top of file
-- Reuse existing damageEnemy() for companion attacks — just pass the companion's ATK
-- Be careful with circular references — companions reference enemies, enemies reference player
-- Run `npx tsc --noEmit && npm run build && git add -A && git commit -m "Phase 5B: companion combat AI — Kael melee tank, Io healer/mage"`
+- Do NOT create new files — all changes in OverworldScene.ts only
+- Do NOT modify the PartyCompanion type fields that already exist (only ADD lastSkillTime)
+- Do NOT recreate createCompanion or updateCompanionBars — they work fine
+- Reuse ALL existing methods: scaleCharacterStats, CombatSystem.calculateRealtimePlayerDamage, showFloatingText, persist, refreshHud, isWallAtWorld
+- Kill enemy death check: if enemy.currentHp <= 0, call killEnemy(enemy) — same as player attacks
+- Run `npx tsc --noEmit && npm run build && git add -A && git commit -m "Phase 5B: companion combat AI — Kael melee tank, Io healer/mage, shared XP"`
