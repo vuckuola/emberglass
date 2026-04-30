@@ -1,5 +1,4 @@
 import Phaser from 'phaser'
-import { BattleScene } from './scenes/BattleScene'
 import { BootScene } from './scenes/BootScene'
 import { OverworldScene } from './scenes/OverworldScene'
 import { TitleScene } from './scenes/TitleScene'
@@ -16,5 +15,5 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
     width: 960,
     height: 640,
   },
-  scene: [BootScene, TitleScene, OverworldScene, BattleScene],
+  scene: [BootScene, TitleScene, OverworldScene],
 }

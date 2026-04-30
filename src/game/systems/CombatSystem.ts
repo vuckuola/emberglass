@@ -126,6 +126,14 @@ export class CombatResult {
 }
 
 export class CombatSystem {
+  static calculateRealtimePlayerDamage(attackerAtk: number, targetDef: number): number {
+    return Math.max(1, Math.round(attackerAtk * 1.5 - targetDef * 0.5))
+  }
+
+  static calculateRealtimeEnemyDamage(enemyAtk: number, playerDef: number): number {
+    return Math.max(1, Math.round(enemyAtk * 1.2 - playerDef * 0.4))
+  }
+
   party: BattleEntity[]
   enemies: BattleEntity[]
   turnOrder: BattleEntity[]

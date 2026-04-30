@@ -1,13 +1,15 @@
 import Phaser from 'phaser'
 import { audioManager } from '../audio/AudioManager'
 import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
-import { CHARACTERS } from '../data/characters'
+import { CHARACTERS, type CharacterStats } from '../data/characters'
+import { ENEMIES_BY_ID, type EnemySkill } from '../data/enemies'
 import { ITEMS_BY_ID } from '../data/items'
 import { SaveSystem, type SaveData } from '../systems/SaveSystem'
+import { CombatSystem } from '../systems/CombatSystem'
 
 const TILE_SIZE = 48
-const MAP_WIDTH = 20
-const MAP_HEIGHT = 15
+const MAP_WIDTH = 40
+const MAP_HEIGHT = 30
 const PLAYER_SPEED = 160
 type Direction = 'up' | 'down' | 'left' | 'right'
 const HERO_ANIM_ROWS: Record<Direction, number> = { down: 0, left: 1, right: 2, up: 3 }
@@ -18,57 +20,63 @@ const TILESET_CROPS = {
   wall: { x: 192, y: 0 },
 } as const
 const MAP_LAYOUT = [
-  'WWWWWWWWWWWWWWWWWWWW',
-  'WGGGPPPPPPPGGGGGGGGW',
-  'WFGGPPPPPPPPPPPPGGGW',
-  'WFGGPGGGGGPGBBBPGGGW',
-  'WGGGPGGGGGPGGGGPGGGW',
-  'WGGGPPPPPPPPGGGPGGGW',
-  'WWWBBBBBGGGGGGGPGGPW',
-  'WGGGGGPGGGGGGGGPGGPW',
-  'WFFGGGPPPPPPPPPPPGPW',
-  'WGGGGGPGGGGGGGBGPGPW',
-  'WGGGGGPGGPPPGGGBPGPW',
-  'WGGGGGPGGPGPGGGGPGPW',
-  'WGGGFPPPPPGPPPPPPGPW',
-  'WGGGGGGGGPGGGGGGGGGW',
-  'WWWWWWWWWWWWWWWWWWWW',
+  'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  'WGGGGGGGGGWWGGGGGGGGGGGGGGGGGGGGGGGGGGGW',
+  'WGGPPPPGGGWWGGGGGGGGGGPPPPPPGGGGGFFGGGGW',
+  'WGGPGGPGGGWWGGGGFFFFGGPGGGGPGGGGGGGGGGGW',
+  'WGGPGGPPPPPPPPPPPGGGGGPGSSSPGGFFGGGGGGGW',
+  'WGGPGGGGGGWWGGGGGPGGGGPGSPSPGGGGGGRGGGGW',
+  'WGGPPPPGGGWWGGGGGPPPPPPGSSSPGGGGGGGGGGGW',
+  'WGGGGGPGGGWWGGGGGGGGGGPGGGGGGGFFGGGGGGGW',
+  'WGGGGGPGGGWWGGGFFGGGGGPGGGGGGGGGGGGGBGGW',
+  'WGGPPPPPPPPPPPPPPPPPPPPPGGGGGGRGGGGBBBGW',
+  'WGGPGGGGGGWWGGGGGGGGGGGGGGGGGGGGGGBBBGGW',
+  'WGGPGGGGGGWWGGGGGFFGGGGGGGGRGGGGGGGBGGGW',
+  'WGGPGGGGGGWWGGGGGGGGGGGGGGGGGGGGGGGGGGGW',
+  'WGGPPPPGGGWWGGGGGGGGGGGGGGGGGGGGGGGGGGGW',
+  'WWWWPGWWWWWWWWWWWWPPPPPPWWWWWWWWWWWWPGWW',
+  'WGGGPGGBBBBBBGGGGGPAAAPPPGGGGGGGGGPGGGGW',
+  'WGBBPPBBGGGBBGGGGGPAAAPGPGGGGGGGGGPGGGGW',
+  'WGBGGPGGGGGBBGGGGGPAAAPGPGGGGGGGGGPGGGGW',
+  'WGBGGPPPPPPPPPPPPPPAAAPGPPPPPPPPPPPGGGGW',
+  'WGBBBGGGGGGBBGGGGGPAAAPGGGGGGGGGGGPGGGGW',
+  'WGGGBBGGGGBBBGGGGGPAAAPGGGGGGGGGGGPGGGGW',
+  'WGGGPPPPGGGBBGGGGGPPPPPGGGGGGGGGGGPGGGGW',
+  'WGGGGGGPPPPPPPPPPPGGGGGPPPPPPPGGGGPGGGGW',
+  'WGGGGGGBBGGGGGGGGGRRRRGGGGGGPPPGGGPGGGGW',
+  'WGGGGGBBBGGGGGGGGGGGGGGGGGGGGGPGGGPGGGGW',
+  'WGGGGGGBGGGGGGGGGGGGGGGGGGGGGGPGGGPGGGGW',
+  'WGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPGGGPGGGGW',
+  'WGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGPGGFGW',
+  'WGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGPPPPGW',
+  'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
 ] as const
-const SAVE_TILE = { x: 5, y: 5 }
-const CHEST_TILE = { x: 15, y: 8 }
-const GUIDE_TILE = { x: 8, y: 3 }
-const ELDER_TILE = { x: 10, y: 3 }
-const MERCHANT_TILE = { x: 6, y: 9 }
-const MARKER_TILE = { x: 16, y: 11 }
-const SIGNPOST_TILE = { x: 3, y: 11 }
-const TIDE_BELL_TILE = { x: 2, y: 7 }
-const MURAL_TILE = { x: 12, y: 5 }
-const WATCH_LANTERN_TILE = { x: 14, y: 9 }
-const SHRINE_GATE_TILE = { x: 18, y: 6 }
-const SHRINE_FONT_TILE = { x: 18, y: 8 }
-const SHRINE_SEAL_TILE = { x: 18, y: 10 }
-const FIELD_BATTLE_TILE = { x: 17, y: 12 }
+const SAVE_TILE = { x: 4, y: 6 }
+const CHEST_TILE = { x: 8, y: 3 }
+const GUIDE_TILE = { x: 5, y: 4 }
+const ELDER_TILE = { x: 7, y: 4 }
+const MERCHANT_TILE = { x: 4, y: 9 }
+const MARKER_TILE = { x: 24, y: 9 }
+const SIGNPOST_TILE = { x: 3, y: 13 }
+const TIDE_BELL_TILE = { x: 5, y: 21 }
+const MURAL_TILE = { x: 10, y: 18 }
+const WATCH_LANTERN_TILE = { x: 7, y: 16 }
+const SHRINE_GATE_TILE = { x: 25, y: 4 }
+const SHRINE_FONT_TILE = { x: 27, y: 5 }
+const SHRINE_SEAL_TILE = { x: 27, y: 6 }
+const FIELD_BATTLE_TILE = { x: -100, y: -100 }
 const HOME_TILE = { x: 4, y: 12 }
-const ALLY_TILE = { x: 13, y: 6 }
-const PET_TILE = { x: 7, y: 12 }
-const ARCHIVE_TILE = { x: 11, y: 12 }
-const MID_BOSS_TILE = { x: 15, y: 10 }
-const FINAL_BOSS_TILE = { x: 18, y: 12 }
+const ALLY_TILE = { x: 9, y: 21 }
+const PET_TILE = { x: 12, y: 20 }
+const ARCHIVE_TILE = { x: 20, y: 18 }
+const MID_BOSS_TILE = { x: 20, y: 23 }
+const FINAL_BOSS_TILE = { x: 36, y: 28 }
 const FIELD_BATTLE_ID = 'field_marker_battle'
 const SHRINE_BOSS_BATTLE_ID = 'moonwake_guardian_battle'
 const ARCHIVE_SKIRMISH_ID = 'archive_skirmish_battle'
 const MID_BOSS_BATTLE_ID = 'thornheart_battle'
 const FINAL_BOSS_BATTLE_ID = 'cartographers_lie_battle'
 const CHEST_ID = 'quay_supply_chest'
-const RANDOM_ENCOUNTER_POOLS: Record<SaveData['stage'], string[]> = {
-  quay: ['vinecrawler', 'moss_knight'],
-  field: ['vinecrawler', 'moss_knight', 'frost_shard', 'storm_wisp'],
-  shrine: ['frost_shard', 'storm_wisp', 'hollow_wisp', 'clay_sentinel'],
-  archive: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'],
-  skywell: ['hollow_wisp', 'clay_sentinel'],
-  homecoming: [],
-}
-
 const OBJECTIVES = {
   talkToElder: 'Speak with Elder Maelin at Luma Quay.',
   inspectMarker: 'Inspect the ruin marker in the eastern field.',
@@ -97,6 +105,41 @@ type OverworldInitData = {
   }
 }
 
+
+type MapEnemy = {
+  id: string
+  enemyId: string
+  sprite: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc
+  hpBar: Phaser.GameObjects.Graphics
+  hpBarBg: Phaser.GameObjects.Graphics
+  nameText: Phaser.GameObjects.Text
+  currentHp: number
+  maxHp: number
+  currentMp: number
+  maxMp: number
+  stats: CharacterStats
+  x: number
+  y: number
+  speed: number
+  element: string
+  weaknesses: string[]
+  resists: string[]
+  skills: EnemySkill[]
+  state: 'idle' | 'chase' | 'attack' | 'hurt' | 'dead'
+  aggroRange: number
+  attackRange: number
+  attackCooldown: number
+  lastAttackTime: number
+  wanderTimer: number
+  wanderTarget: { x: number; y: number } | null
+  hitFlashTimer: number
+  isBoss: boolean
+  dead: boolean
+  expReward: number
+  goldReward: number
+  battleId?: string
+}
+
 type InventoryCounts = { potion: number; ether: number; emberShard: number }
 type MenuOverlay = { container: Phaser.GameObjects.Container }
 type MiniMapOverlay = { container: Phaser.GameObjects.Container; graphics: Phaser.GameObjects.Graphics; visible: boolean }
@@ -106,7 +149,7 @@ export class OverworldScene extends Phaser.Scene {
   private player?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle
   private playerShadow?: Phaser.GameObjects.Ellipse
   private petFollower?: Phaser.GameObjects.Arc | Phaser.GameObjects.Image | Phaser.GameObjects.Container
-  private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
+  private keys?: Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
   private facing: Direction = 'down'
   private saveNoticeShown = false
@@ -133,6 +176,15 @@ export class OverworldScene extends Phaser.Scene {
   private lastArea: string | null = null
   private discoveredAreas = new Set<string>()
   private dustCooldown = 0
+  private mapEnemies: MapEnemy[] = []
+  private playerHpBarBg?: Phaser.GameObjects.Graphics
+  private playerHpBar?: Phaser.GameObjects.Graphics
+  private playerMpBar?: Phaser.GameObjects.Graphics
+  private playerInvulnerableUntil = 0
+  private dashUntil = 0
+  private nextDashAt = 0
+  private nextPlayerAttackAt = 0
+  private killCount = 0
   private pipBobTween?: Phaser.Tweens.Tween
   private homeWarmthUsedThisVisit = false
   private homeGardenUsedThisVisit = false
@@ -165,6 +217,12 @@ export class OverworldScene extends Phaser.Scene {
     this.lastArea = null
     this.discoveredAreas = new Set()
     this.dustCooldown = 0
+    this.mapEnemies = []
+    this.playerInvulnerableUntil = 0
+    this.dashUntil = 0
+    this.nextDashAt = 0
+    this.nextPlayerAttackAt = 0
+    this.killCount = 0
     this.pipBobTween = undefined
     this.homeWarmthUsedThisVisit = false
     this.homeGardenUsedThisVisit = false
@@ -199,14 +257,18 @@ export class OverworldScene extends Phaser.Scene {
       a: Phaser.Input.Keyboard.KeyCodes.A,
       s: Phaser.Input.Keyboard.KeyCodes.S,
       d: Phaser.Input.Keyboard.KeyCodes.D,
-      enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
+      e: Phaser.Input.Keyboard.KeyCodes.E,
       space: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+      q: Phaser.Input.Keyboard.KeyCodes.Q,
       m: Phaser.Input.Keyboard.KeyCodes.M,
       t: Phaser.Input.Keyboard.KeyCodes.T,
       h: Phaser.Input.Keyboard.KeyCodes.H,
       escape: Phaser.Input.Keyboard.KeyCodes.ESC,
-    }) as Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
+    }) as Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
 
+    this.spawnEnemiesForStage()
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => { if (!pointer.event.defaultPrevented && !this.menuOverlay) this.performPlayerAttack(pointer.worldX, pointer.worldY) })
     this.createHud()
     this.createMiniMap()
     this.createTouchControls()
@@ -263,7 +325,11 @@ export class OverworldScene extends Phaser.Scene {
       velocityY *= Math.SQRT1_2
     }
 
-    this.movePlayer(velocityX * seconds, velocityY * seconds)
+    if (Phaser.Input.Keyboard.JustDown(this.keys.shift)) {
+      this.startDash()
+    }
+    const speedMultiplier = this.time.now < this.dashUntil ? 2 : 1
+    this.movePlayer(velocityX * seconds * speedMultiplier, velocityY * seconds * speedMultiplier)
     const isMoving = velocityX !== 0 || velocityY !== 0
     this.updatePlayerAnimation(isMoving)
     this.playerShadow.setPosition(this.player.x, this.player.y + 18)
@@ -276,6 +342,8 @@ export class OverworldScene extends Phaser.Scene {
     this.checkSavePoint()
     this.checkHomeBenefits()
     this.checkPetForage()
+    this.updateMapEnemies(delta)
+    this.updatePlayerBars()
     this.updateInteractionPrompt()
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.m) || Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
@@ -293,7 +361,15 @@ export class OverworldScene extends Phaser.Scene {
       return
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.keys.enter) || Phaser.Input.Keyboard.JustDown(this.keys.space)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.q)) {
+      this.useHealthPotion()
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.space)) {
+      this.performPlayerAttack()
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.e)) {
       this.interact()
     }
   }
@@ -305,13 +381,12 @@ export class OverworldScene extends Phaser.Scene {
     for (let tileY = 0; tileY < MAP_HEIGHT; tileY += 1) {
       for (let tileX = 0; tileX < MAP_WIDTH; tileX += 1) {
         const layoutTile = MAP_LAYOUT[tileY][tileX]
-        const isBattleGate = tileX === FIELD_BATTLE_TILE.x && tileY === FIELD_BATTLE_TILE.y && !this.flag('field_battle_won')
         const isShrineGate = tileX === SHRINE_GATE_TILE.x && tileY === SHRINE_GATE_TILE.y && !this.flag('shrine_gate_seen')
-        const isWall = layoutTile === 'W' || layoutTile === 'B' || isBattleGate
+        const isWall = layoutTile === 'W' || layoutTile === 'B' || layoutTile === 'R'
         const blocksTravel = isWall && !isShrineGate
         const x = tileX * TILE_SIZE
         const y = tileY * TILE_SIZE
-        const terrain = layoutTile === 'P' ? 'path' : layoutTile === '.' ? 'water' : isWall ? 'wall' : 'grass'
+        const terrain = layoutTile === 'P' ? 'path' : layoutTile === 'B' ? 'water' : isWall ? 'wall' : 'grass'
         const areaTint = tileX <= 6 && tileY >= 9 ? 0x4f9342 : tileX >= 14 && tileY <= 8 ? 0x355c75 : tileX >= 12 ? 0x526b3c : tileY >= 10 ? 0x3f7c43 : 0x3d8b37
 
         if (useTileset) {
@@ -319,10 +394,10 @@ export class OverworldScene extends Phaser.Scene {
           this.add.image(x, y, GENERATED_ASSETS.tileset).setOrigin(0).setCrop(crop.x, crop.y, TILE_SIZE, TILE_SIZE).setDepth(isWall ? 1 : 0)
         } else if (layoutTile === 'P') {
           this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0xc4a882).setOrigin(0).setDepth(0)
-        } else if (layoutTile === '.') {
+        } else if (layoutTile === 'B') {
           this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x357ec7).setOrigin(0).setDepth(0)
         } else if (isWall) {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, layoutTile === 'B' ? 0x6b5140 : 0x5a4a3a).setOrigin(0).setDepth(1)
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, layoutTile === 'B' ? 0x356c91 : layoutTile === 'R' ? 0x68635d : 0x5a4a3a).setOrigin(0).setDepth(1)
         } else {
           this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, areaTint).setOrigin(0).setDepth(0)
         }
@@ -331,7 +406,7 @@ export class OverworldScene extends Phaser.Scene {
           if ((tileX * 5 + tileY * 11) % 4 === 0) {
             this.add.rectangle(x + 8, y + 18, 7, 3, 0xad8f66, 0.22).setOrigin(0).setDepth(0.1)
           }
-        } else if (layoutTile === '.') {
+        } else if (layoutTile === 'B') {
           this.add.rectangle(x + 4, y + 14, TILE_SIZE - 8, 3, 0x9bdcff, 0.18).setOrigin(0).setDepth(0.1)
         } else if (isWall) {
           this.add.rectangle(x + 4, y + 12, TILE_SIZE - 8, 2, 0xffffff, 0.08).setOrigin(0).setDepth(1.2)
@@ -886,7 +961,10 @@ export class OverworldScene extends Phaser.Scene {
     const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
     areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
-    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'Move • ACT/Enter • Menu', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '14px', backgroundColor: '#08091aaa', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'Move • E Interact • Space/Click Attack • Shift Dash • Q Potion', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '14px', backgroundColor: '#08091aaa', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.playerHpBarBg = this.add.graphics().setDepth(22)
+    this.playerHpBar = this.add.graphics().setDepth(23)
+    this.playerMpBar = this.add.graphics().setDepth(23)
   }
 
   private createTouchControls() {
@@ -909,7 +987,7 @@ export class OverworldScene extends Phaser.Scene {
       this.touchButtons.push(button, label)
     })
 
-    const interact = this.add.text(width - 92, height - 94, 'ACT', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', backgroundColor: '#0a0a2e88', padding: { x: 20, y: 14 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    const interact = this.add.text(width - 92, height - 94, 'E', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', backgroundColor: '#0a0a2e88', padding: { x: 20, y: 14 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
     const menu = this.add.text(width - 88, height - 38, 'MENU', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px', backgroundColor: '#08091a88', padding: { x: 16, y: 8 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
     interact.on('pointerdown', () => this.interact())
     menu.on('pointerdown', () => this.openMenu())
@@ -1074,11 +1152,9 @@ export class OverworldScene extends Phaser.Scene {
       this.attuneShrineFont()
     } else if (isAt(SHRINE_SEAL_TILE)) {
       this.startShrineGuardianBattle()
-    } else if (isAt(FIELD_BATTLE_TILE)) {
-      this.startFieldBattle()
     } else {
       audioManager.playSfx('ui_cancel')
-      this.showToast('Nothing responds here. Check the objective or face an object and press Enter/Space.')
+      this.showToast('Nothing responds here. Check the objective or face an object and press E.')
     }
   }
 
@@ -1167,54 +1243,6 @@ export class OverworldScene extends Phaser.Scene {
     }
     this.persist()
     this.refreshHud()
-  }
-
-  private startFieldBattle() {
-    if (this.busy) {
-      return
-    }
-
-    if (!this.flag('field_marker_seen')) {
-      this.showToast('Guardian Ward: red stakes block the East Field battle lane. Inspect the ruin marker beside it first.')
-      return
-    }
-    if (this.flag('field_battle_won')) {
-      this.showToast('The cleared field glows softly.')
-      return
-    }
-    this.busy = true
-    this.saveCurrentPosition()
-    this.persist()
-    audioManager.playSfx('scene_whoosh')
-    this.showEventBanner('Guardian Field', 'The grass folds inward. Relics flare as the ward answers.')
-    this.cameras.main.shake(180, 0.004)
-    this.cameras.main.flash(200, 255, 255, 255, false)
-    const line = this.add.rectangle(-80, this.scale.height / 2, 160, 5, 0xffffff, 0.95).setScrollFactor(0).setDepth(260)
-    const glint = this.add.rectangle(-80, this.scale.height / 2, 90, this.scale.height, 0xffffff, 0.08).setScrollFactor(0).setDepth(259)
-    this.tweens.add({ targets: [line, glint], x: this.scale.width + 80, duration: 520, ease: 'Cubic.easeInOut', onComplete: () => { line.destroy(); glint.destroy() } })
-    this.time.delayedCall(760, () => {
-      this.cameras.main.fadeOut(420, 0, 0, 0)
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-        this.scene.start('BattleScene', {
-          battleId: FIELD_BATTLE_ID,
-          enemyIds: this.chooseRandomEncounterEnemies(),
-          isBoss: false,
-        })
-      })
-    })
-  }
-
-  private chooseRandomEncounterEnemies(): string[] {
-    const pool = RANDOM_ENCOUNTER_POOLS[this.saveData.stage]
-    if (pool.length === 0) {
-      return []
-    }
-
-    const enemyCount = ['shrine', 'archive', 'skywell'].includes(this.saveData.stage) && Math.random() < 0.2
-      ? 3
-      : 2
-
-    return Array.from({ length: enemyCount }, () => pool[Math.floor(Math.random() * pool.length)])
   }
 
   private applyBattleResult() {
@@ -1518,93 +1546,30 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private startShrineGuardianBattle() {
-    if (this.busy) {
-      return
-    }
-
-    if (!this.flag('shrine_gate_seen')) {
-      this.showToast('Inner Seal: the shrine lane is blocked by the gate above. Open the Moonwake Gate first.')
-      return
-    }
-    if (!this.flag('shrine_font_attuned')) {
-      this.showToast('Inner Seal: A cold pressure turns you back. Attune the pilgrim font first.')
-      return
-    }
-    if (this.flag('shrine_guardian_won')) {
-      this.showToast('Inner Seal: Broken glass floats upward, forming a map toward the Skywell.')
-      return
-    }
-    this.busy = true
-    this.saveCurrentPosition()
-    this.persist()
-    audioManager.playSfx('boss_sting')
-    this.showEventBanner('Inner Seal Broken', 'The Moonwake Guardian descends to test the ember vow.')
-    this.cameras.main.shake(360, 0.007)
-    this.time.delayedCall(1180, () => {
-      audioManager.playSfx('scene_whoosh')
-      this.cameras.main.fadeOut(420, 6, 8, 22)
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-        this.scene.start('BattleScene', {
-          battleId: SHRINE_BOSS_BATTLE_ID,
-          enemyIds: ['moonwake_guardian'],
-          isBoss: true,
-        })
-      })
-    })
+    if (!this.flag('shrine_gate_seen')) { this.showToast('Inner Seal: the shrine lane is blocked by the gate above. Open the Moonwake Gate first.'); return }
+    if (!this.flag('shrine_font_attuned')) { this.showToast('Inner Seal: A cold pressure turns you back. Attune the pilgrim font first.'); return }
+    if (this.flag('shrine_guardian_won')) { this.showToast('Inner Seal: Broken glass floats upward, forming a map toward the Skywell.'); return }
+    this.spawnStoryBoss('moonwake_guardian', SHRINE_SEAL_TILE, SHRINE_BOSS_BATTLE_ID)
   }
 
   private startArchiveSkirmish() {
-    this.startBattle(ARCHIVE_SKIRMISH_ID, ['glass_wasp', 'moss_knight', 'vinecrawler'], false, 'Archive Ambush', 'Map-eating roots drag lesser guardians into your path.')
+    this.setFlag('archive_skirmish_won')
+    this.setObjective(OBJECTIVES.faceMidBoss)
+    this.showToast('Archive entrance cleared. Thornheart waits deeper in the roots.')
+    this.persist()
   }
 
   private startMidBossBattle() {
-    if (!this.flag('archive_entered')) {
-      this.showToast('Root Wall: the Verdant Archive lane is still overgrown. Open the archive entrance first.')
-      return
-    }
-    if (!this.flag('archive_skirmish_won')) {
-      this.showToast('Root Wall: lesser roots still crowd the archive lane. Clear the archive ambush at the entrance marker first.')
-      return
-    }
-    if (this.flag('thornheart_won')) {
-      this.showToast('Root Wall open: Thornheart\'s stump has become a stair of green glass pointing toward the Skywell.')
-      return
-    }
-    this.startBattle(MID_BOSS_BATTLE_ID, ['thornheart'], true, 'Thornheart Wakes', 'The archive root-crown rises to defend its stolen maps.')
+    if (!this.flag('archive_entered')) { this.showToast('Root Wall: the Verdant Archive lane is still overgrown. Open the archive entrance first.'); return }
+    if (this.flag('thornheart_won')) { this.showToast("Root Wall open: Thornheart's stump has become a stair of green glass pointing toward the Skywell."); return }
+    this.spawnStoryBoss('thornheart', MID_BOSS_TILE, MID_BOSS_BATTLE_ID)
   }
 
   private startFinalBossBattle() {
-    if (!this.flag('thornheart_won')) {
-      this.showToast('Skywell Barrier: the upper approach is sealed by Thornheart roots. Clear the Verdant Archive first.')
-      return
-    }
-    if (!this.flag('skywell_opened')) {
-      this.showToast('Skywell Barrier: the path glows but will not hold. Use the restored home workshop to focus the Skywell Lens.')
-      return
-    }
-    if (this.flag('final_boss_won')) {
-      this.showToast('Skywell Rift: Quiet now. The false horizon has been folded into a true road home.')
-      return
-    }
-    this.startBattle(FINAL_BOSS_BATTLE_ID, ['cartographers_lie'], true, 'Skywell Rift', 'The final map tears open and a voice made of false routes answers.')
-  }
-
-  private startBattle(battleId: string, enemyIds: string[], isBoss: boolean, title: string, subtitle: string) {
-    if (this.busy) {
-      return
-    }
-    this.busy = true
-    this.saveCurrentPosition()
-    this.persist()
-    audioManager.playSfx(isBoss ? 'boss_sting' : 'scene_whoosh')
-    this.showEventBanner(title, subtitle)
-    this.cameras.main.shake(isBoss ? 360 : 180, isBoss ? 0.007 : 0.004)
-    this.time.delayedCall(isBoss ? 980 : 620, () => {
-      this.cameras.main.fadeOut(420, 6, 8, 22)
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-        this.scene.start('BattleScene', { battleId, enemyIds, isBoss })
-      })
-    })
+    if (!this.flag('thornheart_won')) { this.showToast('Skywell Barrier: the upper approach is sealed by Thornheart roots. Clear the Verdant Archive first.'); return }
+    if (!this.flag('skywell_opened')) { this.showToast('Skywell Barrier: the path glows but will not hold. Use the restored home workshop to focus the Skywell Lens.'); return }
+    if (this.flag('final_boss_won')) { this.showToast('Skywell Rift: Quiet now. The false horizon has been folded into a true road home.'); return }
+    this.spawnStoryBoss('cartographers_lie', FINAL_BOSS_TILE, FINAL_BOSS_BATTLE_ID)
   }
 
   private showToast(message: string) {
@@ -1654,6 +1619,7 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: [panel, accent, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); accent.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
     this.cameras.main.flash(180, 255, 211, 110, false)
   }
+
 
   private showFirstSessionGuide() {
     if (this.flag('elder_intro')) {
@@ -2005,6 +1971,263 @@ export class OverworldScene extends Phaser.Scene {
       home: { warmth: 0, garden: 0, workshop: 0 },
       playTime: 0,
     }
+  }
+
+  private spawnEnemiesForStage() {
+    this.mapEnemies.forEach((enemy) => this.destroyEnemy(enemy))
+    this.mapEnemies = []
+    if (this.saveData.stage === 'homecoming') return
+
+    const regularByStage: Record<SaveData['stage'], Array<{ id: string; x: number; y: number }>> = {
+      quay: [
+        { id: 'vinecrawler', x: 23, y: 8 }, { id: 'vinecrawler', x: 28, y: 9 }, { id: 'moss_knight', x: 31, y: 6 }, { id: 'sporefiend', x: 34, y: 11 },
+      ],
+      field: [
+        { id: 'vinecrawler', x: 22, y: 9 }, { id: 'moss_knight', x: 28, y: 8 }, { id: 'frost_shard', x: 31, y: 5 }, { id: 'storm_wisp', x: 34, y: 8 }, { id: 'sporefiend', x: 30, y: 12 }, { id: 'glass_scorpion', x: 36, y: 10 },
+      ],
+      shrine: [
+        { id: 'frost_shard', x: 24, y: 5 }, { id: 'storm_wisp', x: 29, y: 5 }, { id: 'hollow_wisp', x: 32, y: 7 }, { id: 'clay_sentinel', x: 35, y: 9 }, { id: 'frost_shard', x: 30, y: 11 }, { id: 'storm_wisp', x: 23, y: 11 },
+      ],
+      archive: [
+        { id: 'hollow_wisp', x: 18, y: 17 }, { id: 'clay_sentinel', x: 22, y: 17 }, { id: 'archive_guardian', x: 19, y: 20 }, { id: 'vinecrawler', x: 23, y: 20 }, { id: 'sporefiend', x: 17, y: 22 }, { id: 'moss_knight', x: 24, y: 22 }, { id: 'hollow_wisp', x: 21, y: 24 },
+      ],
+      skywell: [
+        { id: 'hollow_wisp', x: 31, y: 22 }, { id: 'clay_sentinel', x: 34, y: 23 }, { id: 'emberglass_wisp', x: 36, y: 24 }, { id: 'memory_phantom', x: 33, y: 25 }, { id: 'void_walker', x: 36, y: 26 }, { id: 'skywell_guardian', x: 30, y: 26 }, { id: 'storm_wisp', x: 32, y: 28 }, { id: 'hollow_wisp', x: 35, y: 28 },
+      ],
+      homecoming: [],
+    }
+    regularByStage[this.saveData.stage].forEach((spawn, index) => this.spawnMapEnemy(spawn.id, spawn.x, spawn.y, false, `${this.saveData.stage}-${index}`))
+  }
+
+  private spawnStoryBoss(enemyId: string, tile: { x: number; y: number }, battleId: string) {
+    if (this.mapEnemies.some((enemy) => enemy.battleId === battleId && !enemy.dead)) return
+    this.showBossIntro(enemyId)
+    this.spawnMapEnemy(enemyId, tile.x, tile.y, true, battleId, battleId)
+  }
+
+  private spawnMapEnemy(enemyId: string, tileX: number, tileY: number, isBoss: boolean, uniqueId: string, battleId?: string) {
+    const data = ENEMIES_BY_ID[enemyId]
+    if (!data) return
+    const x = this.tileCenter(tileX)
+    const y = this.tileCenter(tileY)
+    const color = enemyId === 'moonwake_guardian' ? 0x4da6ff : enemyId === 'thornheart' ? 0x3aa657 : enemyId === 'cartographers_lie' ? 0x8f63ff : data.region === 'moonwake' ? 0x8bd6ff : data.region === 'skywell' ? 0xbda7ff : 0x75c46b
+    const size = isBoss ? 34 : 22
+    const sprite = this.add.rectangle(x, y, size, size, color, 0.95).setDepth(18).setStrokeStyle(2, 0xffffff, 0.35)
+    const hpBarBg = this.add.graphics().setDepth(19)
+    const hpBar = this.add.graphics().setDepth(20)
+    const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
+    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, hpBar, hpBarBg, nameText, currentHp: data.stats.hp, maxHp: data.stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats: { ...data.stats }, x, y, speed: isBoss ? 70 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 250 : 200, attackRange: 50, attackCooldown: isBoss ? 1300 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: data.expReward, goldReward: data.goldReward, battleId }
+    this.mapEnemies.push(enemy)
+    this.updateEnemyBars(enemy)
+  }
+
+  private updateMapEnemies(delta: number) {
+    if (!this.player) return
+    const seconds = delta / 1000
+    this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
+      const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player!.x, this.player!.y)
+      enemy.state = distance <= enemy.attackRange ? 'attack' : distance <= enemy.aggroRange ? 'chase' : 'idle'
+      if (enemy.state === 'chase') this.moveEnemyToward(enemy, this.player!.x, this.player!.y, enemy.speed * seconds)
+      if (enemy.state === 'idle') this.updateEnemyWander(enemy, delta, seconds)
+      if (enemy.state === 'attack') this.tryEnemyAttack(enemy)
+      if (enemy.hitFlashTimer > 0) { enemy.hitFlashTimer -= delta; if (enemy.hitFlashTimer <= 0) enemy.sprite.setFillStyle(this.getEnemyColor(enemy)) }
+      enemy.sprite.setPosition(enemy.x, enemy.y)
+      this.updateEnemyBars(enemy)
+    })
+  }
+
+  private updateEnemyWander(enemy: MapEnemy, delta: number, seconds: number) {
+    enemy.wanderTimer -= delta
+    if (!enemy.wanderTarget || enemy.wanderTimer <= 0) {
+      const tile = this.worldToTile(enemy.x, enemy.y)
+      enemy.wanderTarget = { x: this.tileCenter(Phaser.Math.Clamp(tile.x + Phaser.Math.Between(-3, 3), 1, MAP_WIDTH - 2)), y: this.tileCenter(Phaser.Math.Clamp(tile.y + Phaser.Math.Between(-3, 3), 1, MAP_HEIGHT - 2)) }
+      enemy.wanderTimer = Phaser.Math.Between(900, 2200)
+    }
+    this.moveEnemyToward(enemy, enemy.wanderTarget.x, enemy.wanderTarget.y, enemy.speed * 0.45 * seconds)
+  }
+
+  private moveEnemyToward(enemy: MapEnemy, targetX: number, targetY: number, distance: number) {
+    const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, targetX, targetY)
+    const nextX = enemy.x + Math.cos(angle) * distance
+    const nextY = enemy.y + Math.sin(angle) * distance
+    if (!this.isWallAtWorld(nextX, enemy.y)) enemy.x = Phaser.Math.Clamp(nextX, 8, MAP_WIDTH * TILE_SIZE - 8)
+    if (!this.isWallAtWorld(enemy.x, nextY)) enemy.y = Phaser.Math.Clamp(nextY, 8, MAP_HEIGHT * TILE_SIZE - 8)
+  }
+
+  private performPlayerAttack(pointerX?: number, pointerY?: number) {
+    if (!this.player || this.time.now < this.nextPlayerAttackAt) return
+    this.nextPlayerAttackAt = this.time.now + 320
+    if (pointerX !== undefined && pointerY !== undefined) this.updateFacingFromVector(pointerX - this.player.x, pointerY - this.player.y)
+    const angle = this.facingToAngle()
+    const swingX = this.player.x + Math.cos(angle) * 34
+    const swingY = this.player.y + Math.sin(angle) * 34
+    const swing = this.add.arc(swingX, swingY, 34, Phaser.Math.RadToDeg(angle - Math.PI / 4), Phaser.Math.RadToDeg(angle + Math.PI / 4), false, 0xfff0a6, 0.45).setDepth(25).setStrokeStyle(5, 0xffffff, 0.75)
+    this.tweens.add({ targets: swing, alpha: 0, duration: 200, onComplete: () => swing.destroy() })
+    audioManager.playSfx('field_interact')
+    this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
+      const distance = Phaser.Math.Distance.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
+      const enemyAngle = Phaser.Math.Angle.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
+      if (distance <= 60 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 4) this.damageEnemy(enemy)
+    })
+  }
+
+  private damageEnemy(enemy: MapEnemy) {
+    const heroStats = this.getPlayerCombatStats()
+    const damage = CombatSystem.calculateRealtimePlayerDamage(heroStats.atk, enemy.stats.def)
+    enemy.currentHp = Math.max(0, enemy.currentHp - damage)
+    enemy.hitFlashTimer = 120
+    enemy.sprite.setFillStyle(0xffffff)
+    this.showFloatingText(enemy.x, enemy.y - 22, `${damage}`, damage > heroStats.atk * 1.5 ? '#ffd166' : '#ffffff')
+    this.updateEnemyBars(enemy)
+    if (enemy.currentHp <= 0) this.killEnemy(enemy)
+  }
+
+  private tryEnemyAttack(enemy: MapEnemy) {
+    if (!this.player || this.time.now - enemy.lastAttackTime < enemy.attackCooldown) return
+    enemy.lastAttackTime = this.time.now
+    enemy.sprite.setFillStyle(0xff4d4d)
+    this.time.delayedCall(300, () => {
+      if (enemy.dead || !this.player || this.time.now < this.playerInvulnerableUntil || Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) > enemy.attackRange + 12) return
+      const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, this.getPlayerCombatStats().def)
+      const hero = this.saveData.party[0]
+      hero.currentHp = Math.max(0, hero.currentHp - damage)
+      this.cameras.main.flash(100, 180, 20, 20, false)
+      this.showFloatingText(this.player.x, this.player.y - 26, `-${damage}`, '#ff6b6b')
+      this.refreshHud()
+      this.updatePlayerBars()
+      if (hero.currentHp <= 0) this.handlePlayerDefeat()
+    })
+  }
+
+  private killEnemy(enemy: MapEnemy) {
+    enemy.dead = true
+    enemy.state = 'dead'
+    this.killCount += 1
+    this.saveData.gold += enemy.goldReward
+    this.saveData.battleRewards.exp += enemy.expReward
+    this.saveData.battleRewards.gold += enemy.goldReward
+    if (Math.random() < 0.35) this.addInventory('health_potion', 1)
+    this.showFloatingText(enemy.x, enemy.y - 34, `+${enemy.goldReward}g`, '#ffd166')
+    this.tweens.add({ targets: [enemy.sprite, enemy.nameText], alpha: 0, duration: 260, onComplete: () => this.destroyEnemy(enemy) })
+    if (enemy.battleId) this.completeOverworldBattle(enemy.battleId)
+    this.refreshHud()
+    this.persist()
+  }
+
+  private completeOverworldBattle(battleId: string) {
+    const result = { battleId, victory: true, rewards: { exp: 0, gold: 0, emberShards: 0, items: [] } }
+    this.initData.battleResult = result
+    this.applyBattleResult()
+    this.initData.battleResult = undefined
+  }
+
+  private destroyEnemy(enemy: MapEnemy) {
+    enemy.sprite.destroy(); enemy.hpBar.destroy(); enemy.hpBarBg.destroy(); enemy.nameText.destroy()
+  }
+
+  private getEnemyColor(enemy: MapEnemy) {
+    if (enemy.enemyId === 'moonwake_guardian') return 0x4da6ff
+    if (enemy.enemyId === 'thornheart') return 0x3aa657
+    if (enemy.enemyId === 'cartographers_lie') return 0x8f63ff
+    return enemy.isBoss ? 0xbda7ff : 0x75c46b
+  }
+
+  private updateEnemyBars(enemy: MapEnemy) {
+    const width = enemy.isBoss ? 34 : 20
+    const pct = Phaser.Math.Clamp(enemy.currentHp / enemy.maxHp, 0, 1)
+    const color = pct > 0.5 ? 0x4ade80 : pct > 0.25 ? 0xfacc15 : 0xef4444
+    enemy.hpBarBg.clear().fillStyle(0x050509, 0.8).fillRect(enemy.x - width / 2, enemy.y - 28, width, 3)
+    enemy.hpBar.clear().fillStyle(color, 1).fillRect(enemy.x - width / 2, enemy.y - 28, width * pct, 3)
+    enemy.nameText.setPosition(enemy.x, enemy.y - 39)
+  }
+
+  private startDash() {
+    if (!this.player || this.time.now < this.nextDashAt) return
+    this.dashUntil = this.time.now + 300
+    this.playerInvulnerableUntil = this.time.now + 360
+    this.nextDashAt = this.time.now + 1500
+    audioManager.playSfx('scene_whoosh')
+    for (let index = 0; index < 3; index += 1) {
+      const after = this.add.rectangle(this.player.x, this.player.y, this.player.width, this.player.height, 0xa7f3d0, 0.25).setDepth(11)
+      this.tweens.add({ targets: after, alpha: 0, delay: index * 45, duration: 260, onComplete: () => after.destroy() })
+    }
+    this.tweens.add({ targets: this.player, alpha: 0.45, yoyo: true, repeat: 3, duration: 45 })
+  }
+
+  private useHealthPotion() {
+    const item = this.saveData.inventory.find((entry) => entry.itemId === 'health_potion' && entry.quantity > 0)
+    if (!item || !this.player) { this.showToast('No Health Potions available.'); return }
+    const hero = this.saveData.party[0]
+    const maxHp = this.getPlayerCombatStats().hp
+    if (hero.currentHp >= maxHp) { this.showToast('Nara is already at full HP.'); return }
+    item.quantity -= 1
+    hero.currentHp = Math.min(maxHp, hero.currentHp + 50)
+    this.showFloatingText(this.player.x, this.player.y - 30, '+50 HP', '#86efac')
+    this.tweens.add({ targets: this.player, alpha: 0.55, yoyo: true, repeat: 2, duration: 80 })
+    audioManager.playSfx('item_use')
+    this.refreshHud(); this.updatePlayerBars(); this.persist()
+  }
+
+  private handlePlayerDefeat() {
+    this.busy = true
+    const hero = this.saveData.party[0]
+    hero.currentHp = Math.max(1, Math.floor(this.getPlayerCombatStats().hp * 0.5))
+    this.showEventBanner('Defeat', 'Nara falls back to the quay save crystal. Gold and items are safe.')
+    this.time.delayedCall(900, () => {
+      if (this.player) this.player.setPosition(this.tileCenter(SAVE_TILE.x), this.tileCenter(SAVE_TILE.y))
+      this.busy = false
+      this.refreshHud(); this.updatePlayerBars(); this.persist()
+    })
+  }
+
+  private showFloatingText(x: number, y: number, text: string, color: string) {
+    const label = this.add.text(x, y, text, { color, fontFamily: 'Arial, sans-serif', fontSize: '15px', fontStyle: 'bold' }).setOrigin(0.5).setDepth(80)
+    this.tweens.add({ targets: label, y: y - 34, alpha: 0, duration: 1000, onComplete: () => label.destroy() })
+  }
+
+  private getPlayerCombatStats(): CharacterStats {
+    const member = this.saveData.party[0]
+    const character = CHARACTERS[member.characterId]
+    const stats = this.scaleCharacterStats(character, member.level)
+    Object.values(member.equipment).forEach((itemId) => {
+      if (!itemId) return
+      const effect = ITEMS_BY_ID[itemId]?.effect
+      effect?.stat?.split(',').forEach((stat) => {
+        const key = stat.trim() as keyof CharacterStats
+        if (key in stats) stats[key] += effect.value ?? 0
+      })
+    })
+    return stats
+  }
+
+  private updatePlayerBars() {
+    if (!this.player || !this.playerHpBarBg || !this.playerHpBar || !this.playerMpBar) return
+    const stats = this.getPlayerCombatStats()
+    const hero = this.saveData.party[0]
+    const width = 38
+    this.playerHpBarBg.clear().fillStyle(0x050509, 0.75).fillRect(this.player.x - width / 2, this.player.y + 24, width, 4)
+    this.playerHpBar.clear().fillStyle(0x4ade80, 1).fillRect(this.player.x - width / 2, this.player.y + 24, width * Phaser.Math.Clamp(hero.currentHp / stats.hp, 0, 1), 4)
+    this.playerMpBar.clear().fillStyle(0x60a5fa, 1).fillRect(this.player.x - width / 2, this.player.y + 29, width * Phaser.Math.Clamp(hero.currentMp / stats.mp, 0, 1), 3)
+  }
+
+  private updateFacingFromVector(x: number, y: number) {
+    if (Math.abs(x) > Math.abs(y)) this.facing = x < 0 ? 'left' : 'right'
+    else this.facing = y < 0 ? 'up' : 'down'
+  }
+
+  private facingToAngle() {
+    if (this.facing === 'right') return 0
+    if (this.facing === 'left') return Math.PI
+    if (this.facing === 'up') return -Math.PI / 2
+    return Math.PI / 2
+  }
+
+  private showBossIntro(enemyId: string) {
+    const name = ENEMIES_BY_ID[enemyId]?.name ?? 'Boss'
+    audioManager.playSfx('boss_sting')
+    this.cameras.main.zoomTo(1.12, 350, 'Sine.easeOut', true)
+    this.time.delayedCall(800, () => this.cameras.main.zoomTo(1, 450, 'Sine.easeInOut', true))
+    this.showEventBanner(name, 'A route guardian enters the overworld.')
   }
 
   private persist() {
