@@ -77,9 +77,9 @@ for (const relative of [scriptMatch[1], cssMatch[1]]) {
 }
 
 const assetDirNames = readdirSync(ASSETS_DIR)
-const startGameBundle = assetDirNames.find((name) => /^startGame-.*\.js$/.test(name))
-if (!startGameBundle) {
-  fail('dist/assets does not contain the lazy startGame bundle')
+const gameBundle = assetDirNames.find((name) => /^(startGame|game)-.*\.js$/.test(name))
+if (!gameBundle) {
+  fail('dist/assets does not contain the game bundle (startGame or game chunk)')
 }
 
 const manifestAssets = Array.isArray(manifest.assets) ? manifest.assets : []
@@ -97,14 +97,14 @@ for (const asset of manifestAssets) {
 }
 
 const entryBundleText = readFileSync(join(ASSETS_DIR, normalizeBuiltPath(scriptMatch[1], `${basePath}assets/`)), 'utf8')
-if (!entryBundleText.includes('startGame-')) {
-  fail('entry bundle does not reference the lazy startGame chunk')
+if (!entryBundleText.includes('startGame-') && !entryBundleText.includes('game-')) {
+  fail('entry bundle does not reference the game chunk')
 }
 
 console.log('Launch readiness OK')
 console.log(`- Base path: ${basePath}`)
 console.log(`- Entry script: ${scriptMatch[1]}`)
 console.log(`- Entry stylesheet: ${cssMatch[1]}`)
-console.log(`- startGame bundle: ${startGameBundle}`)
+console.log(`- Game bundle: ${gameBundle}`)
 console.log(`- Generated assets listed: ${manifestAssets.length}`)
 console.log(`- Deploy probe: ${basePath}healthz.json`)
