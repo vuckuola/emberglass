@@ -999,16 +999,30 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private enemySkillToSkill(skill: EnemySkill): Skill {
+    const element = this.normalizeElement(skill.element)
+    const normalizedName = skill.name.toLowerCase()
+    const isDrain = normalizedName.includes('drain')
+    const isStaticField = normalizedName.includes('static') || normalizedName.includes('field')
+    const isBuff = skill.power <= 0 && !isStaticField
+    const statusEffect = element === 'ember'
+      ? 'burn'
+      : element === 'dark' || element === 'earth'
+        ? 'poison'
+        : undefined
+
     return {
       id: skill.id,
       name: skill.name,
-      type: skill.power > 0 ? 'physical' : 'buff',
-      element: this.normalizeElement(skill.element),
+      type: isStaticField ? 'debuff' : isDrain ? 'magical' : skill.power > 0 ? 'physical' : 'buff',
+      element,
       mpCost: 0,
       power: skill.power || 1,
-      target: skill.power > 0 ? 'single_enemy' : 'self',
+      target: isStaticField ? 'all_enemies' : isBuff ? 'self' : 'single_enemy',
       description: skill.name,
       isResonance: false,
+      statusEffect: isStaticField ? undefined : statusEffect,
+      statusChance: statusEffect === 'burn' ? 0.1 : statusEffect === 'poison' ? 0.08 : undefined,
+      duration: statusEffect === 'burn' ? 2 : statusEffect === 'poison' ? 3 : undefined,
     }
   }
 

@@ -423,8 +423,7 @@ export class CombatSystem {
       return []
     }
 
-    const usableSkills = enemy.skills.filter((skill) => this.canUseSkill(enemy, skill))
-    const skill = usableSkills[Math.floor(Math.random() * usableSkills.length)]
+    const skill = this.chooseEnemySkill(enemy)
     if (!skill) {
       this.finishAction()
       return []
@@ -432,12 +431,72 @@ export class CombatSystem {
 
     const targets = this.getValidTargets(enemy, skill.target)
     const preferredTargets =
-      skill.target === 'single_enemy' || skill.target === 'single_ally'
-        ? [targets[Math.floor(Math.random() * targets.length)]]
+      skill.target === 'single_enemy'
+        ? [this.chooseEnemyTarget(targets)]
+        : skill.target === 'single_ally'
+          ? [targets[Math.floor(Math.random() * targets.length)]]
         : targets
-    const results = this.executeSkill(enemy, skill, preferredTargets.filter(Boolean))
+    const results = this.executeSkill(
+      enemy,
+      skill,
+      preferredTargets.filter((target): target is BattleEntity => Boolean(target)),
+    )
     this.finishAction()
     return results
+  }
+
+  private chooseEnemySkill(enemy: BattleEntity): Skill | undefined {
+    const usableSkills = enemy.skills.filter((skill) => this.canUseSkill(enemy, skill))
+    if (usableSkills.length === 0) {
+      return undefined
+    }
+
+    const party = this.party.filter((entity) => entity.isAlive)
+    if (party.length === 0) {
+      return usableSkills[0]
+    }
+
+    if (enemy.element === 'light' && usableSkills.some((skill) => skill.type === 'heal')) {
+      const woundedAllies = this.enemies.filter(
+        (entity) => entity.isAlive && entity !== enemy && entity.currentHp / entity.maxHp < 0.4,
+      )
+      const healSkill = usableSkills.find((skill) => skill.type === 'heal')
+      if (woundedAllies.length > 0 && healSkill) {
+        return healSkill
+      }
+    }
+
+    const buffSkill = usableSkills.find((skill) => skill.type === 'buff')
+    if (buffSkill && !enemy.statusEffects.has('buff_atk') && !enemy.statusEffects.has('buff_def')) {
+      return buffSkill
+    }
+
+    const criticalPartyMember = party.find((entity) => entity.currentHp / entity.maxHp < 0.3)
+    if (criticalPartyMember) {
+      const damageSkills = usableSkills.filter(
+        (skill) => skill.type === 'physical' || skill.type === 'magical',
+      )
+      if (damageSkills.length > 0) {
+        return damageSkills.reduce((strongest, skill) => (skill.power > strongest.power ? skill : strongest))
+      }
+    }
+
+    return usableSkills[Math.floor(Math.random() * usableSkills.length)]
+  }
+
+  private chooseEnemyTarget(targets: BattleEntity[]): BattleEntity | undefined {
+    const livingTargets = targets.filter((target) => target.isAlive)
+    if (livingTargets.length === 0) {
+      return undefined
+    }
+
+    if (Math.random() < 0.4) {
+      return livingTargets.reduce((lowest, target) =>
+        target.currentHp / target.maxHp < lowest.currentHp / lowest.maxHp ? target : lowest,
+      )
+    }
+
+    return livingTargets[Math.floor(Math.random() * livingTargets.length)]
   }
 
   finishAction(): void {

@@ -60,6 +60,14 @@ const ARCHIVE_SKIRMISH_ID = 'archive_skirmish_battle'
 const MID_BOSS_BATTLE_ID = 'thornheart_battle'
 const FINAL_BOSS_BATTLE_ID = 'cartographers_lie_battle'
 const CHEST_ID = 'quay_supply_chest'
+const RANDOM_ENCOUNTER_POOLS: Record<SaveData['stage'], string[]> = {
+  quay: ['vinecrawler', 'moss_knight'],
+  field: ['vinecrawler', 'moss_knight', 'frost_shard', 'storm_wisp'],
+  shrine: ['frost_shard', 'storm_wisp', 'hollow_wisp', 'clay_sentinel'],
+  archive: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'],
+  skywell: ['hollow_wisp', 'clay_sentinel'],
+  homecoming: [],
+}
 
 const OBJECTIVES = {
   talkToElder: 'Speak with Elder Maelin at Luma Quay.',
@@ -1166,11 +1174,24 @@ export class OverworldScene extends Phaser.Scene {
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
         this.scene.start('BattleScene', {
           battleId: FIELD_BATTLE_ID,
-          enemyIds: ['vinecrawler', 'moss_knight'],
+          enemyIds: this.chooseRandomEncounterEnemies(),
           isBoss: false,
         })
       })
     })
+  }
+
+  private chooseRandomEncounterEnemies(): string[] {
+    const pool = RANDOM_ENCOUNTER_POOLS[this.saveData.stage]
+    if (pool.length === 0) {
+      return []
+    }
+
+    const enemyCount = ['shrine', 'archive', 'skywell'].includes(this.saveData.stage) && Math.random() < 0.2
+      ? 3
+      : 2
+
+    return Array.from({ length: enemyCount }, () => pool[Math.floor(Math.random() * pool.length)])
   }
 
   private applyBattleResult() {
