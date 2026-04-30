@@ -81,6 +81,22 @@ import { chromium } from 'playwright';
   const npcs = await evalScene('({ g: !!scene.npcActors?.guide, e: !!scene.npcActors?.elder })');
   if (npcs && npcs.e) steps.push('NPC: Elder');
 
+  // Companions (Phase 5)
+  const companionCount = await evalScene('(scene.companions ? scene.companions.length : -1)');
+  if (companionCount === 2) steps.push('2 companions (Kael + Io)');
+  else if (companionCount >= 0) steps.push(`WARN: ${companionCount} companions`);
+
+  const companionNames = await evalScene('(scene.companions ? scene.companions.map(c => c.name).join(", ") : "none")');
+  if (companionNames && companionNames !== 'none') steps.push(`Companions: ${companionNames}`);
+
+  // PWA manifest
+  const hasManifest = await page.evaluate(() => !!document.querySelector('link[rel="manifest"]'));
+  if (hasManifest) steps.push('PWA manifest linked');
+
+  // Service worker
+  const hasSW = await page.evaluate(() => 'serviceWorker' in navigator);
+  if (hasSW) steps.push('Service Worker API available');
+
   // BattleScene should NOT be in active scenes
   const noBattle = await evalScene('(!scene.scene.manager.getScenes(true).some(s => s.scene.key === "BattleScene"))');
   if (noBattle === true) steps.push('BattleScene disabled');
