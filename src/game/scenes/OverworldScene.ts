@@ -471,6 +471,20 @@ export class OverworldScene extends Phaser.Scene {
         ease: 'Sine.easeInOut',
       })
     }
+    for (let i = 0; i < 18; i++) {
+      const ember = this.add.circle(Phaser.Math.Between(36, MAP_WIDTH * TILE_SIZE - 36), Phaser.Math.Between(48, MAP_HEIGHT * TILE_SIZE - 48), Phaser.Math.FloatBetween(1, 2.5), Phaser.Utils.Array.GetRandom([0xffd36e, 0x9ff3ff, 0x78d66b]), Phaser.Math.FloatBetween(0.05, 0.16)).setDepth(7)
+      this.tweens.add({
+        targets: ember,
+        x: `+=${Phaser.Math.Between(-26, 26)}`,
+        y: `+=${Phaser.Math.Between(-36, -12)}`,
+        alpha: Phaser.Math.FloatBetween(0.02, 0.12),
+        yoyo: true,
+        repeat: -1,
+        duration: Phaser.Math.Between(3600, 7200),
+        delay: Phaser.Math.Between(0, 1800),
+        ease: 'Sine.easeInOut',
+      })
+    }
   }
 
   private createObjects() {
@@ -596,20 +610,24 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createHud() {
-    const panel = this.add.rectangle(12, 12, 500, 86, 0x0b0e1a, 0.88).setOrigin(0).setScrollFactor(0).setDepth(90)
+    const shade = this.add.rectangle(0, 0, this.scale.width, 118, 0x02040b, 0.34).setOrigin(0).setScrollFactor(0).setDepth(89)
+    shade.setName('premium-hud-top-shade')
+    const panel = this.add.rectangle(12, 12, 548, 92, 0x0b0e1a, 0.9).setOrigin(0).setScrollFactor(0).setDepth(90)
     panel.setStrokeStyle(2, 0xf3e1b0, 0.68)
+    this.add.rectangle(18, 18, 4, 80, 0xffd36e, 0.86).setOrigin(0).setScrollFactor(0).setDepth(91)
     const cornerSize = 10
     const g = this.add.graphics().setScrollFactor(0).setDepth(90.1)
     g.lineStyle(2, 0xf0c040, 0.5)
     g.beginPath(); g.moveTo(14, 18 + cornerSize); g.lineTo(14, 18); g.lineTo(14 + cornerSize, 18); g.strokePath()
-    g.beginPath(); g.moveTo(504, 18 + cornerSize); g.lineTo(504, 18); g.lineTo(504 - cornerSize, 18); g.strokePath()
+    g.beginPath(); g.moveTo(552, 18 + cornerSize); g.lineTo(552, 18); g.lineTo(552 - cornerSize, 18); g.strokePath()
     g.beginPath(); g.moveTo(14, 86 - cornerSize); g.lineTo(14, 86); g.lineTo(14 + cornerSize, 86); g.strokePath()
-    g.beginPath(); g.moveTo(504, 86 - cornerSize); g.lineTo(504, 86); g.lineTo(504 - cornerSize, 86); g.strokePath()
+    g.beginPath(); g.moveTo(552, 92 - cornerSize); g.lineTo(552, 92); g.lineTo(552 - cornerSize, 92); g.strokePath()
 
-    this.objectiveText = this.add.text(26, 23, '', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '15px', fontStyle: 'bold', wordWrap: { width: 460 } }).setScrollFactor(0).setDepth(91)
-    this.inventoryText = this.add.text(26, 69, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px' }).setScrollFactor(0).setDepth(91)
-    const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 160, 34, 0x0b0e1a, 0.88).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
-    areaPanel.setStrokeStyle(1, 0xf3e1b0, 0.5)
+    this.add.text(34, 23, 'CURRENT VOW', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setScrollFactor(0).setDepth(91)
+    this.objectiveText = this.add.text(34, 40, '', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '16px', fontStyle: 'bold', wordWrap: { width: 500 } }).setScrollFactor(0).setDepth(91)
+    this.inventoryText = this.add.text(34, 76, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px' }).setScrollFactor(0).setDepth(91)
+    const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
+    areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
     this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'Move • ACT/Enter • Menu', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '14px', backgroundColor: '#08091aaa', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
   }
@@ -1227,11 +1245,12 @@ export class OverworldScene extends Phaser.Scene {
     this.toast?.destroy()
     const panelW = Math.min(message.length * 9 + 48, 740)
     const panelH = Math.max(Math.ceil(message.length / 70) * 22 + 32, 40)
-    const panel = this.add.rectangle(width / 2, 126, panelW, panelH, 0x0a0e1e, 0.92).setScrollFactor(0).setDepth(100).setStrokeStyle(1, 0xd4a84b, 0.6)
+    const glow = this.add.rectangle(width / 2, 126, panelW + 14, panelH + 12, 0xffd36e, 0.1).setScrollFactor(0).setDepth(99.8)
+    const panel = this.add.rectangle(width / 2, 126, panelW, panelH, 0x0a0e1e, 0.94).setScrollFactor(0).setDepth(100).setStrokeStyle(1, 0xd4a84b, 0.72)
     const accent = this.add.rectangle(width / 2 - panelW / 2 + 3, 126, 3, panelH - 8, 0xd4a84b, 0.8).setScrollFactor(0).setDepth(100.1)
     const text = this.add.text(width / 2, 126, message, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: panelW - 32 } }).setOrigin(0.5).setScrollFactor(0).setDepth(101)
     this.toast = text
-    this.tweens.add({ targets: [panel, accent, text], y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => { if (this.toast === text) { this.toast = undefined }; panel.destroy(); accent.destroy(); text.destroy() } })
+    this.tweens.add({ targets: [glow, panel, accent, text], y: 104, alpha: 0, delay: 1900, duration: 450, onComplete: () => { if (this.toast === text) { this.toast = undefined }; glow.destroy(); panel.destroy(); accent.destroy(); text.destroy() } })
   }
 
   private showRewardToast(message: string) {
@@ -1247,11 +1266,13 @@ export class OverworldScene extends Phaser.Scene {
     this.dismissBanners()
     this.areaText?.setText(title)
     const { width } = this.scale
-    const panel = this.add.rectangle(width / 2, 84, 580, 84, 0x071023, 0.88).setScrollFactor(0).setDepth(120).setStrokeStyle(1, 0x9ff3ff, 0.5)
+    const glow = this.add.rectangle(width / 2, 84, 604, 104, 0x9ff3ff, 0.08).setScrollFactor(0).setDepth(119.8)
+    const panel = this.add.rectangle(width / 2, 84, 580, 84, 0x071023, 0.9).setScrollFactor(0).setDepth(120).setStrokeStyle(1, 0x9ff3ff, 0.62)
+    const rule = this.add.rectangle(width / 2, 110, 430, 2, 0xffd36e, 0.62).setScrollFactor(0).setDepth(121)
     const heading = this.add.text(width / 2, 62, title, { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '26px' }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
     const body = this.add.text(width / 2, 92, subtitle, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 520 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
-    this.activeBanners.push(panel, heading, body)
-    this.tweens.add({ targets: [panel, heading, body], alpha: 0, delay: 2300, duration: 600, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
+    this.activeBanners.push(glow, panel, rule, heading, body)
+    this.tweens.add({ targets: [glow, panel, rule, heading, body], alpha: 0, delay: 2300, duration: 600, onComplete: () => { glow.destroy(); panel.destroy(); rule.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
   }
 
   private showEventBanner(title: string, subtitle: string) {

@@ -31,16 +31,33 @@ export class TitleScene extends Phaser.Scene {
     this.createSkywellGlow(width)
     this.createEmbers(width, height)
     this.createDecorativeFrame(width, height)
+    this.createHeroStage(width)
     this.createTitle(width)
 
     this.add
-      .text(width / 2, 220, 'Covenant of the Skywell', {
-        color: '#7a9ac4',
+      .text(width / 2, 226, 'Covenant of the Skywell', {
+        color: '#b9d9ff',
         fontFamily: 'Georgia, serif',
-        fontSize: '18px',
+        fontSize: '20px',
       })
       .setOrigin(0.5)
-      .setShadow(0, 0, '#3a5a9a', 8, true, true)
+      .setShadow(0, 0, '#3a5a9a', 12, true, true)
+
+    this.add
+      .text(width / 2, 258, 'A handcrafted JRPG slice of emberlight, routes, relics, and boss vows', {
+        color: '#d7d9e8',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '15px',
+      })
+      .setOrigin(0.5)
+
+    this.add
+      .text(width / 2, 302, 'Start the showcase route', {
+        color: '#ffd36e',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '13px',
+      })
+      .setOrigin(0.5)
 
     const startY = 340
 
@@ -49,7 +66,7 @@ export class TitleScene extends Phaser.Scene {
         .text(width / 2, startY + index * 48, label, {
           color: '#c0c4d8',
           fontFamily: 'Arial, sans-serif',
-          fontSize: '24px',
+          fontSize: '25px',
         })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
@@ -369,6 +386,26 @@ export class TitleScene extends Phaser.Scene {
     })
   }
 
+  private createHeroStage(width: number) {
+    const stage = this.add.graphics()
+    stage.fillStyle(0x050713, 0.58)
+    stage.fillRoundedRect(width / 2 - 308, 92, 616, 330, 28)
+    stage.lineStyle(1, 0xf0c040, 0.28)
+    stage.strokeRoundedRect(width / 2 - 308, 92, 616, 330, 28)
+    stage.lineStyle(1, 0x9ff3ff, 0.18)
+    stage.strokeRoundedRect(width / 2 - 282, 112, 564, 286, 22)
+
+    const halo = this.add.ellipse(width / 2, 292, 390, 82, 0xff8a32, 0.07)
+    const lens = this.add.ellipse(width / 2, 300, 250, 34, 0x9ff3ff, 0.08)
+    this.tweens.add({ targets: [halo, lens], alpha: '+=0.05', duration: 2400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+
+    for (let index = 0; index < 5; index += 1) {
+      const shard = this.add.polygon(width / 2 - 170 + index * 84, 286 + Math.sin(index) * 12, [0, -22, 12, 0, 0, 24, -12, 0], 0xffd36e, 0.12 + index * 0.015)
+      shard.setStrokeStyle(1, 0xfff1a8, 0.18)
+      this.tweens.add({ targets: shard, y: shard.y - 8, angle: index % 2 === 0 ? 5 : -5, duration: 1800 + index * 220, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+    }
+  }
+
   private createTitle(width: number) {
     const title = 'EMBERGLASS'
     const letters: Phaser.GameObjects.Text[] = []
@@ -431,6 +468,7 @@ export class TitleScene extends Phaser.Scene {
 
   private updateSelection() {
     this.buttons.forEach((button, index) => {
+      button.setScale(index === this.selectedIndex ? 1.08 : 1)
       button.setColor(index === this.selectedIndex ? '#fff1a8' : '#c0c4d8')
       button.setShadow(
         0,
