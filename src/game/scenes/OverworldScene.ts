@@ -1043,6 +1043,7 @@ export class OverworldScene extends Phaser.Scene {
           const angle = Phaser.Math.Angle.Between(companion.x, companion.y, nearestEnemy.x, nearestEnemy.y)
           const swing = this.add.arc(nearestEnemy.x, nearestEnemy.y, 24, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0xff9f1c, 0.38).setDepth(25).setStrokeStyle(4, 0xffd166, 0.8)
           this.tweens.add({ targets: swing, alpha: 0, duration: 180, onComplete: () => swing.destroy() })
+          this.tweens.add({ targets: companion.body, scale: 1.15, yoyo: true, duration: 75 })
           nearestEnemy.currentHp = Math.max(0, nearestEnemy.currentHp - damage)
           nearestEnemy.hitFlashTimer = 120
           nearestEnemy.sprite.setFillStyle(0xffffff)
@@ -1067,6 +1068,7 @@ export class OverworldScene extends Phaser.Scene {
           const healX = healTarget.partyIndex === 0 ? this.player!.x : targetCompanion?.x ?? companion.x
           const healY = healTarget.partyIndex === 0 ? this.player!.y : targetCompanion?.y ?? companion.y
           this.showFloatingText(healX, healY - 28, '+24', '#86efac')
+          this.spawnHealSparkles(healX, healY)
           companion.lastSkillTime = this.time.now
           if (previousHp <= 0 && targetCompanion) {
             targetCompanion.state = 'follow'
@@ -1083,11 +1085,18 @@ export class OverworldScene extends Phaser.Scene {
           const stats = this.scaleCharacterStats(CHARACTERS.io, member.level)
           const projectile = this.add.circle(companion.x, companion.y, 5, 0x60a5fa, 0.9).setDepth(25)
           companion.lastAttackTime = this.time.now
+          let trailDrops = 0
           this.tweens.add({
             targets: projectile,
             x: nearestEnemy.x,
             y: nearestEnemy.y,
             duration: 300,
+            onUpdate: () => {
+              if (trailDrops >= 3 || !projectile.active) return
+              trailDrops += 1
+              const trail = this.add.circle(projectile.x, projectile.y, 4, 0x93c5fd, 0.42).setDepth(24)
+              this.tweens.add({ targets: trail, alpha: 0, scale: 0.35, duration: 220, onComplete: () => trail.destroy() })
+            },
             onComplete: () => {
               projectile.destroy()
               if (nearestEnemy.dead) return
@@ -2438,13 +2447,17 @@ export class OverworldScene extends Phaser.Scene {
     const color = isBoss ? 0xb91c1c : enemyId === 'moonwake_guardian' ? 0x4da6ff : enemyId === 'thornheart' ? 0x3aa657 : enemyId === 'cartographers_lie' ? 0x8f63ff : data.region === 'moonwake' ? 0x8bd6ff : data.region === 'skywell' ? 0xbda7ff : 0x75c46b
     const size = isBoss ? 66 : 22
     const sprite = this.add.rectangle(x, y, size, size, color, 0.95).setDepth(18).setStrokeStyle(isBoss ? 4 : 2, isBoss ? 0xff6b6b : 0xffffff, isBoss ? 0.75 : 0.35)
+    sprite.setAlpha(0).setScale(0.5)
     const hpBarBg = this.add.graphics().setDepth(19)
     const hpBar = this.add.graphics().setDepth(20)
     const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
+    nameText.setAlpha(0)
     const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : data.stats.hp, atk: isBoss ? data.stats.atk * 2 : data.stats.atk }
     const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 320 : 200, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : data.expReward, goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
     this.mapEnemies.push(enemy)
     this.updateEnemyBars(enemy)
+    this.tweens.add({ targets: sprite, alpha: 0.95, scale: 1, duration: 400, ease: 'Back.easeOut' })
+    this.tweens.add({ targets: nameText, alpha: 1, duration: 320 })
     if (isBoss) this.createBossHud(enemy)
   }
 
@@ -2636,10 +2649,10 @@ export class OverworldScene extends Phaser.Scene {
     enemy.dead = true
     enemy.state = 'dead'
     this.killCount += 1
-    this.spawnDeathExplosion(enemy.x, enemy.y)
+    this.cameras.main.shake(enemy.isBoss ? 400 : 120, enemy.isBoss ? 0.008 : 0.003)
+    this.spawnDeathExplosion(enemy.x, enemy.y, this.getEnemyColor(enemy))
     if (enemy.isBoss) {
       this.spawnBossExplosion(enemy.x, enemy.y)
-      this.cameras.main.shake(520, 0.01)
       this.bossHud?.container.destroy()
       this.bossHud = undefined
     }
@@ -2730,14 +2743,27 @@ export class OverworldScene extends Phaser.Scene {
   private registerComboHit(x: number, y: number) {
     this.comboCount = this.time.now - this.lastComboHitAt <= 2000 ? this.comboCount + 1 : 1
     this.lastComboHitAt = this.time.now
-    if (this.comboCount > 1) this.showFloatingText(x, y - 44, `x${this.comboCount}`, '#fef08a')
+    if (this.comboCount > 1) {
+      const color = this.getComboColor(this.comboCount)
+      const label = this.add.text(x, y - 48, `COMBO x${this.comboCount}!`, { color, fontFamily: 'Arial, sans-serif', fontSize: this.comboCount >= 3 ? '18px' : '14px', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82)
+      label.setScale(this.comboCount >= 3 ? 1.35 : 1)
+      this.tweens.add({ targets: label, y: y - 82, alpha: 0, scale: 1, duration: 780, ease: 'Sine.easeOut', onComplete: () => label.destroy() })
+      if (this.player && (this.comboCount === 3 || this.comboCount === 6 || this.comboCount === 10 || this.comboCount % 5 === 0)) this.showFloatingText(this.player.x, this.player.y - 52, `COMBO x${this.comboCount}!`, color)
+    }
   }
 
-  private spawnDeathExplosion(x: number, y: number) {
-    for (let index = 0; index < 6; index += 1) {
-      const angle = (Math.PI * 2 * index) / 6
-      const particle = this.add.circle(x, y, 3, 0xffd166, 0.9).setDepth(23)
-      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * Phaser.Math.Between(18, 34), y: y + Math.sin(angle) * Phaser.Math.Between(18, 34), alpha: 0, duration: 360, onComplete: () => particle.destroy() })
+  private getComboColor(combo: number) {
+    if (combo >= 10) return '#ef4444'
+    if (combo >= 6) return '#fb923c'
+    if (combo >= 3) return '#fef08a'
+    return '#ffffff'
+  }
+
+  private spawnDeathExplosion(x: number, y: number, color = 0xffd166) {
+    for (let index = 0; index < 8; index += 1) {
+      const angle = (Math.PI * 2 * index) / 8
+      const particle = this.add.circle(x, y, 3, color, 0.9).setDepth(30)
+      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * Phaser.Math.Between(20, 50), y: y + Math.sin(angle) * Phaser.Math.Between(20, 50), alpha: 0, scale: 0.2, duration: Phaser.Math.Between(300, 600), onComplete: () => particle.destroy() })
     }
   }
 
@@ -2754,7 +2780,16 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.player) return
     const glow = this.add.circle(this.player.x, this.player.y, 28, 0xffd166, 0.22).setDepth(24).setStrokeStyle(4, 0xfff1a8, 0.85)
     this.showFloatingText(this.player.x, this.player.y - 48, 'LEVEL UP!', '#fff1a8')
+    audioManager.playSfx('level_up')
     this.tweens.add({ targets: glow, scale: 2, alpha: 0, duration: 850, onComplete: () => glow.destroy() })
+  }
+
+  private spawnHealSparkles(x: number, y: number) {
+    for (let index = 0; index < 4; index += 1) {
+      const angle = (Math.PI * 2 * index) / 4
+      const sparkle = this.add.circle(x + Phaser.Math.Between(-8, 8), y + Phaser.Math.Between(-8, 8), 3, 0x86efac, 0.85).setDepth(26)
+      this.tweens.add({ targets: sparkle, x: x + Math.cos(angle) * Phaser.Math.Between(14, 28), y: y + Math.sin(angle) * Phaser.Math.Between(14, 28), alpha: 0, scale: 0.25, duration: 420, onComplete: () => sparkle.destroy() })
+    }
   }
 
   private getEnemyColor(enemy: MapEnemy) {
@@ -2825,7 +2860,9 @@ export class OverworldScene extends Phaser.Scene {
   private handlePlayerDefeat() {
     this.busy = true
     const hero = this.saveData.party[0]
-    hero.currentHp = Math.max(1, Math.floor(this.getPlayerCombatStats().hp * 0.5))
+    const restoredHp = Math.max(1, Math.floor(this.getPlayerCombatStats().hp * 0.5))
+    hero.currentHp = restoredHp
+    this.cameras.main.flash(600, 180, 20, 20, false)
     this.showEventBanner('Defeat', 'Nara falls back to the quay save crystal. Gold and items are safe.')
     this.time.delayedCall(900, () => {
       if (this.player) {
@@ -2836,8 +2873,10 @@ export class OverworldScene extends Phaser.Scene {
           companion.container.setPosition(companion.x, companion.y)
           this.updateCompanionBars(companion)
         })
+        this.showFloatingText(this.player.x, this.player.y - 34, `HP restored to ${restoredHp}`, '#86efac')
+        this.tweens.add({ targets: this.player, alpha: 0.25, yoyo: true, repeat: 5, duration: 120 })
       }
-      this.busy = false
+      this.time.delayedCall(760, () => { this.busy = false })
       this.refreshHud(); this.updatePlayerBars(); this.persist()
     })
   }
@@ -2914,7 +2953,11 @@ export class OverworldScene extends Phaser.Scene {
   private showBossIntro(enemyId: string) {
     const name = ENEMIES_BY_ID[enemyId]?.name ?? 'Boss'
     audioManager.playSfx('boss_sting')
-    this.cameras.main.zoomTo(1.12, 350, 'Sine.easeOut', true)
+    const vignette = this.add.rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0x7f1d1d, 0).setScrollFactor(0).setDepth(124)
+    this.time.timeScale = 0.5
+    this.time.delayedCall(500, () => { this.time.timeScale = 1 })
+    this.tweens.add({ targets: vignette, alpha: 0.28, yoyo: true, duration: 360, ease: 'Sine.easeInOut', onComplete: () => vignette.destroy() })
+    this.cameras.main.zoomTo(1.15, 350, 'Sine.easeOut', true)
     this.time.delayedCall(800, () => this.cameras.main.zoomTo(1, 450, 'Sine.easeInOut', true))
     this.showEventBanner(name, 'A route guardian enters the overworld.')
   }
