@@ -96,7 +96,7 @@ export class OverworldScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private player?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle
   private playerShadow?: Phaser.GameObjects.Ellipse
-  private petFollower?: Phaser.GameObjects.Arc | Phaser.GameObjects.Image
+  private petFollower?: Phaser.GameObjects.Arc | Phaser.GameObjects.Image | Phaser.GameObjects.Container
   private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
   private facing: Direction = 'down'
@@ -114,6 +114,15 @@ export class OverworldScene extends Phaser.Scene {
   private touchButtons: Phaser.GameObjects.GameObject[] = []
   private activeBanners: Phaser.GameObjects.GameObject[] = []
   private routeClarityStates: Record<string, 'open' | 'closed'> = {}
+  private emberParticles: Phaser.GameObjects.Arc[] = []
+  private waterShimmers: Phaser.GameObjects.Rectangle[] = []
+  private homeVisuals: Phaser.GameObjects.GameObject[] = []
+  private npcActors: Partial<Record<'guide' | 'elder' | 'peddler' | 'mira', Phaser.GameObjects.GameObject>> = {}
+  private miraCompanion?: Phaser.GameObjects.Container
+  private lastArea: string | null = null
+  private discoveredAreas = new Set<string>()
+  private dustCooldown = 0
+  private pipBobTween?: Phaser.Tweens.Tween
 
   constructor() {
     super('OverworldScene')
@@ -134,6 +143,15 @@ export class OverworldScene extends Phaser.Scene {
     this.touchButtons = []
     this.activeBanners = []
     this.routeClarityStates = {}
+    this.emberParticles = []
+    this.waterShimmers = []
+    this.homeVisuals = []
+    this.npcActors = {}
+    this.miraCompanion = undefined
+    this.lastArea = null
+    this.discoveredAreas = new Set()
+    this.dustCooldown = 0
+    this.pipBobTween = undefined
     this.objectiveText = undefined
     this.inventoryText = undefined
     this.promptText = undefined
@@ -155,6 +173,7 @@ export class OverworldScene extends Phaser.Scene {
     this.playerShadow = this.add.ellipse(startX, startY + 18, 34, 14, 0x101014, 0.32).setDepth(10)
     this.player = this.createPlayer(startX, startY)
     this.createPetFollower(startX - 28, startY + 18)
+    this.createMiraCompanion(startX + 28, startY + 18)
     this.cursors = this.input.keyboard?.createCursorKeys()
     this.keys = this.input.keyboard?.addKeys({
       w: Phaser.Input.Keyboard.KeyCodes.W,
@@ -222,9 +241,14 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     this.movePlayer(velocityX * seconds, velocityY * seconds)
-    this.updatePlayerAnimation(velocityX !== 0 || velocityY !== 0)
+    const isMoving = velocityX !== 0 || velocityY !== 0
+    this.updatePlayerAnimation(isMoving)
     this.playerShadow.setPosition(this.player.x, this.player.y + 18)
-    this.updatePetFollower()
+    this.updateWalkDust(delta, isMoving)
+    this.updatePetFollower(isMoving)
+    this.updateMiraCompanion()
+    this.updateMiraNpcFacing()
+    this.updateAreaPop()
     this.checkSavePoint()
     this.updateInteractionPrompt()
 
@@ -294,7 +318,29 @@ export class OverworldScene extends Phaser.Scene {
       }
     }
 
+    this.createWaterShimmer()
     this.drawAreaPolish()
+  }
+
+  private createWaterShimmer() {
+    const visited = new Set<string>()
+    for (let tileY = 0; tileY < MAP_HEIGHT; tileY += 1) {
+      for (let tileX = 0; tileX < MAP_WIDTH; tileX += 1) {
+        if (MAP_LAYOUT[tileY][tileX] !== 'B' || visited.has(this.tileKey(tileX, tileY))) {
+          continue
+        }
+        let width = 1
+        while (tileX + width < MAP_WIDTH && MAP_LAYOUT[tileY][tileX + width] === 'B') {
+          width += 1
+        }
+        for (let index = 0; index < width; index += 1) {
+          visited.add(this.tileKey(tileX + index, tileY))
+        }
+        const shimmer = this.add.rectangle(tileX * TILE_SIZE, tileY * TILE_SIZE + 14, width * TILE_SIZE, 16, 0x9bdcff, 0.04).setOrigin(0).setDepth(1.35).setName('ambient:water-shimmer')
+        this.waterShimmers.push(shimmer)
+        this.tweens.add({ targets: shimmer, alpha: 0.08, yoyo: true, repeat: -1, duration: 2000, ease: 'Sine.easeInOut' })
+      }
+    }
   }
 
   private drawAreaPolish() {
@@ -485,6 +531,30 @@ export class OverworldScene extends Phaser.Scene {
         ease: 'Sine.easeInOut',
       })
     }
+    for (let i = 0; i < Phaser.Math.Between(5, 8); i += 1) {
+      this.createFloatingEmber(Phaser.Math.Between(0, 2500))
+    }
+  }
+
+  private createFloatingEmber(delay = 0) {
+    const ember = this.add.circle(Phaser.Math.Between(24, MAP_WIDTH * TILE_SIZE - 24), MAP_HEIGHT * TILE_SIZE + Phaser.Math.Between(8, 120), Phaser.Math.FloatBetween(1.8, 3.5), Phaser.Utils.Array.GetRandom([0xffa43a, 0xffd36e, 0xfff1a8]), Phaser.Math.FloatBetween(0.2, 0.5)).setDepth(8).setName('ambient:floating-ember')
+    this.emberParticles.push(ember)
+    this.tweens.add({
+      targets: ember,
+      x: ember.x + Phaser.Math.Between(-24, 24),
+      y: -24,
+      alpha: 0.08,
+      duration: Phaser.Math.Between(3000, 7000),
+      delay,
+      ease: 'Sine.easeInOut',
+      onComplete: () => {
+        this.emberParticles = this.emberParticles.filter((particle) => particle !== ember)
+        ember.destroy()
+        if (this.scene.isActive()) {
+          this.createFloatingEmber(Phaser.Math.Between(200, 1200))
+        }
+      },
+    })
   }
 
   private createObjects() {
@@ -506,6 +576,7 @@ export class OverworldScene extends Phaser.Scene {
     this.drawMarker(MURAL_TILE, GENERATED_ASSETS.objects.mural, 'Glass Mural')
     this.drawMarker(WATCH_LANTERN_TILE, GENERATED_ASSETS.objects.watchLantern, 'Watch Lantern')
     this.drawMarker(HOME_TILE, GENERATED_ASSETS.objects.signpost, this.getHomeName())
+    this.drawHomeUpgradeVisuals()
     this.drawNpc(ALLY_TILE, GENERATED_ASSETS.npcs.guideRin, this.flag('mira_recruited') ? 'Mira' : 'Bridge Scout')
     this.drawMarker(PET_TILE, GENERATED_ASSETS.objects.tideBell, this.saveData.pet.unlocked ? 'Pip' : 'Bell Thicket')
     this.drawMarker(ARCHIVE_TILE, GENERATED_ASSETS.objects.ruinMarker, 'Verdant Archive')
@@ -540,7 +611,60 @@ export class OverworldScene extends Phaser.Scene {
     if (npc instanceof Phaser.GameObjects.Sprite) {
       npc.play(`idle-${assetKey}`)
     }
-    this.tweens.add({ targets: npc, y: npc.y - 1.5, yoyo: true, repeat: -1, duration: 1600 + tile.x * 35, ease: 'Sine.easeInOut' })
+    const actorKey = this.getNpcActorKey(label)
+    if (actorKey) {
+      this.npcActors[actorKey] = npc
+    }
+    this.applyNpcIdleBehavior(npc, label, tile)
+  }
+
+  private getNpcActorKey(label: string): 'guide' | 'elder' | 'peddler' | 'mira' | null {
+    if (label === 'Guide Rin') return 'guide'
+    if (label === 'Elder') return 'elder'
+    if (label === 'Peddler') return 'peddler'
+    if (label === 'Mira') return 'mira'
+    return null
+  }
+
+  private applyNpcIdleBehavior(npc: Phaser.GameObjects.GameObject, label: string, tile: { x: number; y: number }) {
+    if (label === 'Guide Rin') {
+      this.tweens.add({ targets: npc, x: this.tileCenter(tile.x + 2), yoyo: true, repeat: -1, duration: 2600, hold: 900, ease: 'Sine.easeInOut' })
+    } else if (label === 'Peddler') {
+      this.tweens.add({ targets: npc, angle: 3, y: '-=2', yoyo: true, repeat: -1, duration: 880, ease: 'Sine.easeInOut' })
+    } else if (label === 'Elder') {
+      this.tweens.add({ targets: npc, angle: -2, x: '-=3', yoyo: true, repeat: -1, duration: 1800, hold: 5200, repeatDelay: 4200, ease: 'Sine.easeInOut' })
+    } else {
+      this.tweens.add({ targets: npc, y: '-=1.5', yoyo: true, repeat: -1, duration: 1600 + tile.x * 35, ease: 'Sine.easeInOut' })
+    }
+  }
+
+  private drawHomeUpgradeVisuals() {
+    const x = this.tileCenter(HOME_TILE.x)
+    const y = this.tileCenter(HOME_TILE.y)
+    const home = this.saveData.home
+    const progress = this.homeProgress()
+    if (home.warmth > 0) {
+      this.homeVisuals.push(this.add.ellipse(x, y + 18, 62, 28, 0xff8a32, 0.28).setDepth(2.75).setName('home:warmth-glow'))
+      this.homeVisuals.push(this.add.rectangle(HOME_TILE.x * TILE_SIZE, HOME_TILE.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, 0xffb347, 0.16).setOrigin(0).setDepth(0.42).setName('home:warmth-tint'))
+    }
+    if (home.garden > 0) {
+      for (const offset of [{ x: -22, y: 10 }, { x: -14, y: 22 }, { x: 18, y: 18 }, { x: 26, y: 4 }, { x: 3, y: 26 }]) {
+        this.homeVisuals.push(this.add.circle(x + offset.x, y + offset.y, 3, 0x72d66b, 0.92).setDepth(3.2).setName('home:garden-herb'))
+      }
+    }
+    if (home.workshop > 0) {
+      const lens = this.add.polygon(x, y - 30, [0, -10, 11, 0, 0, 10, -11, 0], 0xffd36e, 0.92).setDepth(4.2).setName('home:workshop-lens')
+      this.homeVisuals.push(lens)
+      this.tweens.add({ targets: lens, angle: 10, alpha: 0.68, yoyo: true, repeat: -1, duration: 1250, ease: 'Sine.easeInOut' })
+    }
+    const label = this.add.text(x, y - 47, `Home ${progress}/3`, { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '11px', backgroundColor: '#070914bb', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(4.5).setName('home:progress-label')
+    this.homeVisuals.push(label)
+  }
+
+  private refreshHomeUpgradeVisuals() {
+    this.homeVisuals.forEach((visual) => visual.destroy())
+    this.homeVisuals = []
+    this.drawHomeUpgradeVisuals()
   }
 
   private drawMarker(tile: { x: number; y: number }, assetKey: string, label: string) {
@@ -568,16 +692,113 @@ export class OverworldScene extends Phaser.Scene {
       this.petFollower = undefined
       return
     }
-    this.petFollower = this.add.circle(x, y, 10, 0xffa43a, 0.95).setStrokeStyle(2, 0xfff1a8, 0.7).setDepth(10.5)
-    this.tweens.add({ targets: this.petFollower, y: y - 5, yoyo: true, repeat: -1, duration: 780, ease: 'Sine.easeInOut' })
+    const pip = this.add.container(x, y).setDepth(10.5).setName('companion:pip')
+    pip.add(this.add.circle(0, 0, 10, 0xffa43a, 0.95).setStrokeStyle(2, 0xfff1a8, 0.7))
+    pip.add(this.add.triangle(-6, -9, 0, 8, 5, -4, -5, -4, 0xff7a22, 0.95).setStrokeStyle(1, 0xfff1a8, 0.55))
+    pip.add(this.add.triangle(6, -9, 0, 8, 5, -4, -5, -4, 0xff7a22, 0.95).setStrokeStyle(1, 0xfff1a8, 0.55))
+    pip.add(this.add.circle(0, 2, 4, 0xfff4df, 0.95))
+    this.petFollower = pip
+    this.pipBobTween = this.tweens.add({ targets: pip, y: y - 7, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' })
   }
 
-  private updatePetFollower() {
+  private updatePetFollower(isMoving: boolean) {
     if (!this.petFollower || !this.player) {
       return
     }
-    this.petFollower.x += (this.player.x - 28 - this.petFollower.x) * 0.08
+    const side = this.facing === 'left' ? 34 : this.facing === 'right' ? -34 : -28
+    this.petFollower.x += (this.player.x + side - this.petFollower.x) * 0.08
     this.petFollower.y += (this.player.y + 18 - this.petFollower.y) * 0.08
+    if (this.pipBobTween) {
+      this.pipBobTween.setTimeScale(isMoving ? 1.45 : 1)
+    }
+  }
+
+  private createMiraCompanion(x: number, y: number) {
+    if (!this.flag('mira_recruited') || this.busy) {
+      this.miraCompanion = undefined
+      return
+    }
+    const companion = this.add.container(x, y).setDepth(10.45).setName('companion:mira')
+    companion.add(this.add.circle(0, 0, 11, 0x7fd8ff, 0.92).setStrokeStyle(2, 0xfff1a8, 0.7))
+    companion.add(this.add.text(0, -23, 'Mira', { color: '#d7f6ff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 3, y: 1 } }).setOrigin(0.5))
+    this.miraCompanion = companion
+  }
+
+  private updateMiraCompanion() {
+    if (!this.flag('mira_recruited') || !this.player || this.busy) {
+      this.miraCompanion?.setVisible(false)
+      return
+    }
+    if (!this.miraCompanion) {
+      this.createMiraCompanion(this.player.x + 28, this.player.y + 18)
+    }
+    this.miraCompanion?.setVisible(true)
+    const offset = this.getFollowerOffset(false)
+    this.miraCompanion!.x += (this.player.x + offset.x - this.miraCompanion!.x) * 0.07
+    this.miraCompanion!.y += (this.player.y + offset.y - this.miraCompanion!.y) * 0.07
+  }
+
+  private getFollowerOffset(forPip: boolean) {
+    const distance = TILE_SIZE * 0.78
+    const offsets: Record<Direction, { x: number; y: number }> = {
+      up: { x: forPip ? -24 : 24, y: distance },
+      down: { x: forPip ? -24 : 24, y: -distance },
+      left: { x: distance, y: forPip ? 18 : -18 },
+      right: { x: -distance, y: forPip ? 18 : -18 },
+    }
+    return offsets[this.facing]
+  }
+
+  private updateWalkDust(delta: number, isMoving: boolean) {
+    this.dustCooldown -= delta
+    if (!isMoving || !this.player || this.dustCooldown > 0) {
+      return
+    }
+    this.dustCooldown = 300
+    const dust = this.add.circle(this.player.x + Phaser.Math.Between(-7, 7), this.player.y + 22, 4, 0xd0c8b8, 0.3).setDepth(10.2).setName('ambient:walk-dust')
+    this.tweens.add({ targets: dust, scale: 1.5, alpha: 0, duration: 300, ease: 'Sine.easeOut', onComplete: () => dust.destroy() })
+  }
+
+  private updateMiraNpcFacing() {
+    const mira = this.npcActors.mira
+    if (!mira || !this.player) {
+      return
+    }
+    const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.tileCenter(ALLY_TILE.x), this.tileCenter(ALLY_TILE.y))
+    if (distance <= TILE_SIZE * 3 && 'scaleX' in mira) {
+      const transform = mira as unknown as Phaser.GameObjects.Components.Transform
+      transform.scaleX = this.player.x < this.tileCenter(ALLY_TILE.x) ? -Math.abs(transform.scaleX) : Math.abs(transform.scaleX)
+    }
+  }
+
+  private updateAreaPop() {
+    if (!this.player) {
+      return
+    }
+    const tile = this.worldToTile(this.player.x, this.player.y)
+    const area = this.getAreaNameForTile(tile.x, tile.y)
+    if (area === this.lastArea) {
+      return
+    }
+    this.lastArea = area
+    if (!this.discoveredAreas.has(area)) {
+      this.discoveredAreas.add(area)
+      this.showAreaPop(area)
+    }
+  }
+
+  private getAreaNameForTile(tileX: number, tileY: number) {
+    if (tileX >= 16 && tileY >= 11) return 'SKYWELL APPROACH'
+    if (tileX >= 14 && tileY <= 8) return 'MOONWAKE SHRINE'
+    if (tileX >= 13 && tileY >= 8) return 'EAST FIELD'
+    if (tileX >= 9 && tileY >= 10) return 'VERDANT ARCHIVE'
+    if (tileY >= 9) return 'SOUTH GARDEN'
+    return 'LUMA QUAY'
+  }
+
+  private showAreaPop(area: string) {
+    const text = this.add.text(this.scale.width / 2, this.scale.height / 2 - 110, area, { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '42px' }).setOrigin(0.5).setScrollFactor(0).setDepth(118).setAlpha(0.48).setName('area-pop')
+    this.tweens.add({ targets: text, y: text.y - 18, alpha: 0, delay: 1400, duration: 600, ease: 'Sine.easeInOut', onComplete: () => text.destroy() })
   }
 
   private createGeneratedAnimations() {
@@ -722,7 +943,7 @@ export class OverworldScene extends Phaser.Scene {
     } else if (isAt(MARKER_TILE)) {
       this.inspectMarker()
     } else if (isAt(SIGNPOST_TILE)) {
-      this.showToast(this.flag('slice_complete') ? 'Route Sign: Moonwake east is open; Archive south waits for home repairs; Skywell opens after Thornheart.' : 'Route Sign: Elder north, marker east, broken bridge south, sealed Skywell beyond the archive.')
+      this.showSignpostGuide()
       this.addEvent('read_signpost')
     } else if (isAt(TIDE_BELL_TILE)) {
       this.ringTideBell()
@@ -1011,6 +1232,7 @@ export class OverworldScene extends Phaser.Scene {
       })
       audioManager.playSfx('objective_update')
       this.showEventBanner('Mira Joins the Route', 'Mira, the bridge scout who stayed behind to mark safe stones, now travels with the party and steadies every route ahead.')
+      this.createMiraCompanion((this.player?.x ?? this.tileCenter(ALLY_TILE.x)) + 28, (this.player?.y ?? this.tileCenter(ALLY_TILE.y)) + 18)
       this.showToast('Mira: I know every broken plank east of here. Scout bonus unlocked: party restored a little HP/MP and archive routes will stay marked.')
     } else {
       this.showToast('Mira: Bridge knots are set. Let us get the little bell-chime out of that thicket, then rebuild your house.')
@@ -1054,12 +1276,14 @@ export class OverworldScene extends Phaser.Scene {
       this.setObjective(OBJECTIVES.restoreHome)
       audioManager.playSfx('save_point')
       this.showEventBanner('Home Restored: Hearth', 'The old stove catches. For the first time, Luma Quay smells like supper instead of smoke.')
+      this.refreshHomeUpgradeVisuals()
       this.showToast('Mira: Your mother kept spare maps under that tile. We are not letting this place go dark again.')
     } else if (home.garden === 0) {
       home.garden = 1
       this.addInventory('health_elixir', 1)
       audioManager.playSfx('reward_gain')
       this.showEventBanner('Home Restored: Moon-Garden', 'Pip stamps the soil flat. Medicinal glassmint begins to glow.')
+      this.refreshHomeUpgradeVisuals()
       this.showToast('Garden upgrade: Health Elixir x1 harvested. Resting here now feels like coming back to people.')
     } else if (home.workshop === 0) {
       home.workshop = 1
@@ -1068,6 +1292,7 @@ export class OverworldScene extends Phaser.Scene {
       audioManager.playSfx('equipment_gain')
       this.showEventBanner('Home Restored: Map Workshop', 'The workbench lens focuses the route beyond the Verdant Archive.')
       this.drawGateBlocker(ARCHIVE_TILE, true, 'Overgrowth', 0x78d66b)
+      this.refreshHomeUpgradeVisuals()
       this.showToast('Workshop upgrade: Skywell Lens crafted. The Verdant Archive lane is now visibly open.')
     } else if (this.flag('thornheart_won') && !this.flag('skywell_opened')) {
       this.setFlag('skywell_opened')
@@ -1300,14 +1525,41 @@ export class OverworldScene extends Phaser.Scene {
     })
   }
 
+  private showSignpostGuide() {
+    const routes = ['◄ North: Elder Maelin\'s quarters']
+    if (this.flag('elder_intro') || this.flag('marker_read') || this.flag('field_battle_won')) {
+      routes.push('► East: Guardian Field → Moonwake Shrine')
+    }
+    if (this.flag('mira_recruited') || this.saveData.pet.unlocked || this.homeProgress() > 0) {
+      routes.push('▼ South: Home, Bell Thicket, Verdant Archive')
+    }
+    if (this.flag('thornheart_won') || this.flag('skywell_opened')) {
+      routes.push('▲ Beyond Archive: Skywell Approach')
+    }
+    routes.slice(0, 4).forEach((route, index) => {
+      this.time.delayedCall(index * 200, () => this.showToast(route))
+    })
+  }
+
   private showDemoCompletionCard() {
     this.dismissBanners()
     const { width, height } = this.scale
-    const panel = this.add.rectangle(width / 2, height / 2 + 20, 760, 210, 0x071023, 0.96).setScrollFactor(0).setDepth(180).setStrokeStyle(2, 0x9ff3ff, 0.82)
-    const heading = this.add.text(width / 2, height / 2 - 58, 'Thanks for Playing the Emberglass Demo', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
-    const body = this.add.text(width / 2, height / 2 + 2, 'You cleared the public-demo route: Luma Quay, the guardian field, Moonwake Shrine, and the first Skywell clue. Save at the Skywell to keep this clear file, or return to the title and press R to reset for another showcase run.', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', align: 'center', wordWrap: { width: 690 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
-    const footer = this.add.text(width / 2, height / 2 + 82, 'This slice represents onboarding, exploration, relic combat, boss payoff, and save/load flow.', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '15px', align: 'center', wordWrap: { width: 660 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
-    this.tweens.add({ targets: [panel, heading, body, footer], alpha: 0, delay: 7200, duration: 900, onComplete: () => { panel.destroy(); heading.destroy(); body.destroy(); footer.destroy() } })
+    const playTime = this.formatPlayTime(this.saveData.playTime)
+    const partyLevels = this.saveData.party.map((member) => `${CHARACTERS[member.characterId]?.name ?? member.characterId} Lv.${member.level}`).join('  •  ')
+    const glow = this.add.ellipse(width / 2, height / 2 + 20, 820, 270, 0xffa43a, 0.14).setScrollFactor(0).setDepth(179)
+    const panel = this.add.rectangle(width / 2, height / 2 + 20, 780, 250, 0x190d16, 0.96).setScrollFactor(0).setDepth(180).setStrokeStyle(2, 0xffd36e, 0.82)
+    const heading = this.add.text(width / 2, height / 2 - 82, 'Luma Quay Endures', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '30px' }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
+    const body = this.add.text(width / 2, height / 2 - 24, `Play time: ${playTime}\n✓ Shrine purified   ✓ Thornheart felled   ✓ Skywell restored\n${partyLevels}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', align: 'center', lineSpacing: 8, wordWrap: { width: 710 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
+    const footer = this.add.text(width / 2, height / 2 + 83, 'Save at the Skywell to keep this clear file, or return to the title and press R to reset for another showcase run.', { color: '#ffdca8', fontFamily: 'Arial, sans-serif', fontSize: '15px', align: 'center', wordWrap: { width: 660 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
+    this.tweens.add({ targets: glow, alpha: 0.25, scale: 1.04, yoyo: true, repeat: -1, duration: 1150, ease: 'Sine.easeInOut' })
+    this.tweens.add({ targets: [glow, panel, heading, body, footer], alpha: 0, delay: 7600, duration: 900, onComplete: () => { glow.destroy(); panel.destroy(); heading.destroy(); body.destroy(); footer.destroy() } })
+  }
+
+  private formatPlayTime(playTime: number) {
+    const totalSeconds = Math.max(0, Math.floor(playTime || this.time.now / 1000))
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
   private openShop() {

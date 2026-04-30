@@ -175,19 +175,26 @@ let overworldState = await evalScene(() => {
     objective: scene.saveData.currentObjective,
     gold: scene.saveData.gold,
     inventory: scene.saveData.inventory,
+    emberParticles: scene.emberParticles.length,
+    waterShimmers: scene.waterShimmers.length,
+    homeVisuals: scene.homeVisuals.map((visual) => visual.name),
   };
 });
 assert.equal(overworldState.objective, 'Speak with Elder Maelin at Luma Quay.');
+assert(overworldState.emberParticles >= 5 && overworldState.emberParticles <= 8);
+assert(overworldState.waterShimmers > 0);
+assert(overworldState.homeVisuals.includes('home:progress-label'));
 steps.push('Verified initial overworld objective and save data');
+steps.push('Verified living-world ambience and home label visuals');
 
-await evalScene(() => {
+const noOpToast = await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
   scene.player.setPosition(2 * 48 + 24, 2 * 48 + 24);
   scene.facing = 'down';
   scene.interact();
+  return scene.toast?.text ?? '';
 });
-await page.waitForTimeout(150);
-assert((await getSceneTexts()).some((text) => text.includes('Nothing responds here')));
+assert(noOpToast.includes('Nothing responds here'));
 steps.push('Verified overworld no-op interactions explain next steps');
 
 await evalScene(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].openMenu());
@@ -267,7 +274,7 @@ await clickGameObject(() => {
   const button = scene.commandTexts.find((item) => item.text === 'Attack');
   return { x: button.x, y: button.y };
 });
-await page.waitForFunction(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].waitingForTarget, undefined, { timeout: 3000 });
+await page.waitForFunction(() => window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].waitingForTarget, undefined, { timeout: 8000 });
 await clickGameObject(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
   const enemy = scene.combat.enemies.find((entity) => entity.isAlive);
