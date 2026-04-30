@@ -243,6 +243,8 @@ export class OverworldScene extends Phaser.Scene {
   private skillCooldownGraphics: Phaser.GameObjects.Graphics[] = []
   private skillTexts: Phaser.GameObjects.Text[] = []
   private killCounterText?: Phaser.GameObjects.Text
+  private comboText?: Phaser.GameObjects.Text
+  private dashReadyText?: Phaser.GameObjects.Text
   private levelText?: Phaser.GameObjects.Text
   private shieldArc?: Phaser.GameObjects.Arc
   private isBlocking = false
@@ -250,6 +252,7 @@ export class OverworldScene extends Phaser.Scene {
   private skillReadyAt = [0, 0, 0, 0]
   private comboCount = 0
   private lastComboHitAt = 0
+  private lastDashAfterimageAt = 0
   private pipBobTween?: Phaser.Tweens.Tween
   private homeWarmthUsedThisVisit = false
   private homeGardenUsedThisVisit = false
@@ -307,10 +310,13 @@ export class OverworldScene extends Phaser.Scene {
     this.isBlocking = false
     this.comboCount = 0
     this.lastComboHitAt = 0
+    this.lastDashAfterimageAt = 0
     this.skillCooldownGraphics = []
     this.skillTexts = []
     this.skillBar = undefined
     this.killCounterText = undefined
+    this.comboText = undefined
+    this.dashReadyText = undefined
     this.playerXpBar = undefined
     this.bossHud = undefined
     this.treasureChests = []
@@ -429,9 +435,11 @@ export class OverworldScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.keys.shift)) {
       this.startDash()
     }
-    const speedMultiplier = (this.time.now < this.dashUntil ? 2 : 1) * (this.isBlocking ? 0.4 : 1)
-    this.movePlayer(velocityX * seconds * speedMultiplier, velocityY * seconds * speedMultiplier)
+    const dashing = this.time.now < this.dashUntil
     const isMoving = velocityX !== 0 || velocityY !== 0
+    const speedMultiplier = (dashing ? 2.5 : 1) * (this.isBlocking ? 0.4 : 1)
+    this.movePlayer(velocityX * seconds * speedMultiplier, velocityY * seconds * speedMultiplier)
+    if (dashing && isMoving) this.updateDashTrail()
     this.updatePlayerAnimation(isMoving)
     this.playerShadow.setPosition(this.player.x, this.player.y + 18)
     this.updateWalkDust(delta, isMoving)
@@ -448,6 +456,7 @@ export class OverworldScene extends Phaser.Scene {
     this.updateGroundLoot()
     this.updateShieldVisual()
     this.updateSkillHud()
+    this.updateComboHud()
     this.updatePlayerBars()
     this.updateInteractionPrompt()
 
@@ -1053,6 +1062,7 @@ export class OverworldScene extends Phaser.Scene {
           const angle = Phaser.Math.Angle.Between(companion.x, companion.y, nearestEnemy.x, nearestEnemy.y)
           const swing = this.add.arc(nearestEnemy.x, nearestEnemy.y, 24, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0xff9f1c, 0.38).setDepth(25).setStrokeStyle(4, 0xffd166, 0.8)
           this.tweens.add({ targets: swing, alpha: 0, duration: 180, onComplete: () => swing.destroy() })
+          this.spawnKaelSlash(companion, nearestEnemy)
           this.tweens.add({ targets: companion.body, scale: 1.15, yoyo: true, duration: 75 })
           nearestEnemy.currentHp = Math.max(0, nearestEnemy.currentHp - damage)
           nearestEnemy.hitFlashTimer = 120
@@ -1079,6 +1089,7 @@ export class OverworldScene extends Phaser.Scene {
           const healY = healTarget.partyIndex === 0 ? this.player!.y : targetCompanion?.y ?? companion.y
           this.showDamageNumber(healX, healY - 28, 24, 'heal')
           this.spawnHealSparkles(healX, healY)
+          this.spawnHealPulse(healX, healY)
           companion.lastSkillTime = this.time.now
           if (previousHp <= 0 && targetCompanion) {
             targetCompanion.state = 'follow'
@@ -1093,7 +1104,7 @@ export class OverworldScene extends Phaser.Scene {
         }
         if (nearestEnemy && this.time.now - companion.lastAttackTime >= companion.attackCooldown) {
           const stats = this.scaleCharacterStats(CHARACTERS.io, member.level)
-          const projectile = this.add.circle(companion.x, companion.y, 5, 0x60a5fa, 0.9).setDepth(25)
+          const projectile = this.add.circle(companion.x, companion.y, 5, 0x60a5fa, 0.9).setDepth(25).setStrokeStyle(2, 0xbfdbfe, 0.8)
           companion.lastAttackTime = this.time.now
           let trailDrops = 0
           this.tweens.add({
@@ -1306,6 +1317,8 @@ export class OverworldScene extends Phaser.Scene {
     this.inventoryText = this.add.text(34, 76, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px' }).setScrollFactor(0).setDepth(91)
     this.levelText = this.add.text(468, 22, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(91)
     this.killCounterText = this.add.text(576, 24, 'Kills: 0', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setScrollFactor(0).setDepth(91)
+    this.comboText = this.add.text(this.scale.width - 24, 24, '', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px', fontStyle: 'bold', shadow: { offsetX: 1, offsetY: 2, color: '#000000', blur: 3, fill: true } }).setOrigin(1, 0).setScrollFactor(0).setDepth(96)
+    this.dashReadyText = this.add.text(this.scale.width - 24, 54, 'DASH READY', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '11px', fontStyle: 'bold' }).setOrigin(1, 0).setScrollFactor(0).setDepth(96).setAlpha(0)
     const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
     areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
@@ -2567,18 +2580,18 @@ export class OverworldScene extends Phaser.Scene {
       const enemyAngle = Phaser.Math.Angle.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
       if (distance <= 60 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 4) { hit = true; this.damageEnemy(enemy) }
     })
-    if (hit) this.cameras.main.shake(80, 0.002)
+    if (hit) this.cameras.main.shake(100, 0.002)
   }
 
   private damageEnemy(enemy: MapEnemy, multiplier = 1) {
     const heroStats = this.getPlayerCombatStats()
-    const damage = Math.max(1, Math.round(CombatSystem.calculateRealtimePlayerDamage(heroStats.atk, enemy.stats.def) * multiplier))
+    const damage = Math.max(1, Math.round(CombatSystem.calculateRealtimePlayerDamage(heroStats.atk, enemy.stats.def) * multiplier * this.getComboDamageMultiplier()))
     const critical = damage > heroStats.atk * 1.5
     enemy.currentHp = Math.max(0, enemy.currentHp - damage)
     enemy.hitFlashTimer = 80
     enemy.sprite.setFillStyle(0xffffff)
     this.showDamageNumber(enemy.x, enemy.y - 22, damage, 'player', critical)
-    this.registerComboHit(enemy.x, enemy.y)
+    this.triggerHitstop(enemy.isBoss ? 50 : 30)
     this.updateEnemyBars(enemy)
     if (enemy.currentHp <= 0) this.killEnemy(enemy)
   }
@@ -2648,7 +2661,7 @@ export class OverworldScene extends Phaser.Scene {
       const hero = this.saveData.party[0]
       hero.currentHp = Math.max(0, hero.currentHp - damage)
       this.cameras.main.flash(100, 180, 20, 20, false)
-      if (enemy.isBoss) this.cameras.main.shake(200, 0.003)
+      this.cameras.main.shake(150, 0.003)
       if (blocking) this.showBlockFlash()
       this.showDamageDirection(enemy.x, enemy.y)
       this.showDamageNumber(this.player.x, this.player.y - 26, damage, 'enemy')
@@ -2671,7 +2684,7 @@ export class OverworldScene extends Phaser.Scene {
       const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, stats.def)
       member.currentHp = Math.max(0, member.currentHp - damage)
       this.showDamageNumber(companion.x, companion.y - 26, damage, 'enemy')
-      companion.body.setFillStyle(0xffffff)
+      companion.body.setFillStyle(0xff4d4d)
       this.time.delayedCall(120, () => companion.body.setFillStyle(companion.characterId === 'kael' ? 0x5c8a4d : 0x7fb3ff, 0.94))
       if (member.currentHp <= 0) {
         companion.state = 'dead'
@@ -2689,13 +2702,15 @@ export class OverworldScene extends Phaser.Scene {
     enemy.state = 'dead'
     this.killCount += 1
     enemy.sprite.setFillStyle(0xffffff)
-    this.cameras.main.shake(enemy.isBoss ? 320 : 120, enemy.isBoss ? 0.006 : 0.003)
+    this.cameras.main.shake(enemy.isBoss ? 400 : 200, enemy.isBoss ? 0.008 : 0.004)
+    if (enemy.isBoss) this.triggerSlowMo(300, 0.3)
     this.spawnDeathExplosion(enemy.x, enemy.y, this.getEnemyColor(enemy))
     if (enemy.isBoss) {
       this.spawnBossExplosion(enemy.x, enemy.y)
       this.bossHud?.container.destroy()
       this.bossHud = undefined
     }
+    this.registerComboKill(enemy.x, enemy.y)
     this.showFloatingText(enemy.x, enemy.y - 34, `+${enemy.goldReward}g`, '#ffd166')
     this.spawnGroundLoot(enemy.x, enemy.y, 'gold', 'gold', enemy.goldReward)
     this.spawnGroundLoot(enemy.x + 12, enemy.y, 'exp', 'exp', enemy.expReward)
@@ -2733,7 +2748,14 @@ export class OverworldScene extends Phaser.Scene {
   private updateGroundLoot() {
     if (!this.player) return
     this.groundLoot.slice().forEach((loot) => {
-      if (Phaser.Math.Distance.Between(this.player!.x, this.player!.y, loot.sprite.x, loot.sprite.y) <= 40) this.pickupGroundLoot(loot)
+      const distance = Phaser.Math.Distance.Between(this.player!.x, this.player!.y, loot.sprite.x, loot.sprite.y)
+      if (distance <= 60) {
+        loot.bobTween.pause()
+        loot.sprite.x = Phaser.Math.Linear(loot.sprite.x, this.player!.x, distance < 24 ? 0.45 : 0.18)
+        loot.sprite.y = Phaser.Math.Linear(loot.sprite.y, this.player!.y, distance < 24 ? 0.45 : 0.18)
+        loot.label.setPosition(loot.sprite.x, loot.sprite.y - 20)
+      }
+      if (distance <= 18) this.pickupGroundLoot(loot)
     })
   }
 
@@ -2743,6 +2765,7 @@ export class OverworldScene extends Phaser.Scene {
       this.saveData.gold += loot.quantity
       this.saveData.battleRewards.gold += loot.quantity
       this.showFloatingText(this.player.x, this.player.y - 32, `+${loot.quantity}g`, '#ffd166')
+      this.flashGoldCounter(loot.quantity)
     } else if (loot.kind === 'exp') {
       this.gainRealtimeExp(loot.quantity)
       this.showFloatingText(this.player.x, this.player.y - 32, `+${loot.quantity} EXP`, '#93c5fd')
@@ -2751,6 +2774,7 @@ export class OverworldScene extends Phaser.Scene {
       this.showFloatingText(this.player.x, this.player.y - 32, `+${loot.quantity} ${this.getItemName(loot.itemId)}`, '#fff1a8')
     }
     audioManager.playSfx('reward_gain')
+    this.spawnPickupDing(loot.sprite.x, loot.sprite.y)
     this.destroyGroundLoot(loot)
     this.refreshHud(); this.persist()
   }
@@ -2781,23 +2805,55 @@ export class OverworldScene extends Phaser.Scene {
     })
   }
 
-  private registerComboHit(x: number, y: number) {
-    this.comboCount = this.time.now - this.lastComboHitAt <= 2000 ? this.comboCount + 1 : 1
+  private registerComboKill(x: number, y: number) {
+    this.comboCount = this.time.now - this.lastComboHitAt <= 3000 ? this.comboCount + 1 : 1
     this.lastComboHitAt = this.time.now
+    const color = this.getComboColor(this.comboCount)
     if (this.comboCount > 1) {
-      const color = this.getComboColor(this.comboCount)
-      const label = this.add.text(x, y - 48, `COMBO x${this.comboCount}!`, { color, fontFamily: 'Arial, sans-serif', fontSize: this.comboCount >= 3 ? '18px' : '14px', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82)
+      const label = this.add.text(x, y - 48, `${this.comboCount}x COMBO`, { color, fontFamily: 'Arial, sans-serif', fontSize: this.comboCount >= 3 ? '18px' : '14px', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82)
       label.setScale(this.comboCount >= 3 ? 1.35 : 1)
       this.tweens.add({ targets: label, y: y - 82, alpha: 0, scale: 1, duration: 780, ease: 'Sine.easeOut', onComplete: () => label.destroy() })
-      if (this.player && (this.comboCount === 3 || this.comboCount === 6 || this.comboCount === 10 || this.comboCount % 5 === 0)) this.showFloatingText(this.player.x, this.player.y - 52, `COMBO x${this.comboCount}!`, color)
+    }
+    if (this.comboCount === 5 || this.comboCount === 10 || this.comboCount === 15) {
+      const milestone = this.comboCount === 5 ? 'UNSTOPPABLE!' : this.comboCount === 10 ? 'LEGENDARY!' : 'MYTHIC!'
+      this.cameras.main.shake(180, 0.005)
+      this.triggerSlowMo(220, 0.55)
+      this.showFloatingText(this.player?.x ?? x, (this.player?.y ?? y) - 58, milestone, color)
     }
   }
 
   private getComboColor(combo: number) {
-    if (combo >= 10) return '#ef4444'
-    if (combo >= 6) return '#fb923c'
+    if (combo >= 8) return '#ef4444'
+    if (combo >= 5) return '#fb923c'
     if (combo >= 3) return '#fef08a'
     return '#ffffff'
+  }
+
+  private getComboDamageMultiplier() {
+    if (this.time.now - this.lastComboHitAt > 3000) return 1
+    const tier = this.comboCount >= 8 ? 4 : this.comboCount >= 5 ? 3 : this.comboCount >= 3 ? 2 : this.comboCount >= 1 ? 1 : 0
+    return 1 + tier * 0.05
+  }
+
+  private updateComboHud() {
+    if (!this.comboText) return
+    if (this.comboCount > 0 && this.time.now - this.lastComboHitAt > 3000) this.comboCount = 0
+    if (this.comboCount <= 1) {
+      this.comboText.setText('')
+      return
+    }
+    this.comboText.setText(`${this.comboCount}x COMBO`).setColor(this.getComboColor(this.comboCount))
+  }
+
+  private flashGoldCounter(amount: number) {
+    if (!this.inventoryText) return
+    const flash = this.add.text(this.inventoryText.x + 42, this.inventoryText.y - 18, `+${amount}`, { color: '#ffd166', fontFamily: 'Arial, sans-serif', fontSize: '14px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(96)
+    this.tweens.add({ targets: [this.inventoryText, flash], alpha: 0.45, yoyo: true, duration: 80, repeat: 1, onComplete: () => flash.destroy() })
+  }
+
+  private spawnPickupDing(x: number, y: number) {
+    const ring = this.add.circle(x, y, 8, 0xffffff, 0).setDepth(28).setStrokeStyle(2, 0xfff1a8, 0.82)
+    this.tweens.add({ targets: ring, scale: 2.8, alpha: 0, duration: 360, ease: 'Sine.easeOut', onComplete: () => ring.destroy() })
   }
 
   private spawnDeathExplosion(x: number, y: number, color = 0xffd166) {
@@ -2821,10 +2877,30 @@ export class OverworldScene extends Phaser.Scene {
 
   private showLevelUpEffect() {
     if (!this.player) return
+    const flash = this.add.rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0xffd166, 0.3).setScrollFactor(0).setDepth(130)
+    const title = this.add.text(this.scale.width / 2, this.scale.height / 2 - 24, 'LEVEL UP!', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '42px', fontStyle: 'bold', shadow: { offsetX: 2, offsetY: 3, color: '#000000', blur: 4, fill: true } }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
+    const stats = this.add.text(this.scale.width / 2, this.scale.height / 2 + 24, 'ATK +2   DEF +1   HP +8', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
     const glow = this.add.circle(this.player.x, this.player.y, 28, 0xffd166, 0.22).setDepth(24).setStrokeStyle(4, 0xfff1a8, 0.85)
-    this.showFloatingText(this.player.x, this.player.y - 48, 'LEVEL UP!', '#fff1a8')
     audioManager.playSfx('level_up')
+    this.triggerSlowMo(200, 0.25)
+    this.companions.forEach((companion) => {
+      companion.body.setFillStyle(0xffd166, 0.96)
+      this.time.delayedCall(420, () => companion.body.setFillStyle(companion.characterId === 'kael' ? 0x5c8a4d : 0x7fb3ff, 0.94))
+    })
+    this.tweens.add({ targets: flash, alpha: 0, duration: 500, onComplete: () => flash.destroy() })
+    this.tweens.add({ targets: [title, stats], y: '-=36', alpha: 0, duration: 900, ease: 'Sine.easeOut', onComplete: () => { title.destroy(); stats.destroy() } })
     this.tweens.add({ targets: glow, scale: 2, alpha: 0, duration: 850, onComplete: () => glow.destroy() })
+  }
+
+  private spawnHealPulse(x: number, y: number) {
+    const pulse = this.add.circle(x, y, 20, 0x86efac, 0.18).setDepth(25).setStrokeStyle(3, 0xbbf7d0, 0.85)
+    this.tweens.add({ targets: pulse, scale: 1.8, alpha: 0, duration: 520, ease: 'Sine.easeOut', onComplete: () => pulse.destroy() })
+  }
+
+  private spawnKaelSlash(companion: PartyCompanion, enemy: MapEnemy) {
+    const angle = Phaser.Math.Angle.Between(companion.x, companion.y, enemy.x, enemy.y)
+    const slash = this.add.arc(companion.x + Math.cos(angle) * 24, companion.y + Math.sin(angle) * 24, 34, Phaser.Math.RadToDeg(angle - Math.PI / 2.8), Phaser.Math.RadToDeg(angle + Math.PI / 2.8), false, 0xff4d2e, 0.34).setDepth(26).setStrokeStyle(6, 0xffb347, 0.86)
+    this.tweens.add({ targets: slash, scale: 1.22, alpha: 0, duration: 180, ease: 'Sine.easeOut', onComplete: () => slash.destroy() })
   }
 
   private spawnHealSparkles(x: number, y: number) {
@@ -2875,15 +2951,45 @@ export class OverworldScene extends Phaser.Scene {
 
   private startDash() {
     if (!this.player || this.time.now < this.nextDashAt) return
-    this.dashUntil = this.time.now + 300
-    this.playerInvulnerableUntil = this.time.now + 360
+    this.dashUntil = this.time.now + 200
+    this.playerInvulnerableUntil = this.time.now + 260
     this.nextDashAt = this.time.now + 1500
+    this.lastDashAfterimageAt = 0
     audioManager.playSfx('scene_whoosh')
-    for (let index = 0; index < 3; index += 1) {
-      const after = this.add.rectangle(this.player.x, this.player.y, this.player.width, this.player.height, 0xa7f3d0, 0.25).setDepth(11)
-      this.tweens.add({ targets: after, alpha: 0, delay: index * 45, duration: 260, onComplete: () => after.destroy() })
-    }
+    this.cameras.main.zoomTo(1.03, 80, 'Sine.easeOut', true)
+    this.time.delayedCall(120, () => this.cameras.main.zoomTo(1, 120, 'Sine.easeInOut', true))
     this.tweens.add({ targets: this.player, alpha: 0.45, yoyo: true, repeat: 3, duration: 45 })
+    this.time.delayedCall(1500, () => this.showDashReady())
+  }
+
+  private updateDashTrail() {
+    if (!this.player || this.time.now - this.lastDashAfterimageAt < 80) return
+    this.lastDashAfterimageAt = this.time.now
+    const afterAlpha = Phaser.Math.Clamp((this.dashUntil - this.time.now) / 200, 0.1, 0.4)
+    const after = this.add.rectangle(this.player.x, this.player.y, this.player.width, this.player.height, 0xa7f3d0, afterAlpha).setDepth(11)
+    this.tweens.add({ targets: after, alpha: 0, duration: 260, ease: 'Sine.easeOut', onComplete: () => after.destroy() })
+    for (let index = 0; index < 3; index += 1) {
+      const particle = this.add.circle(this.player.x + Phaser.Math.Between(-10, 10), this.player.y + Phaser.Math.Between(-10, 10), Phaser.Math.Between(2, 4), index % 2 === 0 ? 0x9ff3ff : 0xffffff, 0.72).setDepth(12)
+      this.tweens.add({ targets: particle, x: particle.x + Phaser.Math.Between(-18, 18), y: particle.y + Phaser.Math.Between(-18, 18), alpha: 0, scale: 0.2, duration: 260, onComplete: () => particle.destroy() })
+    }
+  }
+
+  private showDashReady() {
+    if (!this.dashReadyText || this.time.now < this.nextDashAt) return
+    this.dashReadyText.setAlpha(0.9).setScale(1.15)
+    this.tweens.add({ targets: this.dashReadyText, alpha: 0, scale: 1, duration: 620, ease: 'Sine.easeOut' })
+  }
+
+  private triggerHitstop(duration: number) {
+    this.physics.world.timeScale = 0.01
+    this.tweens.pauseAll()
+    this.time.delayedCall(duration, () => { this.physics.world.timeScale = 1; this.tweens.resumeAll() })
+  }
+
+  private triggerSlowMo(duration: number, scale: number) {
+    this.time.timeScale = scale
+    this.physics.world.timeScale = scale
+    this.time.delayedCall(duration, () => { this.time.timeScale = 1; this.physics.world.timeScale = 1 })
   }
 
   private useHealthPotion() {
