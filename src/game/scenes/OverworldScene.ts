@@ -11,6 +11,8 @@ const TILE_SIZE = 48
 const MAP_WIDTH = 40
 const MAP_HEIGHT = 30
 const PLAYER_SPEED = 160
+const REGULAR_ENEMY_TARGET_COUNT = 7
+const ENEMY_RESPAWN_DELAY = 15000
 type Direction = 'up' | 'down' | 'left' | 'right'
 const HERO_ANIM_ROWS: Record<Direction, number> = { down: 0, left: 1, right: 2, up: 3 }
 const TILESET_CROPS = {
@@ -992,21 +994,27 @@ export class OverworldScene extends Phaser.Scene {
     if (!character) return null
 
     const isKael = member.characterId === 'kael'
-    const offsetX = partyIndex === 1 ? -40 : -20
-    const offsetY = partyIndex === 1 ? -20 : -40
+    const offsetX = isKael ? -40 : -60
+    const offsetY = isKael ? -16 : -34
     const x = this.player.x + offsetX
     const y = this.player.y + offsetY
     const container = this.add.container(x, y).setDepth(10.5).setName(`companion:${member.characterId}`)
-    const body = this.add.rectangle(0, 0, isKael ? 30 : 26, isKael ? 30 : 26, isKael ? 0x5c8a4d : 0x7fb3ff, 0.94)
+    const body = this.add.rectangle(0, 0, 32, 32, isKael ? 0x5c8a4d : 0x7fb3ff, 0.94)
       .setStrokeStyle(2, isKael ? 0xb8d8a8 : 0xe0f2fe, 0.78)
       .setVisible(false)
     const textureKey = member.characterId === 'kael' ? GENERATED_ASSETS.heroes.kael : member.characterId === 'io' ? GENERATED_ASSETS.heroes.io : null
     const sprite = textureKey && hasTexture(this, textureKey) ? this.add.sprite(0, 0, textureKey, 0).setScale(0.5).setDepth(10.51) : undefined
+    const fallbackVisuals: Phaser.GameObjects.GameObject[] = sprite ? [] : [
+      this.add.rectangle(0, 0, 32, 32, isKael ? 0x5c8a4d : 0x7fb3ff, 0.96).setStrokeStyle(2, isKael ? 0xd9f7c8 : 0xe0f2fe, 0.8),
+      this.add.rectangle(0, -5, 22, 10, isKael ? 0x79b35f : 0xbfe3ff, 0.62),
+      this.add.rectangle(isKael ? -8 : 8, 7, 6, 12, isKael ? 0x314d2b : 0x2563eb, 0.72),
+      this.add.circle(isKael ? 8 : -8, -8, 4, 0xfff1a8, 0.84),
+    ]
     const nameText = this.add.text(0, -25, character.name, { color: isKael ? '#d9f7c8' : '#dbeafe', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 3, y: 1 } }).setOrigin(0.5)
     const hpBarBg = this.add.graphics().setDepth(10.55)
     const hpBar = this.add.graphics().setDepth(10.56)
     const mpBar = this.add.graphics().setDepth(10.57)
-    container.add(sprite ? [body, sprite, nameText] : [body, nameText])
+    container.add(sprite ? [body, sprite, nameText] : [body, ...fallbackVisuals, nameText])
 
     const companion: PartyCompanion = {
       characterId: member.characterId,
@@ -1024,7 +1032,7 @@ export class OverworldScene extends Phaser.Scene {
       state: member.currentHp <= 0 ? 'dead' : 'follow',
       offsetX,
       offsetY,
-      attackCooldown: 900,
+      attackCooldown: isKael ? 800 : 900,
       lastAttackTime: 0,
       lastSkillTime: 0,
       hitFlashTimer: 0,
@@ -1047,15 +1055,18 @@ export class OverworldScene extends Phaser.Scene {
       }
 
       companion.container.setAlpha(1)
+      const attackRange = companion.characterId === 'io' ? 200 : 55
       const nearestEnemy = this.getNearestEnemy(companion.x, companion.y, companion.characterId === 'io' ? 200 : 180)
 
       if (companion.characterId === 'kael' && nearestEnemy) {
         const distance = Phaser.Math.Distance.Between(companion.x, companion.y, nearestEnemy.x, nearestEnemy.y)
-        if (distance > 50) {
+        if (distance > attackRange) {
+          const previousX = companion.x
           const nextX = Phaser.Math.Linear(companion.x, nearestEnemy.x, 0.05)
           const nextY = Phaser.Math.Linear(companion.y, nearestEnemy.y, 0.05)
           if (!this.isWallAtWorld(nextX, companion.y)) companion.x = Phaser.Math.Clamp(nextX, 8, MAP_WIDTH * TILE_SIZE - 8)
           if (!this.isWallAtWorld(companion.x, nextY)) companion.y = Phaser.Math.Clamp(nextY, 8, MAP_HEIGHT * TILE_SIZE - 8)
+          if (companion.sprite && Math.abs(companion.x - previousX) > 0.15) companion.sprite.setFlipX(companion.x < previousX)
           companion.container.setPosition(companion.x, companion.y)
           this.updateCompanionBars(companion)
           return
@@ -1084,7 +1095,7 @@ export class OverworldScene extends Phaser.Scene {
 
       if (companion.characterId === 'io') {
         const healTarget = this.getLowestHpPartyMember()
-        if (healTarget && healTarget.hpRatio < 0.5 && member.currentMp >= 6 && this.time.now - companion.lastSkillTime > 3000) {
+        if (healTarget && healTarget.hpRatio < 0.5 && member.currentMp >= 6 && this.time.now - companion.lastSkillTime > 2500) {
           const previousHp = healTarget.member.currentHp
           healTarget.member.currentHp = Math.min(healTarget.maxHp, healTarget.member.currentHp + 24)
           member.currentMp = Math.max(0, member.currentMp - 6)
@@ -1145,8 +1156,8 @@ export class OverworldScene extends Phaser.Scene {
       const targetX = this.player!.x + companion.offsetX
       const targetY = this.player!.y + companion.offsetY
       const previousX = companion.x
-      const nextX = Phaser.Math.Linear(companion.x, targetX, 0.08)
-      const nextY = Phaser.Math.Linear(companion.y, targetY, 0.08)
+      const nextX = Phaser.Math.Linear(companion.x, targetX, 0.12)
+      const nextY = Phaser.Math.Linear(companion.y, targetY, 0.12)
       if (!this.isWallAtWorld(nextX, companion.y)) companion.x = Phaser.Math.Clamp(nextX, 8, MAP_WIDTH * TILE_SIZE - 8)
       if (!this.isWallAtWorld(companion.x, nextY)) companion.y = Phaser.Math.Clamp(nextY, 8, MAP_HEIGHT * TILE_SIZE - 8)
       if (companion.sprite) {
@@ -2485,6 +2496,48 @@ export class OverworldScene extends Phaser.Scene {
       homecoming: [],
     }
     regularByStage[this.saveData.stage].forEach((spawn, index) => this.spawnMapEnemy(spawn.ids[Phaser.Math.Between(0, spawn.ids.length - 1)], spawn.x, spawn.y, false, `${this.saveData.stage}-${index}`))
+    for (let attempt = 0; attempt < REGULAR_ENEMY_TARGET_COUNT && this.mapEnemies.filter((enemy) => !enemy.isBoss && !enemy.dead).length < REGULAR_ENEMY_TARGET_COUNT; attempt += 1) {
+      this.spawnRandomRegularEnemyForStage()
+    }
+    this.spawnMinibossForStage()
+  }
+
+  private spawnRandomRegularEnemyForStage() {
+    const spawnPool: Record<SaveData['stage'], string[]> = {
+      quay: ['ash_slime', 'frost_shard', 'vinecrawler', 'storm_wisp'],
+      field: ['ash_slime', 'frost_shard', 'vinecrawler', 'moss_knight', 'sporefiend', 'glass_scorpion'],
+      shrine: ['frost_shard', 'storm_wisp', 'hollow_wisp', 'clay_sentinel'],
+      archive: ['vinecrawler', 'sporefiend', 'hollow_wisp', 'storm_wisp', 'archive_guardian'],
+      skywell: ['hollow_wisp', 'storm_wisp', 'clay_sentinel', 'emberglass_wisp', 'memory_phantom', 'void_walker'],
+      homecoming: [],
+    }
+    const ids = spawnPool[this.saveData.stage]
+    if (!ids.length) return
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const tileX = Phaser.Math.Between(3, MAP_WIDTH - 4)
+      const tileY = Phaser.Math.Between(3, MAP_HEIGHT - 4)
+      const x = this.tileCenter(tileX)
+      const y = this.tileCenter(tileY)
+      if (this.isWallAtWorld(x, y)) continue
+      if (this.player && Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) < 220) continue
+      if (this.mapEnemies.some((enemy) => !enemy.dead && Phaser.Math.Distance.Between(enemy.x, enemy.y, x, y) < 180)) continue
+      this.spawnMapEnemy(ids[Phaser.Math.Between(0, ids.length - 1)], tileX, tileY, false, `${this.saveData.stage}-respawn-${this.time.now}-${attempt}`)
+      return
+    }
+  }
+
+  private spawnMinibossForStage() {
+    const minibossByStage: Record<SaveData['stage'], { id: string; x: number; y: number } | null> = {
+      quay: { id: 'clay_sentinel', x: 34, y: 10 },
+      field: { id: 'moss_knight', x: 30, y: 12 },
+      shrine: { id: 'hollow_wisp', x: 34, y: 8 },
+      archive: { id: 'archive_guardian', x: 22, y: 23 },
+      skywell: { id: 'skywell_guardian', x: 35, y: 25 },
+      homecoming: null,
+    }
+    const miniboss = minibossByStage[this.saveData.stage]
+    if (!miniboss || this.mapEnemies.some((enemy) => enemy.id === `${this.saveData.stage}-miniboss` && !enemy.dead)) return
+    this.spawnMapEnemy(miniboss.id, miniboss.x, miniboss.y, true, `${this.saveData.stage}-miniboss`)
   }
 
   private spawnStoryBoss(enemyId: string, tile: { x: number; y: number }, battleId: string) {
@@ -2507,8 +2560,8 @@ export class OverworldScene extends Phaser.Scene {
     const hpBar = this.add.graphics().setDepth(20)
     const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
     nameText.setAlpha(0)
-    const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : data.stats.hp, atk: isBoss ? data.stats.atk * 2 : data.stats.atk }
-    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 320 : 200, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : data.expReward, goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
+    const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : data.stats.hp, atk: Math.max(1, Math.round((isBoss ? data.stats.atk * 2 : data.stats.atk) * 0.92)) }
+    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
     this.mapEnemies.push(enemy)
     this.updateEnemyBars(enemy)
     this.tweens.add({ targets: sprite, alpha: 0.95, scale: 1, duration: 400, ease: 'Back.easeOut' })
@@ -2805,11 +2858,11 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private checkRespawnTimer() {
-    if (this.respawnTimer || this.mapEnemies.some((enemy) => !enemy.isBoss && !enemy.dead)) return
-    this.respawnTimer = this.time.delayedCall(30000, () => {
+    if (this.respawnTimer || this.saveData.stage === 'homecoming') return
+    this.respawnTimer = this.time.delayedCall(ENEMY_RESPAWN_DELAY, () => {
       this.respawnTimer = undefined
       this.mapEnemies = this.mapEnemies.filter((enemy) => enemy.isBoss || !enemy.dead)
-      this.spawnRegularEnemiesForStage()
+      this.spawnRandomRegularEnemyForStage()
       this.showToast('New threats emerge...')
     })
   }
