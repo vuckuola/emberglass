@@ -113,6 +113,7 @@ export class OverworldScene extends Phaser.Scene {
   private touchMove: { x: number; y: number } | null = null
   private touchButtons: Phaser.GameObjects.GameObject[] = []
   private activeBanners: Phaser.GameObjects.GameObject[] = []
+  private routeClarityStates: Record<string, 'open' | 'closed'> = {}
 
   constructor() {
     super('OverworldScene')
@@ -132,6 +133,7 @@ export class OverworldScene extends Phaser.Scene {
     this.touchMove = null
     this.touchButtons = []
     this.activeBanners = []
+    this.routeClarityStates = {}
     this.objectiveText = undefined
     this.inventoryText = undefined
     this.promptText = undefined
@@ -296,6 +298,17 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private drawAreaPolish() {
+    this.drawZoneWash(4.3, 3.1, 310, 210, 0x2d7691, 'Luma Quay tideglass')
+    this.drawZoneWash(4.8, 11.2, 360, 210, 0x4f9b47, 'South Garden hearth')
+    this.drawZoneWash(15.8, 8.7, 260, 260, 0xd29b42, 'East Field wheatline')
+    this.drawZoneWash(17.2, 3.4, 190, 270, 0x315d9a, 'Moonwake blue lane')
+    this.drawZoneWash(10.7, 11.8, 210, 180, 0x256a3a, 'Verdant Archive canopy')
+    this.drawZoneWash(17.4, 12.0, 170, 150, 0x7567b7, 'Skywell violet climb')
+
+    this.drawRouteRibbon([{ x: 4, y: 1 }, { x: 4, y: 5 }, { x: 8, y: 5 }, { x: 11, y: 5 }, { x: 15, y: 8 }, { x: 17, y: 12 }], 0xd8ba83, 'main tan road')
+    this.drawRouteRibbon([{ x: 11, y: 5 }, { x: 14, y: 2 }, { x: 18, y: 6 }, { x: 18, y: 10 }], 0x72d7ff, 'blue shrine road')
+    this.drawRouteRibbon([{ x: 5, y: 12 }, { x: 8, y: 12 }, { x: 11, y: 12 }, { x: 15, y: 12 }], 0x6fe07e, 'green archive road')
+
     this.drawAreaLabel(4.5, 1.35, 'Luma Quay')
     this.drawAreaLabel(4.5, 10.55, 'South Garden / Home')
     this.drawAreaLabel(15.6, 8.15, 'East Field')
@@ -307,11 +320,57 @@ export class OverworldScene extends Phaser.Scene {
     this.drawFenceLine([{ x: 14, y: 9 }, { x: 14, y: 10 }, { x: 15, y: 10 }], 'Field fence')
     this.drawHedgeLine([{ x: 9, y: 3 }, { x: 11, y: 3 }, { x: 12, y: 3 }])
     this.drawHedgeLine([{ x: 8, y: 10 }, { x: 8, y: 11 }, { x: 8, y: 12 }])
+    this.drawRouteLandmark({ x: 16, y: 12 }, 'FIELD GATE', 0xffcf76)
+    this.drawRouteLandmark({ x: 18, y: 5 }, 'SHRINE ARCH', 0x8bd6ff)
+    this.drawRouteLandmark({ x: 10, y: 12 }, 'ARCHIVE STEPS', 0x78d66b)
+    this.drawRouteLandmark({ x: 17, y: 11 }, 'SKYWELL STAIRS', 0xbda7ff)
     this.drawGateBlocker(SHRINE_GATE_TILE, this.flag('shrine_gate_seen'), 'Shrine Gate', 0x8bd6ff)
     this.drawGateBlocker(FIELD_BATTLE_TILE, this.flag('field_battle_won'), 'Guardian Ward', 0xff5f5f)
     this.drawGateBlocker(ARCHIVE_TILE, this.saveData.home.workshop > 0, 'Overgrowth', 0x78d66b)
     this.drawGateBlocker(MID_BOSS_TILE, this.flag('thornheart_won'), 'Root Wall', 0x5bc779)
     this.drawGateBlocker(FINAL_BOSS_TILE, this.flag('skywell_opened'), 'Skywell Barrier', 0xbda7ff)
+  }
+
+  private drawZoneWash(tileX: number, tileY: number, width: number, height: number, color: number, label: string) {
+    this.add.ellipse(tileX * TILE_SIZE, tileY * TILE_SIZE, width, height, color, 0.16).setDepth(0.05).setName(`zone:${label}`)
+  }
+
+  private drawRouteRibbon(points: Array<{ x: number; y: number }>, color: number, label: string) {
+    const graphics = this.add.graphics().setDepth(0.35).setName(`route:${label}`)
+    graphics.lineStyle(28, 0x160f0b, 0.22)
+    graphics.beginPath()
+    points.forEach((point, index) => {
+      const x = this.tileCenter(point.x)
+      const y = this.tileCenter(point.y)
+      if (index === 0) {
+        graphics.moveTo(x, y)
+      } else {
+        graphics.lineTo(x, y)
+      }
+    })
+    graphics.strokePath()
+    graphics.lineStyle(20, color, 0.30)
+    graphics.beginPath()
+    points.forEach((point, index) => {
+      const x = this.tileCenter(point.x)
+      const y = this.tileCenter(point.y)
+      if (index === 0) {
+        graphics.moveTo(x, y)
+      } else {
+        graphics.lineTo(x, y)
+      }
+    })
+    graphics.strokePath()
+  }
+
+  private drawRouteLandmark(tile: { x: number; y: number }, label: string, color: number) {
+    const x = this.tileCenter(tile.x)
+    const y = this.tileCenter(tile.y)
+    this.add.rectangle(x, y + 12, 54, 8, 0x120d12, 0.45).setDepth(2.45).setName(`landmark:${label}:shadow`)
+    this.add.rectangle(x - 18, y - 1, 5, 32, color, 0.86).setDepth(2.5).setName(`landmark:${label}:post`)
+    this.add.rectangle(x + 18, y - 1, 5, 32, color, 0.86).setDepth(2.5)
+    this.add.rectangle(x, y - 16, 46, 6, color, 0.86).setDepth(2.55)
+    this.add.text(x, y + 24, label, { color: '#fff7d5', fontFamily: 'Arial, sans-serif', fontSize: '9px', backgroundColor: '#090b12bb', padding: { x: 3, y: 1 } }).setOrigin(0.5).setDepth(2.6).setName(`landmark:${label}`)
   }
 
   private drawAreaLabel(tileX: number, tileY: number, label: string) {
@@ -345,15 +404,20 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private drawGateBlocker(tile: { x: number; y: number }, isOpen: boolean, label: string, color: number) {
+    this.routeClarityStates[label] = isOpen ? 'open' : 'closed'
     const x = this.tileCenter(tile.x)
     const y = this.tileCenter(tile.y)
-    this.add.rectangle(x, y + 22, 48, 4, isOpen ? 0x9ff3ff : color, isOpen ? 0.32 : 0.74).setDepth(2.7)
+    this.add.rectangle(x, y + 23, isOpen ? 68 : 58, isOpen ? 8 : 6, isOpen ? 0x9ff3ff : color, isOpen ? 0.42 : 0.88).setDepth(2.7).setName(`route-state:${label}:${isOpen ? 'open' : 'closed'}`)
     if (!isOpen) {
-      this.add.rectangle(x, y, 38, 34, color, 0.2).setStrokeStyle(2, color, 0.85).setDepth(2.8)
-      this.add.text(x, y - 30, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(2.9)
+      this.add.rectangle(x, y + 4, 52, 44, 0x070914, 0.48).setStrokeStyle(4, color, 0.95).setDepth(2.8)
+      this.add.rectangle(x, y + 4, 34, 56, color, 0.18).setDepth(2.82)
+      this.add.line(x, y + 4, -22, -18, 22, 18, color, 0.95).setLineWidth(5).setDepth(2.86)
+      this.add.line(x, y + 4, 22, -18, -22, 18, color, 0.95).setLineWidth(5).setDepth(2.86)
+      this.add.text(x, y - 34, `${label} closed`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914dd', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(2.9)
       return
     }
-    this.add.text(x, y - 30, `${label} open`, { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#07091488', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(2.9)
+    this.add.rectangle(x, y + 2, 64, 30, 0x9ff3ff, 0.08).setStrokeStyle(2, 0x9ff3ff, 0.42).setDepth(2.78)
+    this.add.text(x, y - 32, `${label} open`, { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(2.9)
   }
 
   private createBackdrop() {

@@ -196,10 +196,19 @@ steps.push('Verified overworld menu open/close via M and Escape');
 const blockedField = await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
   scene.startFieldBattle();
-  return scene.children.list.filter((child) => typeof child.text === 'string').map((child) => child.text);
+  return {
+    texts: scene.children.list.filter((child) => typeof child.text === 'string').map((child) => child.text),
+    routeClarityStates: { ...scene.routeClarityStates },
+    visualNames: scene.children.list.map((child) => child.name).filter(Boolean),
+  };
 });
-assert(blockedField.some((text) => text.includes('Guardian Ward') && text.includes('Inspect the ruin marker')));
-steps.push('Verified blocked-route message names the visible Guardian Ward');
+assert(blockedField.texts.some((text) => text.includes('Guardian Ward') && text.includes('Inspect the ruin marker')));
+assert.equal(blockedField.routeClarityStates['Guardian Ward'], 'closed');
+assert.equal(blockedField.routeClarityStates['Shrine Gate'], 'closed');
+assert(blockedField.visualNames.includes('route-state:Guardian Ward:closed'));
+assert(blockedField.visualNames.includes('landmark:FIELD GATE'));
+assert(blockedField.visualNames.some((name) => name === 'route:blue shrine road'));
+steps.push('Verified blocked routes expose closed visual clarity states');
 
 const preChest = await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
@@ -448,6 +457,17 @@ assert.equal(phase2State.flags.skywell_opened, true);
 assert.equal(phase2State.currentObjective, 'Follow the now-open Skywell approach and confront the Cartographer\'s Lie.');
 const openedRouteTexts = await getSceneTexts();
 assert(openedRouteTexts.some((text) => text.includes('Skywell Barrier open')));
+const openedRouteVisuals = await evalScene(() => {
+  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
+  return {
+    routeClarityStates: { ...scene.routeClarityStates },
+    visualNames: scene.children.list.map((child) => child.name).filter(Boolean),
+  };
+});
+assert.equal(openedRouteVisuals.routeClarityStates['Skywell Barrier'], 'open');
+assert.equal(openedRouteVisuals.routeClarityStates.Overgrowth, 'open');
+assert(openedRouteVisuals.visualNames.includes('route-state:Skywell Barrier:open'));
+assert(openedRouteVisuals.visualNames.includes('landmark:SKYWELL STAIRS'));
 steps.push('Verified newly opened Skywell route state is visible on the map');
 
 await evalScene(() => {
