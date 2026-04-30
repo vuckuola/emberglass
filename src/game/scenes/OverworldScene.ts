@@ -99,13 +99,14 @@ type OverworldInitData = {
 
 type InventoryCounts = { potion: number; ether: number; emberShard: number }
 type MenuOverlay = { container: Phaser.GameObjects.Container }
+type MiniMapOverlay = { container: Phaser.GameObjects.Container; graphics: Phaser.GameObjects.Graphics; visible: boolean }
 
 export class OverworldScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private player?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle
   private playerShadow?: Phaser.GameObjects.Ellipse
   private petFollower?: Phaser.GameObjects.Arc | Phaser.GameObjects.Image | Phaser.GameObjects.Container
-  private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
+  private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
   private facing: Direction = 'down'
   private saveNoticeShown = false
@@ -117,6 +118,8 @@ export class OverworldScene extends Phaser.Scene {
   private promptText?: Phaser.GameObjects.Text
   private areaText?: Phaser.GameObjects.Text
   private menuOverlay?: MenuOverlay
+  private miniMap?: MiniMapOverlay
+  private helpOverlay?: Phaser.GameObjects.Container
   private toast?: Phaser.GameObjects.Text
   private touchMove: { x: number; y: number } | null = null
   private touchButtons: Phaser.GameObjects.GameObject[] = []
@@ -171,6 +174,8 @@ export class OverworldScene extends Phaser.Scene {
     this.promptText = undefined
     this.areaText = undefined
     this.menuOverlay = undefined
+    this.miniMap = undefined
+    this.helpOverlay = undefined
 
     const continuedSave = this.initData.continueGame ? SaveSystem.load(0) : null
     this.saveData = continuedSave ?? this.createDefaultSaveData()
@@ -197,10 +202,13 @@ export class OverworldScene extends Phaser.Scene {
       enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
       space: Phaser.Input.Keyboard.KeyCodes.SPACE,
       m: Phaser.Input.Keyboard.KeyCodes.M,
+      t: Phaser.Input.Keyboard.KeyCodes.T,
+      h: Phaser.Input.Keyboard.KeyCodes.H,
       escape: Phaser.Input.Keyboard.KeyCodes.ESC,
-    }) as Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
+    }) as Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 't' | 'h' | 'escape', Phaser.Input.Keyboard.Key>
 
     this.createHud()
+    this.createMiniMap()
     this.createTouchControls()
     this.refreshHud()
     this.cameras.main.fadeIn(420, 5, 6, 18)
@@ -263,6 +271,7 @@ export class OverworldScene extends Phaser.Scene {
     this.updatePetFollower(isMoving)
     this.updateMiraCompanion()
     this.updateMiraNpcFacing()
+    this.updateMiniMap()
     this.updateAreaPop()
     this.checkSavePoint()
     this.checkHomeBenefits()
@@ -271,6 +280,16 @@ export class OverworldScene extends Phaser.Scene {
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.m) || Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
       this.openMenu()
+      return
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.t)) {
+      this.toggleMiniMap()
+      return
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.h)) {
+      this.openHelpOverlay()
       return
     }
 
@@ -1169,6 +1188,10 @@ export class OverworldScene extends Phaser.Scene {
     audioManager.playSfx('scene_whoosh')
     this.showEventBanner('Guardian Field', 'The grass folds inward. Relics flare as the ward answers.')
     this.cameras.main.shake(180, 0.004)
+    this.cameras.main.flash(200, 255, 255, 255, false)
+    const line = this.add.rectangle(-80, this.scale.height / 2, 160, 5, 0xffffff, 0.95).setScrollFactor(0).setDepth(260)
+    const glint = this.add.rectangle(-80, this.scale.height / 2, 90, this.scale.height, 0xffffff, 0.08).setScrollFactor(0).setDepth(259)
+    this.tweens.add({ targets: [line, glint], x: this.scale.width + 80, duration: 520, ease: 'Cubic.easeInOut', onComplete: () => { line.destroy(); glint.destroy() } })
     this.time.delayedCall(760, () => {
       this.cameras.main.fadeOut(420, 0, 0, 0)
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
@@ -1671,14 +1694,24 @@ export class OverworldScene extends Phaser.Scene {
     const body = this.add.text(width / 2, height / 2 - 24, `Play time: ${playTime}\n✓ Shrine purified   ✓ Thornheart felled   ✓ Skywell restored\n${partyLevels}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', align: 'center', lineSpacing: 8, wordWrap: { width: 710 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
     const footer = this.add.text(width / 2, height / 2 + 83, 'Save at the Skywell to keep this clear file, or return to the title and press R to reset for another showcase run.', { color: '#ffdca8', fontFamily: 'Arial, sans-serif', fontSize: '15px', align: 'center', wordWrap: { width: 660 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
     this.tweens.add({ targets: glow, alpha: 0.25, scale: 1.04, yoyo: true, repeat: -1, duration: 1150, ease: 'Sine.easeInOut' })
-    this.tweens.add({ targets: [glow, panel, heading, body, footer], alpha: 0, delay: 7600, duration: 900, onComplete: () => { glow.destroy(); panel.destroy(); heading.destroy(); body.destroy(); footer.destroy() } })
+    this.tweens.add({ targets: [glow, panel, heading, body, footer], alpha: 0, delay: 7600, duration: 900, onComplete: () => { glow.destroy(); panel.destroy(); heading.destroy(); body.destroy(); footer.destroy(); this.showCreditsScroll() } })
+  }
+
+  private showCreditsScroll() {
+    const { width, height } = this.scale
+    const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0).setScrollFactor(0).setDepth(240)
+    const credits = this.add.text(width / 2, height + 80, 'Emberglass: Covenant of the Skywell\nA handcrafted JRPG experience\n\nGame Design & Development\nZai & Hermes\n\nArt\nProgrammatic Pixel Art (Pillow)\n\nMusic & SFX\nWeb Audio API\n\nThank you for playing.', { align: 'center', color: '#ffffff', fontFamily: 'Georgia, serif', fontSize: '25px', lineSpacing: 14 }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(241)
+    this.tweens.add({ targets: overlay, alpha: 0.86, duration: 900, ease: 'Sine.easeInOut' })
+    this.tweens.add({ targets: credits, y: -360, duration: 8000, ease: 'Linear', onComplete: () => {
+      this.tweens.add({ targets: [overlay, credits], alpha: 0, duration: 800, onComplete: () => this.scene.start('TitleScene') })
+    } })
   }
 
   private formatPlayTime(playTime: number) {
     const totalSeconds = Math.max(0, Math.floor(playTime || this.time.now / 1000))
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
   }
 
   private openShop() {
@@ -1759,16 +1792,7 @@ export class OverworldScene extends Phaser.Scene {
     const { width, height } = this.scale
     const container = this.add.container(0, 0).setScrollFactor(0).setDepth(200)
     const counts = this.getInventoryCounts()
-    const relicLines = this.saveData.party
-      .map((member) => {
-        const character = CHARACTERS[member.characterId]
-        const equipped = [member.equipment.weapon, member.equipment.charm, member.equipment.relic]
-          .filter(Boolean)
-          .map((itemId) => ITEMS_BY_ID[itemId ?? '']?.name)
-          .filter(Boolean)
-        return `${character?.name ?? member.characterId} Lv ${member.level}  HP ${member.currentHp}  MP ${member.currentMp}\n  ${equipped.length ? equipped.join(' • ') : 'No relics equipped'}`
-      })
-      .join('\n')
+    const playTime = this.formatPlayTime(this.saveData.playTime)
 
     const inventoryLines = [
       `Potion x${counts.potion}`,
@@ -1779,7 +1803,11 @@ export class OverworldScene extends Phaser.Scene {
         .map((entry) => `${ITEMS_BY_ID[entry.itemId]?.name ?? entry.itemId} x${entry.quantity}`),
     ]
 
-    container.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.72))
+    container.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.58))
+    container.add(this.add.rectangle(width / 2, 18, width, 36, 0x000000, 0.34))
+    container.add(this.add.rectangle(width / 2, height - 18, width, 36, 0x000000, 0.34))
+    container.add(this.add.rectangle(18, height / 2, 36, height, 0x000000, 0.34))
+    container.add(this.add.rectangle(width - 18, height / 2, 36, height, 0x000000, 0.34))
     const panel = this.add.rectangle(width / 2, height / 2, 700, 500, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.6)
     container.add(panel)
     container.add(this.add.rectangle(width / 2, height / 2 - 136, 640, 1, 0xd4a84b, 0.3))
@@ -1787,10 +1815,13 @@ export class OverworldScene extends Phaser.Scene {
     container.add(this.add.rectangle(width / 2, height / 2 + 160, 640, 1, 0xd4a84b, 0.3))
     container.add(this.add.text(width / 2 - 310, height / 2 - 220, '◈', { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '22px' }))
     container.add(this.add.text(width / 2 - 290, height / 2 - 220, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }))
-    container.add(this.add.text(width / 2 + 170, height / 2 - 216, `${this.saveData.gold}g`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '24px' }))
+    container.add(this.add.text(width / 2 + 112, height / 2 - 216, `${this.saveData.gold}g  •  ${playTime}`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '21px' }))
     container.add(this.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 610 } }))
-    container.add(this.add.text(width / 2 - 310, height / 2 - 86, `Status / Equipment\n${relicLines}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 5 }))
+    this.saveData.party.forEach((member, index) => this.addMenuPartyRow(container, width / 2 - 300 + index * 198, height / 2 - 74, member))
     container.add(this.add.text(width / 2 + 64, height / 2 - 86, `Inventory\n${inventoryLines.join('\n')}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 7 }))
+    const status = this.add.text(width / 2 - 74, height / 2 + 146, 'Status', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    status.on('pointerdown', () => this.openStatusScreen())
+    container.add(status)
     container.add(this.add.text(width / 2 - 310, height / 2 + 184, 'Controls: Move WASD/Arrows or touch pad • Interact Enter/Space/ACT • Menu M/Esc • Shop trades shards first, then sells potions.', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 620 } }))
     this.menuOverlay = { container }
   }
@@ -1800,6 +1831,103 @@ export class OverworldScene extends Phaser.Scene {
     this.menuOverlay = undefined
     this.busy = false
     audioManager.playSfx('ui_cancel')
+  }
+
+  private addMenuPartyRow(container: Phaser.GameObjects.Container, x: number, y: number, member: SaveData['party'][number]) {
+    const character = CHARACTERS[member.characterId]
+    if (!character) return
+    const stats = this.scaleCharacterStats(character, member.level)
+    const hpRatio = Phaser.Math.Clamp(member.currentHp / stats.hp, 0, 1)
+    container.add(this.add.text(x, y, `${character.name} Lv.${member.level}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '15px' }))
+    container.add(this.add.rectangle(x + 56, y + 28, 116, 8, 0x281018, 0.95).setOrigin(0.5))
+    container.add(this.add.rectangle(x - 2, y + 28, 112 * hpRatio, 6, 0x45e67a, 0.95).setOrigin(0, 0.5))
+    container.add(this.add.text(x, y + 40, `HP ${member.currentHp}/${stats.hp}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '12px' }))
+  }
+
+  private openStatusScreen() {
+    if (!this.menuOverlay) return
+    const { width, height } = this.scale
+    const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(215)
+    this.menuOverlay.container.add(overlay)
+    overlay.add(this.add.rectangle(width / 2, height / 2, 760, 500, 0x090d20, 0.94).setStrokeStyle(2, 0x8ab4f8, 0.72))
+    overlay.add(this.add.text(width / 2 - 340, height / 2 - 226, 'Party Status', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '27px' }))
+    this.saveData.party.forEach((member, index) => {
+      const character = CHARACTERS[member.characterId]
+      if (!character) return
+      const stats = this.scaleCharacterStats(character, member.level)
+      const x = width / 2 - 320
+      const y = height / 2 - 172 + index * 126
+      overlay.add(this.add.text(x, y, `${character.name} (Lv.${member.level})`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '19px' }))
+      this.addStatusBar(overlay, x, y + 36, 'HP', member.currentHp, stats.hp, 0x45e67a)
+      this.addStatusBar(overlay, x, y + 58, 'MP', member.currentMp, stats.mp, 0x6db7ff)
+      overlay.add(this.add.text(x + 220, y + 32, `ATK ${stats.atk}  DEF ${stats.def}  SPD ${stats.spd}  MAG ${stats.mag}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px' }))
+      const equipment = `Weapon: ${this.itemName(member.equipment.weapon)}   Charm: ${this.itemName(member.equipment.charm)}   Relic: ${this.itemName(member.equipment.relic)}`
+      overlay.add(this.add.text(x, y + 88, `${equipment}\nLevel progress: Showcase milestone ${member.level}/6`, { color: '#ffdca8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }))
+    })
+    const close = this.add.text(width / 2, height / 2 + 216, 'Close', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    close.on('pointerdown', () => overlay.destroy())
+    overlay.add(close)
+  }
+
+  private addStatusBar(container: Phaser.GameObjects.Container, x: number, y: number, label: string, current: number, max: number, color: number) {
+    container.add(this.add.text(x, y - 8, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px' }))
+    container.add(this.add.rectangle(x + 90, y, 134, 9, 0x12182d, 0.98).setOrigin(0.5))
+    container.add(this.add.rectangle(x + 23, y, 130 * Phaser.Math.Clamp(current / max, 0, 1), 7, color, 0.95).setOrigin(0, 0.5))
+    container.add(this.add.text(x + 164, y - 8, `${current}/${max}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '12px' }))
+  }
+
+  private itemName(itemId: string | null) {
+    return itemId ? ITEMS_BY_ID[itemId]?.name ?? itemId : 'None'
+  }
+
+  private createMiniMap() {
+    const container = this.add.container(this.scale.width - 180, 18).setScrollFactor(0).setDepth(120)
+    const graphics = this.add.graphics()
+    container.add(graphics)
+    this.miniMap = { container, graphics, visible: true }
+    this.updateMiniMap()
+  }
+
+  private toggleMiniMap() {
+    if (!this.miniMap) return
+    this.miniMap.visible = !this.miniMap.visible
+    this.miniMap.container.setVisible(this.miniMap.visible)
+    audioManager.playSfx('ui_blip')
+  }
+
+  private updateMiniMap() {
+    if (!this.miniMap || !this.miniMap.visible || !this.player) return
+    const graphics = this.miniMap.graphics
+    graphics.clear()
+    graphics.fillStyle(0x02030a, 0.72).fillRoundedRect(0, 0, 160, 80, 8)
+    for (let y = 0; y < 10; y += 1) {
+      for (let x = 0; x < MAP_WIDTH; x += 1) {
+        const tile = MAP_LAYOUT[y]?.[x] ?? 'G'
+        graphics.fillStyle(tile === 'W' || tile === 'B' ? 0x2d3142 : tile === 'P' ? 0xad8f66 : 0x3d8b37, 0.82).fillRect(8 + x * 4, 8 + y * 4, 3, 3)
+      }
+    }
+    const dot = (tile: { x: number; y: number }, color: number) => graphics.fillStyle(color, 1).fillCircle(9.5 + tile.x * 4, 9.5 + tile.y * 4, 2.2)
+    dot(SAVE_TILE, 0x6db7ff); dot(HOME_TILE, 0xffa43a); dot(GUIDE_TILE, 0x45e67a); dot(ELDER_TILE, 0xb48cff); dot(MERCHANT_TILE, 0xffd36e); dot(ALLY_TILE, 0x7df9ff)
+    const playerTile = this.worldToTile(this.player.x, this.player.y)
+    dot(playerTile, 0xffffff)
+    graphics.lineStyle(1, 0xd4a84b, 0.6).strokeRoundedRect(0.5, 0.5, 159, 79, 8)
+    graphics.fillStyle(0xffffff, 0.86).fillRect(94, 18, 50, 1)
+  }
+
+  private openHelpOverlay() {
+    if (this.helpOverlay) return
+    this.busy = true
+    const { width, height } = this.scale
+    const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(230)
+    overlay.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.68))
+    overlay.add(this.add.rectangle(width / 2, height / 2, 520, 310, 0x10162d, 0.96).setStrokeStyle(2, 0x8ab4f8, 0.75))
+    overlay.add(this.add.text(width / 2, height / 2 - 116, 'Keyboard Shortcuts', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }).setOrigin(0.5))
+    overlay.add(this.add.text(width / 2 - 190, height / 2 - 68, 'WASD / Arrows — Move\nEnter / Space — Interact\nM — Menu\nT — Toggle Map\nH — Help (this screen)\nEsc — Close', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', lineSpacing: 10 }))
+    overlay.add(this.add.text(width / 2, height / 2 + 114, 'Press any key or click to close', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px' }).setOrigin(0.5))
+    const close = () => { overlay.destroy(); this.helpOverlay = undefined; this.busy = false }
+    this.helpOverlay = overlay
+    this.input.keyboard?.once('keydown', close)
+    this.input.once('pointerdown', close)
   }
 
   private dismissBanners() {

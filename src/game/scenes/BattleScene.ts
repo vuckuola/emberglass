@@ -123,7 +123,7 @@ export class BattleScene extends Phaser.Scene {
     this.createEntityViews()
     this.createBottomPanel(width, height)
     this.createTimeline()
-    this.cameras.main.fadeIn(360, 5, 6, 18)
+    this.cameras.main.fadeIn(500, 5, 6, 18)
 
     this.messageText = this.add
       .text(width / 2, height / 2, '', {
@@ -813,7 +813,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (this.combat.state === 'defeat') {
-      this.showMessage('Defeat...\nYou regroup at the last safe point.', 1800, () => {
+      this.showDefeatScreen(() => {
         const hasSave = Boolean(SaveSystem.load(0))
         this.scene.start('OverworldScene', hasSave ? { continueGame: true, battleResult: { victory: false } } : { newGame: true, battleResult: { victory: false } })
       })
@@ -956,25 +956,48 @@ export class BattleScene extends Phaser.Scene {
     const glow = this.add.rectangle(width / 2, height / 2 - 108, 642, bossReward ? 170 : 150, bossReward ? 0xffd36e : 0x9ff3ff, 0.08).setDepth(97.8)
     const panel = this.add.rectangle(width / 2, height / 2 - 108, 600, bossReward ? 142 : 124, 0x181020, 0.96).setDepth(98).setStrokeStyle(2, bossReward ? 0xffd36e : 0x9ff3ff, 0.86)
     const title = this.add.text(width / 2, height / 2 - 150, bossReward ? 'COVENANT FULFILLED' : 'VICTORY', { color: bossReward ? '#ffd36e' : '#fff1a8', fontFamily: 'Georgia, serif', fontSize: bossReward ? '24px' : '28px' }).setOrigin(0.5).setDepth(99)
-    const rewards = this.add.text(width / 2, height / 2 - 108, `EXP +${exp}    Gold +${gold}\n${rewardLine}`, { align: 'center', color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 540 } }).setOrigin(0.5).setDepth(99)
+    const rewards = this.add.text(width / 2, height / 2 - 112, `EXP +0    Gold +0\n${rewardLine}`, { align: 'center', color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 540 } }).setOrigin(0.5).setDepth(99)
+    const prompt = this.add.text(width / 2, height / 2 - 48, 'Continue', { color: '#ffd36e', fontFamily: 'Arial, sans-serif', fontSize: '15px' }).setOrigin(0.5).setDepth(99)
     panel.setScale(0.92)
     title.setAlpha(0)
     rewards.setAlpha(0)
+    prompt.setAlpha(0)
     this.tweens.add({ targets: panel, scale: 1, duration: 260, ease: 'Back.easeOut' })
-    this.tweens.add({ targets: [title, rewards], alpha: 1, delay: 120, duration: 240 })
-    for (let i = 0; i < 5; i++) {
-      const sparkle = this.add.circle(width / 2 + Phaser.Math.Between(-180, 180), height / 2 - 108, Phaser.Math.Between(2, 4), 0xffd36e, 0.8).setDepth(99.5)
+    this.tweens.add({ targets: [title, rewards, prompt], alpha: 1, delay: 120, duration: 240 })
+    this.tweens.add({ targets: prompt, alpha: 0.45, yoyo: true, repeat: -1, duration: 760, ease: 'Sine.easeInOut' })
+    this.tweens.addCounter({ from: 0, to: 1, duration: 1500, ease: 'Sine.easeOut', onUpdate: (tween) => {
+      const value = tween.getValue()
+      rewards.setText(`EXP +${Math.floor(exp * value)}    Gold +${Math.floor(gold * value)}\n${rewardLine}`)
+    } })
+    for (let i = 0; i < 10; i++) {
+      const angle = (Math.PI * 2 * i) / 10
+      const sparkle = this.add.circle(width / 2, height / 2 - 108, Phaser.Math.Between(2, 4), 0xffd36e, 0.86).setDepth(99.5)
       this.tweens.add({
         targets: sparkle,
-        y: sparkle.y - Phaser.Math.Between(30, 60),
+        x: sparkle.x + Math.cos(angle) * Phaser.Math.Between(70, 145),
+        y: sparkle.y + Math.sin(angle) * Phaser.Math.Between(38, 78),
         alpha: 0,
-        duration: Phaser.Math.Between(600, 1200),
-        delay: 200 + i * 80,
+        duration: Phaser.Math.Between(720, 1180),
+        delay: 80 + i * 24,
         ease: 'Sine.easeOut',
         onComplete: () => sparkle.destroy(),
       })
     }
-    this.tweens.add({ targets: [glow, panel, title, rewards], alpha: 0, delay: bossReward ? 3150 : 2450, duration: 360, onComplete: () => { glow.destroy(); panel.destroy(); title.destroy(); rewards.destroy() } })
+    this.tweens.add({ targets: [glow, panel, title, rewards, prompt], alpha: 0, delay: bossReward ? 3150 : 2450, duration: 360, onComplete: () => { glow.destroy(); panel.destroy(); title.destroy(); rewards.destroy(); prompt.destroy() } })
+  }
+
+  private showDefeatScreen(onComplete: () => void) {
+    const { width, height } = this.scale
+    this.messageText?.setText('')
+    const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x260006, 0).setDepth(120)
+    const title = this.add.text(width / 2, height / 2 - 32, 'Defeat', { color: '#ff5050', fontFamily: 'Georgia, serif', fontSize: '58px' }).setOrigin(0.5).setDepth(121).setAlpha(0)
+    const subtitle = this.add.text(width / 2, height / 2 + 34, 'The embers dim... but not forever.', { color: '#ffd0d0', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setDepth(121).setAlpha(0)
+    this.tweens.add({ targets: overlay, alpha: 0.82, duration: 1100, ease: 'Sine.easeIn' })
+    this.tweens.add({ targets: [title, subtitle], alpha: 1, y: '-=8', duration: 850, ease: 'Sine.easeOut' })
+    this.time.delayedCall(2000, () => {
+      this.cameras.main.fadeOut(520, 5, 0, 6)
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, onComplete)
+    })
   }
 
   private addDeathEffect(view: EntityView) {
