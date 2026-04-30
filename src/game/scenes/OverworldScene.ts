@@ -19,19 +19,19 @@ const TILESET_CROPS = {
 } as const
 const MAP_LAYOUT = [
   'WWWWWWWWWWWWWWWWWWWW',
-  'WGGGPPPPPGGGGGPPPGGW',
-  'WFGGPPPPPGGGGBPPPGGW',
-  'WFGGPPPPPGPGBBPPGGGW',
-  'WGGGPPPPPGGGBBPPGGGW',
-  'WGGGGPGGGGGGGGPGGGGW',
-  'WWWWBBBBBGGGGGGPGGPW',
-  'WGGGGGGGGGGGGGGGGGPW',
-  'WFFGGGGGGGGGGGGPPGPW',
-  'WGGGGGPGGGGGGGGBPGPW',
-  'WGGGGGPGGPPGGGGBBGPW',
-  'WGGGGGPGGPPGGGGGPGPW',
-  'WGGGGFGGGPPGGGGGFGPW',
-  'WGGGGGGGGPPGGGGGGGGW',
+  'WGGGPPPPPPPGGGGGGGGW',
+  'WFGGPPPPPPPPPPPPGGGW',
+  'WFGGPGGGGGPGBBBPGGGW',
+  'WGGGPGGGGGPGGGGPGGGW',
+  'WGGGPPPPPPPPGGGPGGGW',
+  'WWWBBBBBGGGGGGGPGGPW',
+  'WGGGGGPGGGGGGGGPGGPW',
+  'WFFGGGPPPPPPPPPPPGPW',
+  'WGGGGGPGGGGGGGBGPGPW',
+  'WGGGGGPGGPPPGGGBPGPW',
+  'WGGGGGPGGPGPGGGGPGPW',
+  'WGGGFPPPPPGPPPPPPGPW',
+  'WGGGGGGGGPGGGGGGGGGW',
   'WWWWWWWWWWWWWWWWWWWW',
 ] as const
 const SAVE_TILE = { x: 5, y: 5 }
@@ -66,16 +66,16 @@ const OBJECTIVES = {
   inspectMarker: 'Inspect the ruin marker in the eastern field.',
   winBattle: 'Defeat the field guardian beyond the marker.',
   returnToElder: 'Return to Elder Maelin with the ember shard.',
-  visitShrineGate: 'Follow the opened east path to the Moonwake Shrine gate.',
+  visitShrineGate: 'Follow the blue-lit east lane to the Moonwake Shrine gate.',
   attuneShrineFont: 'Enter Moonwake Shrine and attune the pilgrim font.',
   faceShrineGuardian: 'Break the inner seal and face the Moonwake Guardian.',
-  recruitMira: 'Find Mira at the broken bridge and ask her to join you.',
+  recruitMira: 'Follow the broken-bridge lane and recruit Mira.',
   rescuePet: 'Follow the bell-chime south and rescue the emberfox kit.',
   restoreHome: 'Restore the old quay house into a safe base.',
-  enterArchive: 'Cross into the Verdant Archive with Mira and Pip.',
+  enterArchive: 'Use the cleared archive lane with Mira and Pip.',
   faceMidBoss: 'Cut through the archive roots and defeat Thornheart.',
   openSkywell: 'Use the restored home workshop to focus the Skywell Lens.',
-  finalBoss: 'Climb to the Skywell and confront the Cartographer\'s Lie.',
+  finalBoss: 'Follow the now-open Skywell approach and confront the Cartographer\'s Lie.',
   complete: 'Return home. Luma Quay has a future again.',
 } as const
 
@@ -250,6 +250,7 @@ export class OverworldScene extends Phaser.Scene {
         const x = tileX * TILE_SIZE
         const y = tileY * TILE_SIZE
         const terrain = layoutTile === 'P' ? 'path' : layoutTile === '.' ? 'water' : isWall ? 'wall' : 'grass'
+        const areaTint = tileX <= 6 && tileY >= 9 ? 0x4f9342 : tileX >= 14 && tileY <= 8 ? 0x355c75 : tileX >= 12 ? 0x526b3c : tileY >= 10 ? 0x3f7c43 : 0x3d8b37
 
         if (useTileset) {
           const crop = TILESET_CROPS[terrain]
@@ -261,7 +262,7 @@ export class OverworldScene extends Phaser.Scene {
         } else if (isWall) {
           this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, layoutTile === 'B' ? 0x6b5140 : 0x5a4a3a).setOrigin(0).setDepth(1)
         } else {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x3d8b37).setOrigin(0).setDepth(0)
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, areaTint).setOrigin(0).setDepth(0)
         }
 
         if (layoutTile === 'P') {
@@ -290,6 +291,69 @@ export class OverworldScene extends Phaser.Scene {
         }
       }
     }
+
+    this.drawAreaPolish()
+  }
+
+  private drawAreaPolish() {
+    this.drawAreaLabel(4.5, 1.35, 'Luma Quay')
+    this.drawAreaLabel(4.5, 10.55, 'South Garden / Home')
+    this.drawAreaLabel(15.6, 8.15, 'East Field')
+    this.drawAreaLabel(16.5, 2.05, 'Moonwake Shrine')
+    this.drawAreaLabel(10.8, 11.05, 'Verdant Archive')
+    this.drawAreaLabel(17.05, 12.65, 'Skywell Approach')
+
+    this.drawFenceLine([{ x: 4, y: 6 }, { x: 5, y: 6 }, { x: 6, y: 6 }, { x: 7, y: 6 }], 'Fallen bridge to Mira')
+    this.drawFenceLine([{ x: 14, y: 9 }, { x: 14, y: 10 }, { x: 15, y: 10 }], 'Field fence')
+    this.drawHedgeLine([{ x: 9, y: 3 }, { x: 11, y: 3 }, { x: 12, y: 3 }])
+    this.drawHedgeLine([{ x: 8, y: 10 }, { x: 8, y: 11 }, { x: 8, y: 12 }])
+    this.drawGateBlocker(SHRINE_GATE_TILE, this.flag('shrine_gate_seen'), 'Shrine Gate', 0x8bd6ff)
+    this.drawGateBlocker(FIELD_BATTLE_TILE, this.flag('field_battle_won'), 'Guardian Ward', 0xff5f5f)
+    this.drawGateBlocker(ARCHIVE_TILE, this.saveData.home.workshop > 0, 'Overgrowth', 0x78d66b)
+    this.drawGateBlocker(MID_BOSS_TILE, this.flag('thornheart_won'), 'Root Wall', 0x5bc779)
+    this.drawGateBlocker(FINAL_BOSS_TILE, this.flag('skywell_opened'), 'Skywell Barrier', 0xbda7ff)
+  }
+
+  private drawAreaLabel(tileX: number, tileY: number, label: string) {
+    const x = tileX * TILE_SIZE
+    const y = tileY * TILE_SIZE
+    const panel = this.add.rectangle(x, y, label.length * 7.6 + 22, 22, 0x061019, 0.58).setDepth(2.2)
+    panel.setStrokeStyle(1, 0xf3e1b0, 0.24)
+    this.add.text(x, y, label, { color: '#f3e1b0', fontFamily: 'Georgia, serif', fontSize: '12px' }).setOrigin(0.5).setDepth(2.3)
+  }
+
+  private drawFenceLine(tiles: Array<{ x: number; y: number }>, label: string) {
+    tiles.forEach((tile) => {
+      const x = this.tileCenter(tile.x)
+      const y = this.tileCenter(tile.y)
+      this.add.rectangle(x, y + 3, 42, 8, 0x8b623c, 0.96).setDepth(2.4)
+      this.add.rectangle(x - 13, y, 5, 22, 0x5a3b24, 0.96).setDepth(2.5)
+      this.add.rectangle(x + 13, y, 5, 22, 0x5a3b24, 0.96).setDepth(2.5)
+    })
+    const first = tiles[0]
+    this.add.text(this.tileCenter(first.x), this.tileCenter(first.y) - 23, label, { color: '#ffdca8', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(2.6)
+  }
+
+  private drawHedgeLine(tiles: Array<{ x: number; y: number }>) {
+    tiles.forEach((tile) => {
+      const x = this.tileCenter(tile.x)
+      const y = this.tileCenter(tile.y)
+      this.add.ellipse(x, y + 4, 42, 30, 0x1f5b2f, 0.94).setDepth(2.2)
+      this.add.circle(x - 10, y - 4, 10, 0x2f7c3a, 0.9).setDepth(2.3)
+      this.add.circle(x + 8, y - 5, 11, 0x3b9146, 0.9).setDepth(2.3)
+    })
+  }
+
+  private drawGateBlocker(tile: { x: number; y: number }, isOpen: boolean, label: string, color: number) {
+    const x = this.tileCenter(tile.x)
+    const y = this.tileCenter(tile.y)
+    this.add.rectangle(x, y + 22, 48, 4, isOpen ? 0x9ff3ff : color, isOpen ? 0.32 : 0.74).setDepth(2.7)
+    if (!isOpen) {
+      this.add.rectangle(x, y, 38, 34, color, 0.2).setStrokeStyle(2, color, 0.85).setDepth(2.8)
+      this.add.text(x, y - 30, label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(2.9)
+      return
+    }
+    this.add.text(x, y - 30, `${label} open`, { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#07091488', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(2.9)
   }
 
   private createBackdrop() {
@@ -350,7 +414,7 @@ export class OverworldScene extends Phaser.Scene {
     this.drawNpc(ELDER_TILE, GENERATED_ASSETS.npcs.elderMaelin, 'Elder')
     this.drawNpc(MERCHANT_TILE, GENERATED_ASSETS.npcs.peddler, 'Peddler')
     this.drawMarker(MARKER_TILE, GENERATED_ASSETS.objects.ruinMarker, 'Ruin Marker')
-    this.drawMarker(SIGNPOST_TILE, GENERATED_ASSETS.objects.signpost, 'Signpost')
+    this.drawMarker(SIGNPOST_TILE, GENERATED_ASSETS.objects.signpost, 'Route Sign')
     this.drawMarker(TIDE_BELL_TILE, GENERATED_ASSETS.objects.tideBell, 'Tide Bell')
     this.drawMarker(MURAL_TILE, GENERATED_ASSETS.objects.mural, 'Glass Mural')
     this.drawMarker(WATCH_LANTERN_TILE, GENERATED_ASSETS.objects.watchLantern, 'Watch Lantern')
@@ -567,7 +631,7 @@ export class OverworldScene extends Phaser.Scene {
     } else if (isAt(MARKER_TILE)) {
       this.inspectMarker()
     } else if (isAt(SIGNPOST_TILE)) {
-      this.showToast(this.flag('slice_complete') ? 'Signpost: Moonwake Shrine east. Luma Quay west. Home behind you.' : 'Signpost: Elder north, marker east, skywell west. Fresh paint hides old scorch marks.')
+      this.showToast(this.flag('slice_complete') ? 'Route Sign: Moonwake east is open; Archive south waits for home repairs; Skywell opens after Thornheart.' : 'Route Sign: Elder north, marker east, broken bridge south, sealed Skywell beyond the archive.')
       this.addEvent('read_signpost')
     } else if (isAt(TIDE_BELL_TILE)) {
       this.ringTideBell()
@@ -659,7 +723,7 @@ export class OverworldScene extends Phaser.Scene {
       audioManager.playSfx('equipment_gain')
       this.time.delayedCall(260, () => audioManager.playResonancePulse('event'))
       this.showEventBanner('Moonwake Route Opened', 'A green seam of light unlocks the old shrine gate east of the field.')
-      this.showToast('Elder Maelin: Take the Warding Ember. Io equips it. Then follow the gate that woke for you.')
+      this.showToast('Elder Maelin: Take the Warding Ember. The blue Moonwake lane east is open now.')
     } else {
       this.showToast(this.flag('shrine_gate_seen') ? 'Elder Maelin: Beyond Moonwake lies the first true answer. Tonight, Luma Quay will keep your names.' : 'Elder Maelin: The shrine gate is awake. Let it see the ember you carry.')
     }
@@ -694,7 +758,7 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     if (!this.flag('field_marker_seen')) {
-      this.showToast('A red ward blocks the field. Inspect the marker first.')
+      this.showToast('Guardian Ward: red stakes block the East Field battle lane. Inspect the ruin marker beside it first.')
       return
     }
     if (this.flag('field_battle_won')) {
@@ -912,14 +976,16 @@ export class OverworldScene extends Phaser.Scene {
       this.setObjective(OBJECTIVES.enterArchive)
       audioManager.playSfx('equipment_gain')
       this.showEventBanner('Home Restored: Map Workshop', 'The workbench lens focuses the route beyond the Verdant Archive.')
-      this.showToast('Workshop upgrade: Skywell Lens crafted. The archive path can now be mapped safely.')
+      this.drawGateBlocker(ARCHIVE_TILE, true, 'Overgrowth', 0x78d66b)
+      this.showToast('Workshop upgrade: Skywell Lens crafted. The Verdant Archive lane is now visibly open.')
     } else if (this.flag('thornheart_won') && !this.flag('skywell_opened')) {
       this.setFlag('skywell_opened')
       this.setObjective(OBJECTIVES.finalBoss)
       audioManager.playResonancePulse('objective')
       audioManager.playSfx('scene_whoosh')
       this.showEventBanner('Skywell Lens Focused', 'Back at the workshop, Mira and Nara align the lens with Thornheart\'s crown and reveal the final climb.')
-      this.showToast('The home workshop burns bright. A true route to the Skywell Rift is finally locked in.')
+      this.drawGateBlocker(FINAL_BOSS_TILE, true, 'Skywell Barrier', 0xbda7ff)
+      this.showToast('Skywell Barrier open: the home workshop locks a true route to the rift.')
     } else {
       this.showToast(this.flag('final_boss_won') ? 'Home: Warm hearth, living garden, open maps. Everyone has somewhere to return.' : 'Home: The hearth, garden, and map workshop are ready. Cross into the archive.')
     }
@@ -928,7 +994,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private enterArchive() {
     if (this.saveData.home.workshop === 0) {
-      this.showToast('Verdant Archive: The paths keep rearranging. Restore the home workshop and focus a Skywell Lens first.')
+      this.showToast('Archive Overgrowth: vines cover this lane. Recruit Mira, rescue Pip, and restore the home workshop to mark a safe path.')
       return
     }
     if (!this.flag('archive_entered')) {
@@ -949,7 +1015,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private inspectShrineGate() {
     if (!this.flag('slice_complete')) {
-      this.showToast('Moonwake Gate: Moon-silver roots lock the path. The elder may know the vow.')
+      this.showToast('Shrine Gate: moon-silver bars block this lane. Return after the field guardian and Elder Maelin open the vow.')
       return
     }
     if (!this.flag('shrine_gate_seen')) {
@@ -960,6 +1026,7 @@ export class OverworldScene extends Phaser.Scene {
       this.cameras.main.shake(220, 0.004)
       this.showAreaBanner('Moonwake Shrine Approach', 'Beyond the gate, old glass ruins breathe with patient light.')
       this.showEventBanner('Moonwake Shrine', 'A narrow pilgrim route opens. The inner seal waits beyond the font.')
+      this.drawGateBlocker(SHRINE_GATE_TILE, true, 'Shrine Gate', 0x8bd6ff)
     } else {
       this.showToast(this.flag('shrine_guardian_won') ? 'Moonwake Gate: The guardian vow is fulfilled. The shrine keeps a road of silver fire.' : 'Moonwake Gate: The approach descends to a font and an inner seal. Prepare before touching it.')
     }
@@ -969,7 +1036,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private attuneShrineFont() {
     if (!this.flag('shrine_gate_seen')) {
-      this.showToast('The shrine approach is sealed. Inspect the Moonwake Gate first.')
+      this.showToast('Shrine Lane: the visible gate is still closed. Inspect the Moonwake Gate at the top of the lane first.')
       return
     }
     if (!this.flag('shrine_font_attuned')) {
@@ -998,7 +1065,7 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     if (!this.flag('shrine_gate_seen')) {
-      this.showToast('The inner shrine is unreachable until the Moonwake Gate opens.')
+      this.showToast('Inner Seal: the shrine lane is blocked by the gate above. Open the Moonwake Gate first.')
       return
     }
     if (!this.flag('shrine_font_attuned')) {
@@ -1034,15 +1101,15 @@ export class OverworldScene extends Phaser.Scene {
 
   private startMidBossBattle() {
     if (!this.flag('archive_entered')) {
-      this.showToast('Thornheart roots are hidden beyond the Verdant Archive entrance.')
+      this.showToast('Root Wall: the Verdant Archive lane is still overgrown. Open the archive entrance first.')
       return
     }
     if (!this.flag('archive_skirmish_won')) {
-      this.showToast('The archive paths are still crowded. Clear the first ambush at the archive marker.')
+      this.showToast('Root Wall: lesser roots still crowd the archive lane. Clear the archive ambush at the entrance marker first.')
       return
     }
     if (this.flag('thornheart_won')) {
-      this.showToast('Thornheart\'s stump has become a stair of green glass pointing toward the Skywell.')
+      this.showToast('Root Wall open: Thornheart\'s stump has become a stair of green glass pointing toward the Skywell.')
       return
     }
     this.startBattle(MID_BOSS_BATTLE_ID, ['thornheart'], true, 'Thornheart Wakes', 'The archive root-crown rises to defend its stolen maps.')
@@ -1050,11 +1117,11 @@ export class OverworldScene extends Phaser.Scene {
 
   private startFinalBossBattle() {
     if (!this.flag('thornheart_won')) {
-      this.showToast('Skywell Rift: The route refuses to hold while Thornheart still grips the archive maps.')
+      this.showToast('Skywell Barrier: the upper approach is sealed by Thornheart roots. Clear the Verdant Archive first.')
       return
     }
     if (!this.flag('skywell_opened')) {
-      this.showToast('Skywell Rift: The lens is still unfocused. Return to the restored home workshop and lock the true route first.')
+      this.showToast('Skywell Barrier: the path glows but will not hold. Use the restored home workshop to focus the Skywell Lens.')
       return
     }
     if (this.flag('final_boss_won')) {

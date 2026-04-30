@@ -179,7 +179,7 @@ steps.push('Verified initial overworld objective and save data');
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
-  scene.player.setPosition(9 * 48 + 24, 9 * 48 + 24);
+  scene.player.setPosition(2 * 48 + 24, 2 * 48 + 24);
   scene.facing = 'down';
   scene.interact();
 });
@@ -198,8 +198,8 @@ const blockedField = await evalScene(() => {
   scene.startFieldBattle();
   return scene.children.list.filter((child) => typeof child.text === 'string').map((child) => child.text);
 });
-assert(blockedField.some((text) => text.includes('Inspect the marker first')));
-steps.push('Verified field battle is blocked before marker progression');
+assert(blockedField.some((text) => text.includes('Guardian Ward') && text.includes('Inspect the ruin marker')));
+steps.push('Verified blocked-route message names the visible Guardian Ward');
 
 const preChest = await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
@@ -379,7 +379,7 @@ steps.push('Verified boss victory return flow');
 
 const finalState = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
 assert.equal(finalState.flags.shrine_guardian_won, true);
-assert.equal(finalState.currentObjective, 'Find Mira at the broken bridge and ask her to join you.');
+assert.equal(finalState.currentObjective, 'Follow the broken-bridge lane and recruit Mira.');
 assert.equal(finalState.party[0].equipment.relic, 'skywell_shard');
 assert(finalState.party.every((member) => member.level >= 4));
 steps.push('Verified shrine completion now opens the longer Phase 2 route');
@@ -437,7 +437,7 @@ await evalScene(() => {
   scene.startFinalBossBattle();
 });
 let postGateTexts = await getSceneTexts();
-assert(postGateTexts.some((text) => text.includes('lens is still unfocused')));
+assert(postGateTexts.some((text) => text.includes('Skywell Barrier') && text.includes('restored home workshop')));
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
@@ -445,7 +445,10 @@ await evalScene(() => {
 });
 phase2State = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
 assert.equal(phase2State.flags.skywell_opened, true);
-assert.equal(phase2State.currentObjective, 'Climb to the Skywell and confront the Cartographer\'s Lie.');
+assert.equal(phase2State.currentObjective, 'Follow the now-open Skywell approach and confront the Cartographer\'s Lie.');
+const openedRouteTexts = await getSceneTexts();
+assert(openedRouteTexts.some((text) => text.includes('Skywell Barrier open')));
+steps.push('Verified newly opened Skywell route state is visible on the map');
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
