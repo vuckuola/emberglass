@@ -205,10 +205,11 @@ const blockedField = await evalScene(() => {
 assert(blockedField.texts.some((text) => text.includes('Guardian Ward') && text.includes('Inspect the ruin marker')));
 assert.equal(blockedField.routeClarityStates['Guardian Ward'], 'closed');
 assert.equal(blockedField.routeClarityStates['Shrine Gate'], 'closed');
-assert(blockedField.visualNames.includes('route-state:Guardian Ward:closed'));
+assert(blockedField.visualNames.some((name) => name.startsWith('route-state:Guardian Ward:closed')));
+assert(!blockedField.visualNames.some((name) => name.startsWith('route-state:Guardian Ward:open')));
 assert(blockedField.visualNames.includes('landmark:FIELD GATE'));
 assert(blockedField.visualNames.some((name) => name === 'route:blue shrine road'));
-steps.push('Verified blocked routes expose closed visual clarity states');
+steps.push('Verified blocked routes expose only closed visual clarity states');
 
 const preChest = await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
@@ -466,9 +467,12 @@ const openedRouteVisuals = await evalScene(() => {
 });
 assert.equal(openedRouteVisuals.routeClarityStates['Skywell Barrier'], 'open');
 assert.equal(openedRouteVisuals.routeClarityStates.Overgrowth, 'open');
-assert(openedRouteVisuals.visualNames.includes('route-state:Skywell Barrier:open'));
+assert(openedRouteVisuals.visualNames.some((name) => name.startsWith('route-state:Skywell Barrier:open')));
+assert(!openedRouteVisuals.visualNames.some((name) => name.startsWith('route-state:Skywell Barrier:closed')));
+assert(openedRouteVisuals.visualNames.some((name) => name.startsWith('route-state:Overgrowth:open')));
+assert(!openedRouteVisuals.visualNames.some((name) => name.startsWith('route-state:Overgrowth:closed')));
 assert(openedRouteVisuals.visualNames.includes('landmark:SKYWELL STAIRS'));
-steps.push('Verified newly opened Skywell route state is visible on the map');
+steps.push('Verified newly opened Skywell route state replaces the closed blockers on the map');
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];

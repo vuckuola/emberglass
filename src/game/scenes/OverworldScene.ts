@@ -405,19 +405,28 @@ export class OverworldScene extends Phaser.Scene {
 
   private drawGateBlocker(tile: { x: number; y: number }, isOpen: boolean, label: string, color: number) {
     this.routeClarityStates[label] = isOpen ? 'open' : 'closed'
+    this.clearRouteStateVisuals(label)
     const x = this.tileCenter(tile.x)
     const y = this.tileCenter(tile.y)
-    this.add.rectangle(x, y + 23, isOpen ? 68 : 58, isOpen ? 8 : 6, isOpen ? 0x9ff3ff : color, isOpen ? 0.42 : 0.88).setDepth(2.7).setName(`route-state:${label}:${isOpen ? 'open' : 'closed'}`)
+    const statePrefix = `route-state:${label}`
+    this.add.rectangle(x, y + 23, isOpen ? 68 : 58, isOpen ? 8 : 6, isOpen ? 0x9ff3ff : color, isOpen ? 0.42 : 0.88).setDepth(2.7).setName(`${statePrefix}:${isOpen ? 'open' : 'closed'}:base`)
     if (!isOpen) {
-      this.add.rectangle(x, y + 4, 52, 44, 0x070914, 0.48).setStrokeStyle(4, color, 0.95).setDepth(2.8)
-      this.add.rectangle(x, y + 4, 34, 56, color, 0.18).setDepth(2.82)
-      this.add.line(x, y + 4, -22, -18, 22, 18, color, 0.95).setLineWidth(5).setDepth(2.86)
-      this.add.line(x, y + 4, 22, -18, -22, 18, color, 0.95).setLineWidth(5).setDepth(2.86)
-      this.add.text(x, y - 34, `${label} closed`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914dd', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(2.9)
+      this.add.rectangle(x, y + 4, 52, 44, 0x070914, 0.48).setStrokeStyle(4, color, 0.95).setDepth(2.8).setName(`${statePrefix}:closed:frame`)
+      this.add.rectangle(x, y + 4, 34, 56, color, 0.18).setDepth(2.82).setName(`${statePrefix}:closed:fill`)
+      this.add.line(x, y + 4, -22, -18, 22, 18, color, 0.95).setLineWidth(5).setDepth(2.86).setName(`${statePrefix}:closed:cross-a`)
+      this.add.line(x, y + 4, 22, -18, -22, 18, color, 0.95).setLineWidth(5).setDepth(2.86).setName(`${statePrefix}:closed:cross-b`)
+      this.add.text(x, y - 34, `${label} closed`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914dd', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(2.9).setName(`${statePrefix}:closed:label`)
       return
     }
-    this.add.rectangle(x, y + 2, 64, 30, 0x9ff3ff, 0.08).setStrokeStyle(2, 0x9ff3ff, 0.42).setDepth(2.78)
-    this.add.text(x, y - 32, `${label} open`, { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(2.9)
+    this.add.rectangle(x, y + 2, 64, 30, 0x9ff3ff, 0.08).setStrokeStyle(2, 0x9ff3ff, 0.42).setDepth(2.78).setName(`${statePrefix}:open:frame`)
+    this.add.text(x, y - 32, `${label} open`, { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 4, y: 2 } }).setOrigin(0.5).setDepth(2.9).setName(`${statePrefix}:open:label`)
+  }
+
+  private clearRouteStateVisuals(label: string) {
+    const prefix = `route-state:${label}:`
+    this.children.list
+      .filter((child) => typeof child.name === 'string' && child.name.startsWith(prefix))
+      .forEach((child) => child.destroy())
   }
 
   private createBackdrop() {
