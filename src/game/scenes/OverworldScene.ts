@@ -757,13 +757,11 @@ export class OverworldScene extends Phaser.Scene {
     if (result.battleId === ARCHIVE_SKIRMISH_ID) {
       this.setFlag('archive_skirmish_won')
       this.setObjective(OBJECTIVES.faceMidBoss)
-      this.addInventory('glass_lens', 1)
     }
     if (result.battleId === MID_BOSS_BATTLE_ID) {
       this.setFlag('thornheart_won')
       this.saveData.stage = 'skywell'
       this.setObjective(OBJECTIVES.openSkywell)
-      this.addInventory('root_crown', 1)
       this.saveData.pet.forageReady = this.saveData.pet.unlocked
       this.saveData.party.forEach((member) => { member.level = Math.max(member.level, 5) })
     }
@@ -772,7 +770,6 @@ export class OverworldScene extends Phaser.Scene {
       this.setFlag('demo_complete')
       this.saveData.stage = 'homecoming'
       this.setObjective(OBJECTIVES.complete)
-      this.addInventory('true_map', 1)
       this.saveData.pet.forageReady = this.saveData.pet.unlocked
       this.saveData.party.forEach((member) => { member.level = Math.max(member.level, 6) })
     }
@@ -851,10 +848,15 @@ export class OverworldScene extends Phaser.Scene {
       this.setFlag('mira_recruited')
       this.saveData.stage = 'archive'
       this.addInventory('mira_bridge_key', 1)
+      this.addInventory('mana_potion', 1)
       this.setObjective(OBJECTIVES.rescuePet)
+      this.saveData.party.forEach((member) => {
+        member.currentHp += 12
+        member.currentMp += 6
+      })
       audioManager.playSfx('objective_update')
-      this.showEventBanner('Mira Joins the Route', 'Mira, the bridge scout who stayed behind to mark safe stones, chooses to walk beside Nara.')
-      this.showToast('Mira: I know every broken plank east of here. No more heroic wandering alone, agreed?')
+      this.showEventBanner('Mira Joins the Route', 'Mira, the bridge scout who stayed behind to mark safe stones, now travels with the party and steadies every route ahead.')
+      this.showToast('Mira: I know every broken plank east of here. Scout bonus unlocked: party restored a little HP/MP and archive routes will stay marked.')
     } else {
       this.showToast('Mira: Bridge knots are set. Let us get the little bell-chime out of that thicket, then rebuild your house.')
     }
@@ -911,6 +913,13 @@ export class OverworldScene extends Phaser.Scene {
       audioManager.playSfx('equipment_gain')
       this.showEventBanner('Home Restored: Map Workshop', 'The workbench lens focuses the route beyond the Verdant Archive.')
       this.showToast('Workshop upgrade: Skywell Lens crafted. The archive path can now be mapped safely.')
+    } else if (this.flag('thornheart_won') && !this.flag('skywell_opened')) {
+      this.setFlag('skywell_opened')
+      this.setObjective(OBJECTIVES.finalBoss)
+      audioManager.playResonancePulse('objective')
+      audioManager.playSfx('scene_whoosh')
+      this.showEventBanner('Skywell Lens Focused', 'Back at the workshop, Mira and Nara align the lens with Thornheart\'s crown and reveal the final climb.')
+      this.showToast('The home workshop burns bright. A true route to the Skywell Rift is finally locked in.')
     } else {
       this.showToast(this.flag('final_boss_won') ? 'Home: Warm hearth, living garden, open maps. Everyone has somewhere to return.' : 'Home: The hearth, garden, and map workshop are ready. Cross into the archive.')
     }
@@ -1042,6 +1051,10 @@ export class OverworldScene extends Phaser.Scene {
   private startFinalBossBattle() {
     if (!this.flag('thornheart_won')) {
       this.showToast('Skywell Rift: The route refuses to hold while Thornheart still grips the archive maps.')
+      return
+    }
+    if (!this.flag('skywell_opened')) {
+      this.showToast('Skywell Rift: The lens is still unfocused. Return to the restored home workshop and lock the true route first.')
       return
     }
     if (this.flag('final_boss_won')) {

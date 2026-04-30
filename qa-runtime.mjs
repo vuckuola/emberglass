@@ -397,6 +397,8 @@ let phase2State = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBER
 assert.equal(phase2State.flags.mira_recruited, true);
 assert.equal(phase2State.pet.unlocked, true);
 assert.deepEqual(phase2State.home, { warmth: 1, garden: 1, workshop: 1 });
+assert(phase2State.party.every((member) => member.currentHp > 0 && member.currentMp > 0));
+assert(phase2State.inventory.some((entry) => entry.itemId === 'mira_bridge_key' && entry.quantity === 1));
 assert.equal(phase2State.flags.archive_entered, true);
 assert.equal(phase2State.currentObjective, 'Cut through the archive roots and defeat Thornheart.');
 steps.push('Verified recruitable ally beat, pet unlock, home restoration loop, and archive entry');
@@ -429,6 +431,21 @@ assert.equal(phase2State.flags.thornheart_won, true);
 assert.equal(phase2State.pet.forageReady, true);
 assert.equal(phase2State.currentObjective, 'Use the restored home workshop to focus the Skywell Lens.');
 steps.push('Verified archive encounter and mid-boss progression rewards');
+
+await evalScene(() => {
+  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
+  scene.startFinalBossBattle();
+});
+let postGateTexts = await getSceneTexts();
+assert(postGateTexts.some((text) => text.includes('lens is still unfocused')));
+
+await evalScene(() => {
+  const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
+  scene.restoreHome();
+});
+phase2State = await evalScene(() => JSON.parse(JSON.stringify(window.__EMBERGLASS_GAME__.scene.getScenes(true)[0].saveData)));
+assert.equal(phase2State.flags.skywell_opened, true);
+assert.equal(phase2State.currentObjective, 'Climb to the Skywell and confront the Cartographer\'s Lie.');
 
 await evalScene(() => {
   const scene = window.__EMBERGLASS_GAME__.scene.getScenes(true)[0];
