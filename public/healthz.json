@@ -1,0 +1,11 @@
+{
+  "app": "emberglass",
+  "deployment": "static-github-pages",
+  "probe": "static-artifact-availability",
+  "status": "ok",
+  "checks": [
+    "built-artifact-present",
+    "generated-assets-manifest-present",
+    "runtime-qa-required-before-publish"
+  ]
+}

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['src/**', 'public/**', 'index.html', 'package.json', 'vite.config.ts']
+    paths: ['src/**', 'public/**', 'scripts/**', 'index.html', 'package.json', 'vite.config.ts']
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - run: npm run launch:check
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

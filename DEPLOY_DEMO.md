@@ -6,12 +6,12 @@ This repo is ready to hand off as a static public-demo build. The production art
 
 ```bash
 npm ci
-npm run ship:check
+npm run ship:strict
 npm run demo:preview
 ```
 
 - `npm ci` installs from the locked dependency set for repeatable presenter machines or CI.
-- `npm run ship:check` runs typecheck, production build, and runtime QA in the same path used for final validation.
+- `npm run ship:strict` runs typecheck, production build, runtime QA, and the static artifact integrity checks in one final path.
 - `npm run demo:preview` rebuilds and serves `dist/` with Vite preview on `0.0.0.0` for local, LAN, or capture-machine review.
 
 ## Static Hosting
@@ -22,8 +22,10 @@ Recommended host settings:
 
 - Serve `index.html` at the site root.
 - Preserve the generated `assets/` paths exactly as emitted by Vite.
+- Publish `healthz.json` alongside the build so smoke checks can hit `/healthz.json`.
 - Enable gzip or brotli compression if the host supports it.
 - Use HTTPS for public links so browser input/audio behavior matches modern presentation environments.
+- Run `npm run launch:check` locally before publishing.
 
 ## Presenter Handoff Bundle
 
@@ -34,3 +36,5 @@ When sharing a zip or folder with another presenter, include:
 - `SHOWCASE_NOTES.md` for live presenter checklist details.
 - `QA_RUNTIME_REPORT.md` for covered runtime flows.
 - This `DEPLOY_DEMO.md` file for preview/deploy commands.
+- `docs/launch/STATIC_LAUNCH_AUDIT.md` for applicability of backend-style launch risks.
+- `docs/launch/INCIDENT_RUNBOOK.md` for static-demo incident handling.

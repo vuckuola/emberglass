@@ -12,7 +12,10 @@
     "demo:serve": "vite preview --host 0.0.0.0",
     "demo:preview": "npm run build && vite preview --host 0.0.0.0",
     "demo:check": "npm run typecheck && npm run build && node qa-runtime.mjs",
-    "ship:check": "npm run demo:check"
+    "launch:artifact-check": "node scripts/check-launch-readiness.mjs",
+    "launch:check": "npm run build && npm run launch:artifact-check",
+    "ship:check": "npm run demo:check",
+    "ship:strict": "npm run demo:check && npm run launch:artifact-check"
   },
   "dependencies": {
     "phaser": "^3.80.1",

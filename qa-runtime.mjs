@@ -87,6 +87,9 @@ async function evalScene(fn, arg) {
 await page.goto('http://127.0.0.1:4173/emberglass/', { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas', { timeout: 10000 });
 await page.waitForFunction(() => !!window.__EMBERGLASS_GAME__, undefined, { timeout: 10000 });
+const diagnosticsReady = await page.evaluate(() => Boolean(window.__EMBERGLASS_DIAGNOSTICS__?.list && window.__EMBERGLASS_DIAGNOSTICS__?.clear));
+assert.equal(diagnosticsReady, true);
+steps.push('Verified runtime diagnostics API is installed before gameplay boot');
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForFunction(() => !!window.__EMBERGLASS_GAME__, undefined, { timeout: 10000 });

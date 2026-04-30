@@ -31,11 +31,11 @@ For a clean handoff or presenter machine, use the locked install and final ship 
 
 ```bash
 npm ci
-npm run ship:check
+npm run ship:strict
 npm run demo:preview
 ```
 
-Deploy the generated `dist/` folder to any static host. See `DEPLOY_DEMO.md` for the complete preview/deploy handoff checklist.
+Deploy the generated `dist/` folder to any static host. See `DEPLOY_DEMO.md` for the complete preview/deploy handoff checklist and `docs/launch/` for launch hardening/runbook notes.
 
 ## Demo Controls
 
@@ -60,10 +60,11 @@ Deploy the generated `dist/` folder to any static host. See `DEPLOY_DEMO.md` for
 - Present in Chrome or Edge at desktop/tablet size when possible.
 - Keep `SHOWCASE_NOTES.md` open for the route, limitations, and handoff notes.
 - Keep `DEPLOY_DEMO.md` available for static-host and presenter-machine setup.
+- Keep `docs/launch/STATIC_LAUNCH_AUDIT.md` and `docs/launch/INCIDENT_RUNBOOK.md` available for launch-risk and incident handling context.
 - Run the full validation command before publishing or zipping a build.
 
 ```bash
-npm run ship:check
+npm run ship:strict
 ```
 
 ## Known Limitations
