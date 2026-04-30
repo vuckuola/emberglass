@@ -5,4 +5,24 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: '/emberglass/',
   plugins: [react()],
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'phaser',
+              test: /node_modules[\\/]phaser[\\/]/,
+              priority: 2,
+            },
+            {
+              name: 'game',
+              test: /src[\\/]game[\\/]/,
+              priority: 1,
+            },
+          ],
+        },
+      },
+    },
+  },
 })

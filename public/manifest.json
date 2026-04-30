@@ -1,0 +1,13 @@
+{
+  "name": "Emberglass: Covenant of the Skywell",
+  "short_name": "Emberglass",
+  "description": "A browser action RPG — three heroes, one skywell, and the ember that binds them.",
+  "start_url": "/emberglass/",
+  "display": "standalone",
+  "background_color": "#08090f",
+  "theme_color": "#ff7a3d",
+  "orientation": "landscape",
+  "icons": [
+    { "src": "/emberglass/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

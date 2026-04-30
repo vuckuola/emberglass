@@ -30,6 +30,15 @@ type MutableSaveData = SaveData & Record<string, unknown>
 export class SaveSystem {
   static readonly SAVE_VERSION = 1
   static readonly MAX_SLOTS = 3
+  private static readonly DB_NAME = 'emberglass-saves'
+  private static readonly STORE_NAME = 'saves'
+  private static db: Promise<IDBDatabase> | null = null
+  private static cache = new Map<number, SaveData>()
+  private static warmupStarted = false
+
+  static {
+    this.warmCache()
+  }
 
   static save(slot: number, data: SaveData): boolean {
     try {
@@ -40,7 +49,9 @@ export class SaveSystem {
       data.version = this.SAVE_VERSION
       data.slot = slot
       data.timestamp = Date.now()
+      this.cache.set(slot, structuredClone(data))
       localStorage.setItem(`emberglass_save_${slot}`, JSON.stringify(data))
+      void this.saveToDB(slot, data)
       return true
     } catch {
       return false
@@ -53,13 +64,30 @@ export class SaveSystem {
         return null
       }
 
+      const cached = this.cache.get(slot)
+      if (cached) {
+        return structuredClone(cached)
+      }
+
       const raw = localStorage.getItem(`emberglass_save_${slot}`)
       if (!raw) {
+        void this.getFromDB(slot).then((data) => {
+          if (data) {
+            this.cache.set(slot, data)
+            localStorage.setItem(`emberglass_save_${slot}`, JSON.stringify(data))
+          }
+        })
         return null
       }
 
       const data = JSON.parse(raw)
-      return SaveSystem.validate(data) ? data : null
+      if (!SaveSystem.validate(data)) {
+        return null
+      }
+
+      this.cache.set(slot, structuredClone(data))
+      void this.saveToDB(slot, data)
+      return data
     } catch {
       return null
     }
@@ -120,8 +148,30 @@ export class SaveSystem {
 
   static delete(slot: number): void {
     if (this.isValidSlot(slot)) {
+      this.cache.delete(slot)
       localStorage.removeItem(`emberglass_save_${slot}`)
+      void this.deleteSave(slot)
     }
+  }
+
+  static async deleteSave(slot: number): Promise<void> {
+    if (!this.isValidSlot(slot)) {
+      return
+    }
+
+    this.cache.delete(slot)
+    localStorage.removeItem(`emberglass_save_${slot}`)
+
+    try {
+      const database = await this.openDB()
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(this.STORE_NAME, 'readwrite')
+        const request = transaction.objectStore(this.STORE_NAME).delete(slot)
+
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(request.error)
+      })
+    } catch {}
   }
 
   static getSlotInfo(
@@ -142,6 +192,112 @@ export class SaveSystem {
 
   static autoSave(data: SaveData): boolean {
     return this.save(0, data)
+  }
+
+  private static warmCache(): void {
+    if (this.warmupStarted) {
+      return
+    }
+
+    this.warmupStarted = true
+
+    for (let slot = 0; slot <= this.MAX_SLOTS; slot += 1) {
+      try {
+        const raw = localStorage.getItem(`emberglass_save_${slot}`)
+        if (!raw) {
+          continue
+        }
+
+        const data = JSON.parse(raw)
+        if (this.validate(data)) {
+          this.cache.set(slot, structuredClone(data))
+          void this.saveToDB(slot, data)
+        }
+      } catch {}
+    }
+
+    for (let slot = 0; slot <= this.MAX_SLOTS; slot += 1) {
+      void this.getFromDB(slot).then((data) => {
+        if (!data) {
+          return
+        }
+
+        const cached = this.cache.get(slot)
+        if (!cached || data.timestamp >= cached.timestamp) {
+          this.cache.set(slot, data)
+          localStorage.setItem(`emberglass_save_${slot}`, JSON.stringify(data))
+        }
+      })
+    }
+  }
+
+  private static openDB(): Promise<IDBDatabase> {
+    if (this.db) {
+      return this.db
+    }
+
+    this.db = new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) {
+        reject(new Error('IndexedDB is not available'))
+        return
+      }
+
+      const request = indexedDB.open(this.DB_NAME, 1)
+
+      request.onupgradeneeded = () => {
+        const database = request.result
+        if (!database.objectStoreNames.contains(this.STORE_NAME)) {
+          database.createObjectStore(this.STORE_NAME)
+        }
+      }
+
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+
+    return this.db
+  }
+
+  private static async getFromDB(slot: number): Promise<SaveData | null> {
+    if (!this.isValidSlot(slot)) {
+      return null
+    }
+
+    try {
+      const database = await this.openDB()
+      const data = await new Promise<unknown>((resolve, reject) => {
+        const transaction = database.transaction(this.STORE_NAME, 'readonly')
+        const request = transaction.objectStore(this.STORE_NAME).get(slot)
+
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+
+      if (!this.validate(data)) {
+        return null
+      }
+
+      return structuredClone(data)
+    } catch {
+      return null
+    }
+  }
+
+  private static async saveToDB(slot: number, data: SaveData): Promise<void> {
+    if (!this.isValidSlot(slot)) {
+      return
+    }
+
+    try {
+      const database = await this.openDB()
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(this.STORE_NAME, 'readwrite')
+        const request = transaction.objectStore(this.STORE_NAME).put(structuredClone(data), slot)
+
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(request.error)
+      })
+    } catch {}
   }
 
   private static isValidSlot(slot: number): boolean {

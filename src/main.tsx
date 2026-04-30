@@ -15,3 +15,9 @@ createRoot(document.getElementById('root')!).render(
 requestAnimationFrame(() => {
   void import('./game/startGame').then(({ startGame }) => startGame('game-container'))
 })
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/emberglass/sw.js')
+  })
+}
