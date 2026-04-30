@@ -71,6 +71,13 @@ const PET_TILE = { x: 12, y: 20 }
 const ARCHIVE_TILE = { x: 20, y: 18 }
 const MID_BOSS_TILE = { x: 20, y: 23 }
 const FINAL_BOSS_TILE = { x: 36, y: 28 }
+const TREASURE_CHESTS = [
+  { id: 'quay_supply_chest', x: 8, y: 3 },
+  { id: 'field_cache_chest', x: 18, y: 11 },
+  { id: 'shrine_gold_chest', x: 31, y: 4 },
+  { id: 'archive_relic_chest', x: 16, y: 22 },
+  { id: 'skywell_hidden_chest', x: 34, y: 27 },
+] as const
 const FIELD_BATTLE_ID = 'field_marker_battle'
 const SHRINE_BOSS_BATTLE_ID = 'moonwake_guardian_battle'
 const ARCHIVE_SKIRMISH_ID = 'archive_skirmish_battle'
@@ -143,6 +150,8 @@ type MapEnemy = {
 type InventoryCounts = { potion: number; ether: number; emberShard: number }
 type MenuOverlay = { container: Phaser.GameObjects.Container }
 type MiniMapOverlay = { container: Phaser.GameObjects.Container; graphics: Phaser.GameObjects.Graphics; visible: boolean }
+type BossHud = { container: Phaser.GameObjects.Container; bar: Phaser.GameObjects.Graphics; nameText: Phaser.GameObjects.Text }
+type TreasureChest = { id: string; tile: { x: number; y: number }; base: Phaser.GameObjects.Rectangle; lid: Phaser.GameObjects.Rectangle; trim: Phaser.GameObjects.Rectangle; opened: boolean }
 type GroundLoot = {
   x: number
   y: number
@@ -192,12 +201,15 @@ export class OverworldScene extends Phaser.Scene {
   private playerHpBarBg?: Phaser.GameObjects.Graphics
   private playerHpBar?: Phaser.GameObjects.Graphics
   private playerMpBar?: Phaser.GameObjects.Graphics
+  private playerXpBar?: Phaser.GameObjects.Graphics
+  private bossHud?: BossHud
   private playerInvulnerableUntil = 0
   private dashUntil = 0
   private nextDashAt = 0
   private nextPlayerAttackAt = 0
   private killCount = 0
   private groundLoot: GroundLoot[] = []
+  private treasureChests: TreasureChest[] = []
   private respawnTimer?: Phaser.Time.TimerEvent
   private skillBar?: Phaser.GameObjects.Container
   private skillCooldownGraphics: Phaser.GameObjects.Graphics[] = []
@@ -214,6 +226,7 @@ export class OverworldScene extends Phaser.Scene {
   private homeWarmthUsedThisVisit = false
   private homeGardenUsedThisVisit = false
   private lastForageTime = 0
+  private pipIdleAngle = 0
 
   constructor() {
     super('OverworldScene')
@@ -261,6 +274,9 @@ export class OverworldScene extends Phaser.Scene {
     this.skillTexts = []
     this.skillBar = undefined
     this.killCounterText = undefined
+    this.playerXpBar = undefined
+    this.bossHud = undefined
+    this.treasureChests = []
     this.levelText = undefined
     this.shieldArc = undefined
     this.pipBobTween = undefined
@@ -396,12 +412,12 @@ export class OverworldScene extends Phaser.Scene {
     this.updatePlayerBars()
     this.updateInteractionPrompt()
 
-    if (Phaser.Input.Keyboard.JustDown(this.keys.m) || Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
       this.openMenu()
       return
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.keys.t)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.m) || Phaser.Input.Keyboard.JustDown(this.keys.t)) {
       this.toggleMiniMap()
       return
     }
@@ -437,11 +453,11 @@ export class OverworldScene extends Phaser.Scene {
       for (let tileX = 0; tileX < MAP_WIDTH; tileX += 1) {
         const layoutTile = MAP_LAYOUT[tileY][tileX]
         const isShrineGate = tileX === SHRINE_GATE_TILE.x && tileY === SHRINE_GATE_TILE.y && !this.flag('shrine_gate_seen')
-        const isWall = layoutTile === 'W' || layoutTile === 'B' || layoutTile === 'R'
+        const isWall = layoutTile === 'W'
         const blocksTravel = isWall && !isShrineGate
         const x = tileX * TILE_SIZE
         const y = tileY * TILE_SIZE
-        const terrain = layoutTile === 'P' ? 'path' : layoutTile === 'B' ? 'water' : isWall ? 'wall' : 'grass'
+        const terrain = layoutTile === 'P' ? 'path' : layoutTile === 'B' ? 'water' : layoutTile === 'R' ? 'path' : isWall ? 'wall' : 'grass'
         const areaTint = tileX <= 6 && tileY >= 9 ? 0x4f9342 : tileX >= 14 && tileY <= 8 ? 0x355c75 : tileX >= 12 ? 0x526b3c : tileY >= 10 ? 0x3f7c43 : 0x3d8b37
 
         if (useTileset) {
@@ -451,8 +467,10 @@ export class OverworldScene extends Phaser.Scene {
           this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0xc4a882).setOrigin(0).setDepth(0)
         } else if (layoutTile === 'B') {
           this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x357ec7).setOrigin(0).setDepth(0)
+        } else if (layoutTile === 'R') {
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x68635d).setOrigin(0).setDepth(0)
         } else if (isWall) {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, layoutTile === 'B' ? 0x356c91 : layoutTile === 'R' ? 0x68635d : 0x5a4a3a).setOrigin(0).setDepth(1)
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x5a4a3a).setOrigin(0).setDepth(1)
         } else {
           this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, areaTint).setOrigin(0).setDepth(0)
         }
@@ -757,13 +775,21 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private drawChest() {
-    const isOpen = this.saveData.openedChests.includes(CHEST_ID)
-    this.add.ellipse(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y) + 14, 34, 12, 0x101014, 0.28).setDepth(3.5)
-    if (hasTexture(this, GENERATED_ASSETS.objects.chest)) {
-      this.add.image(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), GENERATED_ASSETS.objects.chest).setScale(0.6).setAlpha(isOpen ? 0.45 : 1).setDepth(4)
-      return
-    }
-    this.add.rectangle(this.tileCenter(CHEST_TILE.x), this.tileCenter(CHEST_TILE.y), 32, 26, isOpen ? 0x403520 : 0x8a5a21).setStrokeStyle(3, 0xf0c040, 0.8).setDepth(4)
+    TREASURE_CHESTS.forEach((chest) => this.drawTreasureChest(chest.id, chest.x, chest.y))
+  }
+
+  private drawTreasureChest(id: string, tileX: number, tileY: number) {
+    const x = this.tileCenter(tileX)
+    const y = this.tileCenter(tileY)
+    const opened = this.saveData.openedChests.includes(id) || this.flag(`chest_${id}`)
+    this.add.ellipse(x, y + 14, 34, 12, 0x101014, 0.28).setDepth(3.5)
+    const base = this.add.rectangle(x, y + 5, 34, 18, opened ? 0x49351e : 0x8a5a21, opened ? 0.62 : 0.95).setStrokeStyle(2, 0xf0c040, 0.82).setDepth(4)
+    const lid = this.add.rectangle(x, y - 8, 34, 12, opened ? 0x3e2c19 : 0x7a451a, opened ? 0.5 : 0.95).setStrokeStyle(2, 0xffd166, 0.86).setDepth(4.1)
+    const trim = this.add.rectangle(x, y + 2, 5, 26, 0xf0c040, opened ? 0.45 : 0.9).setDepth(4.2)
+    this.add.rectangle(x - 11, y - 8, 5, 5, 0xffe08a, opened ? 0.35 : 0.76).setDepth(4.3)
+    this.add.rectangle(x + 11, y - 8, 5, 5, 0xffe08a, opened ? 0.35 : 0.76).setDepth(4.3)
+    if (opened) lid.y -= 7
+    this.treasureChests.push({ id, tile: { x: tileX, y: tileY }, base, lid, trim, opened })
   }
 
   private drawNpc(tile: { x: number; y: number }, assetKey: string, label: string) {
@@ -859,10 +885,9 @@ export class OverworldScene extends Phaser.Scene {
       return
     }
     const pip = this.add.container(x, y).setDepth(10.5).setName('companion:pip')
-    pip.add(this.add.circle(0, 0, 10, 0xffa43a, 0.95).setStrokeStyle(2, 0xfff1a8, 0.7))
-    pip.add(this.add.triangle(-6, -9, 0, 8, 5, -4, -5, -4, 0xff7a22, 0.95).setStrokeStyle(1, 0xfff1a8, 0.55))
-    pip.add(this.add.triangle(6, -9, 0, 8, 5, -4, -5, -4, 0xff7a22, 0.95).setStrokeStyle(1, 0xfff1a8, 0.55))
-    pip.add(this.add.circle(0, 2, 4, 0xfff4df, 0.95))
+    pip.add(this.add.circle(0, 0, 12, 0xf2d16b, 0.2))
+    pip.add(this.add.circle(0, 0, 6, 0xf2d16b, 0.95).setStrokeStyle(2, 0xfff1a8, 0.72))
+    pip.add(this.add.circle(-2, -2, 2, 0xfff4df, 0.92))
     this.petFollower = pip
     this.pipBobTween = this.tweens.add({ targets: pip, y: y - 7, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' })
   }
@@ -871,9 +896,12 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.petFollower || !this.player) {
       return
     }
-    const side = this.facing === 'left' ? 34 : this.facing === 'right' ? -34 : -28
-    this.petFollower.x += (this.player.x + side - this.petFollower.x) * 0.08
-    this.petFollower.y += (this.player.y + 18 - this.petFollower.y) * 0.08
+    this.pipIdleAngle += isMoving ? 0.025 : 0.055
+    const orbitX = isMoving ? 0 : Math.cos(this.pipIdleAngle) * 28
+    const orbitY = isMoving ? 0 : Math.sin(this.pipIdleAngle) * 12
+    const side = this.facing === 'left' ? 26 : this.facing === 'right' ? -26 : -20
+    this.petFollower.x += (this.player.x + side + orbitX - this.petFollower.x) * 0.075
+    this.petFollower.y += (this.player.y + 18 + orbitY - this.petFollower.y) * 0.075
     if (this.pipBobTween) {
       this.pipBobTween.setTimeScale(isMoving ? 1.45 : 1)
     }
@@ -1023,6 +1051,7 @@ export class OverworldScene extends Phaser.Scene {
     this.playerHpBarBg = this.add.graphics().setDepth(22)
     this.playerHpBar = this.add.graphics().setDepth(23)
     this.playerMpBar = this.add.graphics().setDepth(23)
+    this.playerXpBar = this.add.graphics().setScrollFactor(0).setDepth(91)
   }
 
   private createTouchControls() {
@@ -1173,8 +1202,9 @@ export class OverworldScene extends Phaser.Scene {
     const playerTile = this.player ? this.worldToTile(this.player.x, this.player.y) : null
     const isAt = (target: { x: number; y: number }) => this.matchesTile(tile, target) || this.matchesTile(playerTile, target)
 
-    if (isAt(CHEST_TILE)) {
-      this.openChest()
+    const chest = TREASURE_CHESTS.find((entry) => isAt(entry))
+    if (chest) {
+      this.openChest(chest.id)
     } else if (isAt(GUIDE_TILE)) {
       this.talkGuide()
     } else if (isAt(ELDER_TILE)) {
@@ -1216,23 +1246,51 @@ export class OverworldScene extends Phaser.Scene {
     }
   }
 
-  private openChest() {
-    if (this.saveData.openedChests.includes(CHEST_ID)) {
+  private openChest(chestId = CHEST_ID) {
+    if (this.saveData.openedChests.includes(chestId) || this.flag(`chest_${chestId}`)) {
       audioManager.playSfx('ui_cancel')
-      this.showToast('The supply chest is empty.')
+      this.showToast('The treasure chest is empty.')
       return
     }
-    this.saveData.openedChests.push(CHEST_ID)
-    this.addInventory('health_potion', 2)
-    this.addInventory('mana_potion', 1)
-    this.addInventory('wind_charm', 1)
-    this.saveData.party[0].equipment.charm = 'wind_charm'
+    this.saveData.openedChests.push(chestId)
+    this.setFlag(`chest_${chestId}`)
+    const reward = this.rollChestReward(chestId)
+    if (reward.gold > 0) this.saveData.gold += reward.gold
+    reward.items.forEach((item) => this.addInventory(item.itemId, item.quantity))
+    if (reward.equipCharm) this.saveData.party[0].equipment.charm = reward.equipCharm
     audioManager.playSfx('chest_open')
+    this.animateChestOpen(chestId)
     this.time.delayedCall(230, () => audioManager.playSfx('equipment_gain'))
-    this.showToast('Supply chest: Potion x2, Ether x1, Wind Charm equipped to Nara')
+    this.showToast(`Treasure chest: ${reward.label}`)
     this.persist()
     if (this.objectiveText && this.inventoryText) {
       this.refreshHud()
+    }
+  }
+
+  private rollChestReward(chestId: string): { gold: number; items: Array<{ itemId: string; quantity: number }>; equipCharm?: string; label: string } {
+    if (chestId === CHEST_ID) return { gold: 0, items: [{ itemId: 'health_potion', quantity: 2 }, { itemId: 'mana_potion', quantity: 1 }, { itemId: 'wind_charm', quantity: 1 }], equipCharm: 'wind_charm', label: 'Potion x2, Ether x1, Wind Charm equipped' }
+    const rolls = [
+      { gold: 90, items: [] as Array<{ itemId: string; quantity: number }>, label: '90 gold' },
+      { gold: 0, items: [{ itemId: 'health_potion', quantity: 2 }], label: 'Potion x2' },
+      { gold: 0, items: [{ itemId: 'mana_potion', quantity: 1 }], label: 'Ether x1' },
+      { gold: 30, items: [{ itemId: 'wind_charm', quantity: 1 }], equipCharm: 'wind_charm', label: '30 gold and Wind Charm' },
+    ]
+    return rolls[Phaser.Math.Between(0, rolls.length - 1)]
+  }
+
+  private animateChestOpen(chestId: string) {
+    const chest = this.treasureChests.find((entry) => entry.id === chestId)
+    if (!chest) return
+    chest.opened = true
+    chest.base.setFillStyle(0x49351e, 0.62)
+    chest.trim.setAlpha(0.45)
+    this.tweens.add({ targets: chest.lid, y: chest.lid.y - 9, alpha: 0.55, duration: 180, ease: 'Back.easeOut' })
+    const x = this.tileCenter(chest.tile.x)
+    const y = this.tileCenter(chest.tile.y)
+    for (let index = 0; index < 8; index += 1) {
+      const sparkle = this.add.circle(x, y - 10, 2, 0xfff1a8, 0.95).setDepth(24)
+      this.tweens.add({ targets: sparkle, x: x + Phaser.Math.Between(-24, 24), y: y - Phaser.Math.Between(18, 42), alpha: 0, duration: 560, onComplete: () => sparkle.destroy() })
     }
   }
 
@@ -1293,6 +1351,7 @@ export class OverworldScene extends Phaser.Scene {
       this.setFlag('field_marker_seen')
       this.setObjective(OBJECTIVES.winBattle)
       audioManager.playSfx('objective_update')
+      this.spawnStoryBoss('clay_sentinel', MARKER_TILE, FIELD_BATTLE_ID)
       this.showToast('Marker: Guardian wake confirmed. Step southeast to challenge it.')
     } else if (!this.flag('field_battle_won')) {
       this.showToast('Marker: The guardian waits in the red-lit field southeast.')
@@ -1547,6 +1606,7 @@ export class OverworldScene extends Phaser.Scene {
       this.setObjective(OBJECTIVES.faceMidBoss)
       this.showAreaBanner('Verdant Archive', 'A living library of roots, ruined maps, and roads that remember footsteps.')
       this.showToast('Mira: Stay on my chalk marks. If a tree whispers your name, absolutely do not answer.')
+      this.spawnStoryBoss('storm_wisp', ARCHIVE_TILE, ARCHIVE_SKIRMISH_ID)
       this.persist()
       return
     }
@@ -1905,10 +1965,10 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createMiniMap() {
-    const container = this.add.container(this.scale.width - 180, 18).setScrollFactor(0).setDepth(120)
+    const container = this.add.container(this.scale.width - 136, 18).setScrollFactor(0).setDepth(120).setVisible(false)
     const graphics = this.add.graphics()
     container.add(graphics)
-    this.miniMap = { container, graphics, visible: true }
+    this.miniMap = { container, graphics, visible: false }
     this.updateMiniMap()
   }
 
@@ -1922,20 +1982,33 @@ export class OverworldScene extends Phaser.Scene {
   private updateMiniMap() {
     if (!this.miniMap || !this.miniMap.visible || !this.player) return
     const graphics = this.miniMap.graphics
+    const width = 120
+    const height = 90
+    const radius = 20
+    const scaleX = width / (radius * 2)
+    const scaleY = height / (radius * 2)
+    const playerTile = this.worldToTile(this.player.x, this.player.y)
     graphics.clear()
-    graphics.fillStyle(0x02030a, 0.72).fillRoundedRect(0, 0, 160, 80, 8)
-    for (let y = 0; y < 10; y += 1) {
-      for (let x = 0; x < MAP_WIDTH; x += 1) {
+    graphics.fillStyle(0x02030a, 0.72).fillRoundedRect(0, 0, width, height, 8)
+    for (let y = playerTile.y - radius; y <= playerTile.y + radius; y += 2) {
+      for (let x = playerTile.x - radius; x <= playerTile.x + radius; x += 2) {
+        if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) continue
         const tile = MAP_LAYOUT[y]?.[x] ?? 'G'
-        graphics.fillStyle(tile === 'W' || tile === 'B' ? 0x2d3142 : tile === 'P' ? 0xad8f66 : 0x3d8b37, 0.82).fillRect(8 + x * 4, 8 + y * 4, 3, 3)
+        const miniX = width / 2 + (x - playerTile.x) * scaleX
+        const miniY = height / 2 + (y - playerTile.y) * scaleY
+        graphics.fillStyle(tile === 'W' || tile === 'B' || tile === 'R' ? 0x2d3142 : tile === 'P' ? 0xad8f66 : 0x3d8b37, 0.64).fillRect(miniX, miniY, 2, 2)
       }
     }
-    const dot = (tile: { x: number; y: number }, color: number) => graphics.fillStyle(color, 1).fillCircle(9.5 + tile.x * 4, 9.5 + tile.y * 4, 2.2)
-    dot(SAVE_TILE, 0x6db7ff); dot(HOME_TILE, 0xffa43a); dot(GUIDE_TILE, 0x45e67a); dot(ELDER_TILE, 0xb48cff); dot(MERCHANT_TILE, 0xffd36e); dot(ALLY_TILE, 0x7df9ff)
-    const playerTile = this.worldToTile(this.player.x, this.player.y)
-    dot(playerTile, 0xffffff)
-    graphics.lineStyle(1, 0xd4a84b, 0.6).strokeRoundedRect(0.5, 0.5, 159, 79, 8)
-    graphics.fillStyle(0xffffff, 0.86).fillRect(94, 18, 50, 1)
+    const dot = (tile: { x: number; y: number }, color: number, size = 2.4) => {
+      if (Math.abs(tile.x - playerTile.x) > radius || Math.abs(tile.y - playerTile.y) > radius) return
+      graphics.fillStyle(color, 1).fillCircle(width / 2 + (tile.x - playerTile.x) * scaleX, height / 2 + (tile.y - playerTile.y) * scaleY, size)
+    }
+    ;[GUIDE_TILE, ELDER_TILE, MERCHANT_TILE, ALLY_TILE].forEach((tile) => dot(tile, 0x45e67a))
+    this.treasureChests.filter((chest) => !chest.opened).forEach((chest) => dot(chest.tile, 0xffd166, 2.2))
+    this.groundLoot.forEach((loot) => dot(this.worldToTile(loot.x, loot.y), 0xffd166, 1.8))
+    this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => dot(this.worldToTile(enemy.x, enemy.y), 0xef4444, enemy.isBoss ? 3.6 : 2.4))
+    dot(playerTile, 0xffffff, 3)
+    graphics.lineStyle(1, 0xd4a84b, 0.72).strokeRoundedRect(0.5, 0.5, width - 1, height - 1, 8)
   }
 
   private getRealtimeSkills(): RealtimeSkill[] {
@@ -2082,28 +2155,34 @@ export class OverworldScene extends Phaser.Scene {
     this.mapEnemies = []
     if (this.saveData.stage === 'homecoming') return
     this.spawnRegularEnemiesForStage()
+    if (!this.flag('field_battle_won') && (this.saveData.currentObjective === OBJECTIVES.winBattle || this.flag('field_marker_seen'))) {
+      this.spawnStoryBoss('clay_sentinel', MARKER_TILE, FIELD_BATTLE_ID)
+    }
+    if (this.flag('archive_entered') && !this.flag('archive_skirmish_won')) {
+      this.spawnStoryBoss('storm_wisp', ARCHIVE_TILE, ARCHIVE_SKIRMISH_ID)
+    }
   }
 
   private spawnRegularEnemiesForStage() {
-    const regularByStage: Record<SaveData['stage'], Array<{ id: string; x: number; y: number }>> = {
+    const regularByStage: Record<SaveData['stage'], Array<{ ids: string[]; x: number; y: number }>> = {
       quay: [
-        { id: 'vinecrawler', x: 23, y: 8 }, { id: 'vinecrawler', x: 28, y: 9 }, { id: 'moss_knight', x: 31, y: 6 }, { id: 'sporefiend', x: 34, y: 11 },
+        { ids: ['ash_slime', 'frost_shard', 'vinecrawler'], x: 8, y: 10 }, { ids: ['ash_slime', 'frost_shard'], x: 12, y: 13 }, { ids: ['vinecrawler', 'ash_slime'], x: 18, y: 10 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 31, y: 7 },
       ],
       field: [
-        { id: 'vinecrawler', x: 22, y: 9 }, { id: 'moss_knight', x: 28, y: 8 }, { id: 'frost_shard', x: 31, y: 5 }, { id: 'storm_wisp', x: 34, y: 8 }, { id: 'sporefiend', x: 30, y: 12 }, { id: 'glass_scorpion', x: 36, y: 10 },
+        { ids: ['ash_slime', 'frost_shard'], x: 9, y: 10 }, { ids: ['vinecrawler', 'moss_knight', 'sporefiend'], x: 20, y: 9 }, { ids: ['moss_knight', 'sporefiend', 'glass_scorpion'], x: 25, y: 12 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 33, y: 8 }, { ids: ['storm_wisp', 'clay_sentinel'], x: 36, y: 11 },
       ],
       shrine: [
-        { id: 'frost_shard', x: 24, y: 5 }, { id: 'storm_wisp', x: 29, y: 5 }, { id: 'hollow_wisp', x: 32, y: 7 }, { id: 'clay_sentinel', x: 35, y: 9 }, { id: 'frost_shard', x: 30, y: 11 }, { id: 'storm_wisp', x: 23, y: 11 },
+        { ids: ['frost_shard', 'ash_slime'], x: 20, y: 5 }, { ids: ['storm_wisp', 'hollow_wisp'], x: 29, y: 5 }, { ids: ['hollow_wisp', 'clay_sentinel'], x: 32, y: 7 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 35, y: 9 }, { ids: ['frost_shard', 'storm_wisp'], x: 30, y: 11 },
       ],
       archive: [
-        { id: 'hollow_wisp', x: 18, y: 17 }, { id: 'clay_sentinel', x: 22, y: 17 }, { id: 'archive_guardian', x: 19, y: 20 }, { id: 'vinecrawler', x: 23, y: 20 }, { id: 'sporefiend', x: 17, y: 22 }, { id: 'moss_knight', x: 24, y: 22 }, { id: 'hollow_wisp', x: 21, y: 24 },
+        { ids: ['vinecrawler', 'sporefiend'], x: 16, y: 17 }, { ids: ['hollow_wisp', 'storm_wisp'], x: 22, y: 17 }, { ids: ['archive_guardian', 'clay_sentinel'], x: 19, y: 20 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 27, y: 20 }, { ids: ['hollow_wisp', 'clay_sentinel'], x: 21, y: 24 },
       ],
       skywell: [
-        { id: 'hollow_wisp', x: 31, y: 22 }, { id: 'clay_sentinel', x: 34, y: 23 }, { id: 'emberglass_wisp', x: 36, y: 24 }, { id: 'memory_phantom', x: 33, y: 25 }, { id: 'void_walker', x: 36, y: 26 }, { id: 'skywell_guardian', x: 30, y: 26 }, { id: 'storm_wisp', x: 32, y: 28 }, { id: 'hollow_wisp', x: 35, y: 28 },
+        { ids: ['hollow_wisp', 'storm_wisp'], x: 31, y: 22 }, { ids: ['clay_sentinel', 'storm_wisp'], x: 34, y: 23 }, { ids: ['emberglass_wisp', 'memory_phantom'], x: 36, y: 24 }, { ids: ['void_walker', 'skywell_guardian'], x: 36, y: 26 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 32, y: 28 },
       ],
       homecoming: [],
     }
-    regularByStage[this.saveData.stage].forEach((spawn, index) => this.spawnMapEnemy(spawn.id, spawn.x, spawn.y, false, `${this.saveData.stage}-${index}`))
+    regularByStage[this.saveData.stage].forEach((spawn, index) => this.spawnMapEnemy(spawn.ids[Phaser.Math.Between(0, spawn.ids.length - 1)], spawn.x, spawn.y, false, `${this.saveData.stage}-${index}`))
   }
 
   private spawnStoryBoss(enemyId: string, tile: { x: number; y: number }, battleId: string) {
@@ -2117,15 +2196,17 @@ export class OverworldScene extends Phaser.Scene {
     if (!data) return
     const x = this.tileCenter(tileX)
     const y = this.tileCenter(tileY)
-    const color = enemyId === 'moonwake_guardian' ? 0x4da6ff : enemyId === 'thornheart' ? 0x3aa657 : enemyId === 'cartographers_lie' ? 0x8f63ff : data.region === 'moonwake' ? 0x8bd6ff : data.region === 'skywell' ? 0xbda7ff : 0x75c46b
-    const size = isBoss ? 34 : 22
-    const sprite = this.add.rectangle(x, y, size, size, color, 0.95).setDepth(18).setStrokeStyle(2, 0xffffff, 0.35)
+    const color = isBoss ? 0xb91c1c : enemyId === 'moonwake_guardian' ? 0x4da6ff : enemyId === 'thornheart' ? 0x3aa657 : enemyId === 'cartographers_lie' ? 0x8f63ff : data.region === 'moonwake' ? 0x8bd6ff : data.region === 'skywell' ? 0xbda7ff : 0x75c46b
+    const size = isBoss ? 66 : 22
+    const sprite = this.add.rectangle(x, y, size, size, color, 0.95).setDepth(18).setStrokeStyle(isBoss ? 4 : 2, isBoss ? 0xff6b6b : 0xffffff, isBoss ? 0.75 : 0.35)
     const hpBarBg = this.add.graphics().setDepth(19)
     const hpBar = this.add.graphics().setDepth(20)
     const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
-    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, hpBar, hpBarBg, nameText, currentHp: data.stats.hp, maxHp: data.stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats: { ...data.stats }, x, y, speed: isBoss ? 70 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 250 : 200, attackRange: 50, attackCooldown: isBoss ? 1300 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: data.expReward, goldReward: data.goldReward, battleId }
+    const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : data.stats.hp, atk: isBoss ? data.stats.atk * 2 : data.stats.atk }
+    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 320 : 200, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : data.expReward, goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
     this.mapEnemies.push(enemy)
     this.updateEnemyBars(enemy)
+    if (isBoss) this.createBossHud(enemy)
   }
 
   private updateMapEnemies(delta: number) {
@@ -2270,6 +2351,12 @@ export class OverworldScene extends Phaser.Scene {
     enemy.state = 'dead'
     this.killCount += 1
     this.spawnDeathExplosion(enemy.x, enemy.y)
+    if (enemy.isBoss) {
+      this.spawnBossExplosion(enemy.x, enemy.y)
+      this.cameras.main.shake(520, 0.01)
+      this.bossHud?.container.destroy()
+      this.bossHud = undefined
+    }
     this.spawnGroundLoot(enemy.x, enemy.y, 'gold', 'gold', enemy.goldReward)
     this.spawnGroundLoot(enemy.x + 12, enemy.y, 'exp', 'exp', enemy.expReward)
     if (Math.random() < 0.35) this.spawnGroundLoot(enemy.x - 12, enemy.y, 'item', 'health_potion', 1)
@@ -2367,6 +2454,15 @@ export class OverworldScene extends Phaser.Scene {
     }
   }
 
+  private spawnBossExplosion(x: number, y: number) {
+    this.cameras.main.flash(240, 255, 96, 96, false)
+    for (let index = 0; index < 18; index += 1) {
+      const angle = (Math.PI * 2 * index) / 18
+      const particle = this.add.circle(x, y, 5, index % 2 === 0 ? 0xff6b6b : 0xffd166, 0.95).setDepth(25)
+      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * Phaser.Math.Between(42, 92), y: y + Math.sin(angle) * Phaser.Math.Between(42, 92), scale: 0.2, alpha: 0, duration: 720, onComplete: () => particle.destroy() })
+    }
+  }
+
   private showLevelUpEffect() {
     if (!this.player) return
     const glow = this.add.circle(this.player.x, this.player.y, 28, 0xffd166, 0.22).setDepth(24).setStrokeStyle(4, 0xfff1a8, 0.85)
@@ -2378,7 +2474,28 @@ export class OverworldScene extends Phaser.Scene {
     if (enemy.enemyId === 'moonwake_guardian') return 0x4da6ff
     if (enemy.enemyId === 'thornheart') return 0x3aa657
     if (enemy.enemyId === 'cartographers_lie') return 0x8f63ff
-    return enemy.isBoss ? 0xbda7ff : 0x75c46b
+    return enemy.isBoss ? 0xb91c1c : 0x75c46b
+  }
+
+  private createBossHud(enemy: MapEnemy) {
+    this.bossHud?.container.destroy()
+    const container = this.add.container(this.scale.width / 2, 116).setScrollFactor(0).setDepth(125)
+    const nameText = this.add.text(0, -20, enemy.nameText.text, { color: '#ffe4b5', fontFamily: 'Georgia, serif', fontSize: '20px', fontStyle: 'bold' }).setOrigin(0.5)
+    const bar = this.add.graphics()
+    container.add([nameText, bar])
+    this.bossHud = { container, bar, nameText }
+    this.updateBossHud(enemy)
+  }
+
+  private updateBossHud(enemy: MapEnemy) {
+    if (!this.bossHud || enemy.dead) return
+    const width = 420
+    const pct = Phaser.Math.Clamp(enemy.currentHp / enemy.maxHp, 0, 1)
+    this.bossHud.bar.clear()
+    this.bossHud.bar.fillStyle(0x050509, 0.88).fillRoundedRect(-width / 2, 0, width, 16, 6)
+    this.bossHud.bar.fillStyle(0x991b1b, 1).fillRoundedRect(-width / 2 + 2, 2, (width - 4) * pct, 12, 5)
+    this.bossHud.bar.lineStyle(2, 0xffd166, 0.72).strokeRoundedRect(-width / 2, 0, width, 16, 6)
+    this.bossHud.nameText.setText(enemy.nameText.text)
   }
 
   private updateEnemyBars(enemy: MapEnemy) {
@@ -2388,6 +2505,7 @@ export class OverworldScene extends Phaser.Scene {
     enemy.hpBarBg.clear().fillStyle(0x050509, 0.8).fillRect(enemy.x - width / 2, enemy.y - 28, width, 3)
     enemy.hpBar.clear().fillStyle(color, 1).fillRect(enemy.x - width / 2, enemy.y - 28, width * pct, 3)
     enemy.nameText.setPosition(enemy.x, enemy.y - 39)
+    if (enemy.isBoss) this.updateBossHud(enemy)
   }
 
   private startDash() {
@@ -2632,8 +2750,19 @@ export class OverworldScene extends Phaser.Scene {
     this.objectiveText?.setText(`Objective: ${this.saveData.currentObjective}`)
     this.inventoryText?.setText(`Gold ${this.saveData.gold}  |  Potion ${counts.potion}  Ether ${counts.ether}  Ember Shard ${counts.emberShard}  |  Home ${this.homeProgress()}/3${this.saveData.pet.unlocked ? '  Pip' : ''}`)
     this.levelText?.setText(`Lv.${hero.level}`)
+    this.updateXpBar()
     this.killCounterText?.setText(`Kills: ${this.killCount}`)
     this.updateSkillHud()
+  }
+
+  private updateXpBar() {
+    if (!this.playerXpBar) return
+    const xpForLevel = 180
+    const progress = (this.saveData.battleRewards.exp % xpForLevel) / xpForLevel
+    this.playerXpBar.clear()
+    this.playerXpBar.fillStyle(0x050509, 0.82).fillRoundedRect(344, 57, 190, 8, 3)
+    this.playerXpBar.fillStyle(0xffd166, 0.95).fillRoundedRect(346, 59, 186 * progress, 4, 2)
+    this.playerXpBar.lineStyle(1, 0xfff1a8, 0.44).strokeRoundedRect(344, 57, 190, 8, 3)
   }
 
   private homeProgress() {
