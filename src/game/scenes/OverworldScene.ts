@@ -9,6 +9,14 @@ const TILE_SIZE = 48
 const MAP_WIDTH = 20
 const MAP_HEIGHT = 15
 const PLAYER_SPEED = 160
+type Direction = 'up' | 'down' | 'left' | 'right'
+const HERO_ANIM_ROWS: Record<Direction, number> = { down: 0, left: 1, right: 2, up: 3 }
+const TILESET_CROPS = {
+  grass: { x: 0, y: 0 },
+  path: { x: 64, y: 0 },
+  water: { x: 128, y: 0 },
+  wall: { x: 192, y: 0 },
+} as const
 const MAP_LAYOUT = [
   'WWWWWWWWWWWWWWWWWWWW',
   'WGGGPPPPPGGGGGPPPGGW',
@@ -55,7 +63,6 @@ const OBJECTIVES = {
   complete: 'Save at the skywell. Moonwake Shrine has answered.',
 } as const
 
-type Direction = 'up' | 'down' | 'left' | 'right'
 type OverworldInitData = {
   newGame?: boolean
   continueGame?: boolean
@@ -71,7 +78,7 @@ type MenuOverlay = { container: Phaser.GameObjects.Container }
 
 export class OverworldScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
-  private player?: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle
+  private player?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle
   private playerShadow?: Phaser.GameObjects.Ellipse
   private keys?: Record<'w' | 'a' | 's' | 'd' | 'enter' | 'space' | 'm' | 'escape', Phaser.Input.Keyboard.Key>
   private walls = new Set<string>()
@@ -120,6 +127,7 @@ export class OverworldScene extends Phaser.Scene {
     this.applyBattleResult()
     this.createBackdrop()
     this.createAmbientParticles()
+    this.createGeneratedAnimations()
     this.createMap()
     this.createObjects()
 
@@ -194,6 +202,7 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     this.movePlayer(velocityX * seconds, velocityY * seconds)
+    this.updatePlayerAnimation(velocityX !== 0 || velocityY !== 0)
     this.playerShadow.setPosition(this.player.x, this.player.y + 18)
     this.checkSavePoint()
     this.updateInteractionPrompt()
@@ -209,14 +218,8 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createMap() {
-    const grassColors = [0x3d8b37, 0x4a9944, 0x368232, 0x45913f]
     const flowerColors = [0xffd166, 0xff7aa2, 0xc7f9ff]
-    const pathColor = 0xc4a882
-    const pathAccent = 0xad8f66
-    const wallColor = 0x5a4a3a
-    const wallTopColor = 0x7a6a5a
-    const wallShadeColor = 0x3f3329
-    const waterColors = [0x357ec7, 0x3d96db, 0x2f6fb2]
+    const useTileset = hasTexture(this, GENERATED_ASSETS.tileset)
 
     for (let tileY = 0; tileY < MAP_HEIGHT; tileY += 1) {
       for (let tileX = 0; tileX < MAP_WIDTH; tileX += 1) {
@@ -227,24 +230,30 @@ export class OverworldScene extends Phaser.Scene {
         const blocksTravel = isWall && !isShrineGate
         const x = tileX * TILE_SIZE
         const y = tileY * TILE_SIZE
+        const terrain = layoutTile === 'P' ? 'path' : layoutTile === '.' ? 'water' : isWall ? 'wall' : 'grass'
+
+        if (useTileset) {
+          const crop = TILESET_CROPS[terrain]
+          this.add.image(x, y, GENERATED_ASSETS.tileset).setOrigin(0).setCrop(crop.x, crop.y, TILE_SIZE, TILE_SIZE).setDepth(isWall ? 1 : 0)
+        } else if (layoutTile === 'P') {
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0xc4a882).setOrigin(0).setDepth(0)
+        } else if (layoutTile === '.') {
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x357ec7).setOrigin(0).setDepth(0)
+        } else if (isWall) {
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, layoutTile === 'B' ? 0x6b5140 : 0x5a4a3a).setOrigin(0).setDepth(1)
+        } else {
+          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x3d8b37).setOrigin(0).setDepth(0)
+        }
 
         if (layoutTile === 'P') {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, pathColor).setOrigin(0).setDepth(0)
           if ((tileX * 5 + tileY * 11) % 4 === 0) {
-            this.add.rectangle(x + 8, y + 18, 7, 3, pathAccent, 0.22).setOrigin(0).setDepth(0.1)
+            this.add.rectangle(x + 8, y + 18, 7, 3, 0xad8f66, 0.22).setOrigin(0).setDepth(0.1)
           }
         } else if (layoutTile === '.') {
-          const waterColor = waterColors[(tileX * 3 + tileY * 7) % waterColors.length]
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, waterColor).setOrigin(0).setDepth(0)
           this.add.rectangle(x + 4, y + 14, TILE_SIZE - 8, 3, 0x9bdcff, 0.18).setOrigin(0).setDepth(0.1)
         } else if (isWall) {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, layoutTile === 'B' ? 0x6b5140 : wallColor).setOrigin(0).setDepth(1)
-          this.add.rectangle(x, y, TILE_SIZE, 12, layoutTile === 'B' ? 0x92705a : wallTopColor).setOrigin(0).setDepth(1.1)
-          this.add.rectangle(x, y + TILE_SIZE - 10, TILE_SIZE, 10, wallShadeColor, 0.5).setOrigin(0).setDepth(1.1)
           this.add.rectangle(x + 4, y + 12, TILE_SIZE - 8, 2, 0xffffff, 0.08).setOrigin(0).setDepth(1.2)
         } else {
-          const grassColor = grassColors[(tileX * 7 + tileY * 13) % grassColors.length]
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, grassColor).setOrigin(0).setDepth(0)
           if ((tileX + tileY) % 3 === 0) {
             this.add.rectangle(x + 9, y + 11, 12, 3, 0x2d722d, 0.18).setOrigin(0).setDepth(0.1)
           }
@@ -350,8 +359,11 @@ export class OverworldScene extends Phaser.Scene {
     void label
     this.add.ellipse(x, y + 18, 34, 13, 0x101014, 0.32).setDepth(3.5)
     const npc = hasTexture(this, assetKey)
-      ? this.add.image(x, y, assetKey).setScale(0.65).setDepth(4)
+      ? this.add.sprite(x, y, assetKey, 0).setScale(0.65).setDepth(4)
       : this.add.rectangle(x, y, 34, 44, 0x888888).setStrokeStyle(2, 0xffffff, 0.45).setDepth(4)
+    if (npc instanceof Phaser.GameObjects.Sprite) {
+      npc.play(`idle-${assetKey}`)
+    }
     this.tweens.add({ targets: npc, y: npc.y - 1.5, yoyo: true, repeat: -1, duration: 1600 + tile.x * 35, ease: 'Sine.easeInOut' })
   }
 
@@ -366,11 +378,42 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: marker, scale: hasTexture(this, assetKey) ? 0.63 : 1.04, yoyo: true, repeat: -1, duration: 1350, ease: 'Sine.easeInOut' })
   }
 
-  private createPlayer(x: number, y: number): Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle {
+  private createPlayer(x: number, y: number): Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle {
     if (hasTexture(this, GENERATED_ASSETS.heroes.nara)) {
-      return this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setScale(0.65).setDepth(11)
+      const player = this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setScale(0.65).setDepth(11)
+      player.play('nara-idle-down')
+      return player
     }
     return this.add.rectangle(x, y, 32, 48, 0xff8a32).setDepth(11)
+  }
+
+  private createGeneratedAnimations() {
+    if (hasTexture(this, GENERATED_ASSETS.heroes.nara)) {
+      for (const direction of Object.keys(HERO_ANIM_ROWS) as Direction[]) {
+        const row = HERO_ANIM_ROWS[direction]
+        if (!this.anims.exists(`nara-walk-${direction}`)) {
+          this.anims.create({ key: `nara-walk-${direction}`, frames: this.anims.generateFrameNumbers(GENERATED_ASSETS.heroes.nara, { start: row * 4, end: row * 4 + 3 }), frameRate: 7, repeat: -1 })
+        }
+        if (!this.anims.exists(`nara-idle-${direction}`)) {
+          this.anims.create({ key: `nara-idle-${direction}`, frames: [{ key: GENERATED_ASSETS.heroes.nara, frame: row * 4 }], frameRate: 1 })
+        }
+      }
+    }
+    for (const assetKey of [GENERATED_ASSETS.npcs.guideRin, GENERATED_ASSETS.npcs.elderMaelin, GENERATED_ASSETS.npcs.peddler, GENERATED_ASSETS.npc]) {
+      if (hasTexture(this, assetKey) && !this.anims.exists(`idle-${assetKey}`)) {
+        this.anims.create({ key: `idle-${assetKey}`, frames: this.anims.generateFrameNumbers(assetKey, { start: 0, end: 1 }), frameRate: 1.6, repeat: -1 })
+      }
+    }
+  }
+
+  private updatePlayerAnimation(isMoving: boolean) {
+    if (!(this.player instanceof Phaser.GameObjects.Sprite)) {
+      return
+    }
+    const key = `nara-${isMoving ? 'walk' : 'idle'}-${this.facing}`
+    if (this.player.anims.currentAnim?.key !== key) {
+      this.player.play(key)
+    }
   }
 
   private createHud() {

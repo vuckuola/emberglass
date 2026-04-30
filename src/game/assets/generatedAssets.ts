@@ -45,17 +45,17 @@ export const GENERATED_ASSETS = {
 const BASE = import.meta.env.BASE_URL + 'assets/generated/'
 
 export function preloadGeneratedAssets(scene: Phaser.Scene) {
-  // Hero spritesheets: 384x144, frameWidth:96, frameHeight:144
+  // Hero spritesheets: 384x576, 4 directions x 4 walk frames
   scene.load.spritesheet(GENERATED_ASSETS.heroes.nara, `${BASE}hero_nara_sheet.png`, { frameWidth: 96, frameHeight: 144 })
   scene.load.spritesheet(GENERATED_ASSETS.heroes.kael, `${BASE}hero_kael_sheet.png`, { frameWidth: 96, frameHeight: 144 })
   scene.load.spritesheet(GENERATED_ASSETS.heroes.io, `${BASE}hero_io_sheet.png`, { frameWidth: 96, frameHeight: 144 })
 
-  // Unique NPC images (single frame 96x144)
-  scene.load.image(GENERATED_ASSETS.npcs.guideRin, `${BASE}npc_guide_rin.png`)
-  scene.load.image(GENERATED_ASSETS.npcs.elderMaelin, `${BASE}npc_elder_maelin.png`)
-  scene.load.image(GENERATED_ASSETS.npcs.peddler, `${BASE}npc_peddler.png`)
+  // Unique NPC spritesheets: 192x144, 2 idle frames
+  scene.load.spritesheet(GENERATED_ASSETS.npcs.guideRin, `${BASE}npc_guide_rin.png`, { frameWidth: 96, frameHeight: 144 })
+  scene.load.spritesheet(GENERATED_ASSETS.npcs.elderMaelin, `${BASE}npc_elder_maelin.png`, { frameWidth: 96, frameHeight: 144 })
+  scene.load.spritesheet(GENERATED_ASSETS.npcs.peddler, `${BASE}npc_peddler.png`, { frameWidth: 96, frameHeight: 144 })
 
-  // NPC spritesheet (backward compat): 384x144, frameWidth:96, frameHeight:144
+  // NPC spritesheet (backward compat): 384x576, frameWidth:96, frameHeight:144
   scene.load.spritesheet(GENERATED_ASSETS.npc, `${BASE}npc_luma_elder_sheet.png`, { frameWidth: 96, frameHeight: 144 })
 
   // Enemies (192x192)
