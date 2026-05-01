@@ -266,6 +266,7 @@ export class OverworldScene extends Phaser.Scene {
   private homeGardenUsedThisVisit = false
   private lastForageTime = 0
   private pipIdleAngle = 0
+  private cameraZoom = 1
 
   constructor() {
     super('OverworldScene')
@@ -383,6 +384,7 @@ export class OverworldScene extends Phaser.Scene {
 
     this.spawnEnemiesForStage()
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => { if (!pointer.event.defaultPrevented && !this.menuOverlay) this.performPlayerAttack(pointer.worldX, pointer.worldY) })
+    this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: Phaser.GameObjects.GameObject[], _deltaX: number, deltaY: number) => this.handleCameraZoom(deltaY))
     this.createHud()
     this.createMiniMap()
     this.createTouchControls()
@@ -394,6 +396,8 @@ export class OverworldScene extends Phaser.Scene {
     }
     this.notifyWorkshopBuff()
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE)
+    this.cameraZoom = 1
+    this.cameras.main.setZoom(this.cameraZoom)
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
   }
 
@@ -511,7 +515,8 @@ export class OverworldScene extends Phaser.Scene {
         const layoutTile = MAP_LAYOUT[tileY][tileX]
         const isShrineGate = tileX === SHRINE_GATE_TILE.x && tileY === SHRINE_GATE_TILE.y && !this.flag('shrine_gate_seen')
         const isWall = layoutTile === 'W'
-        const blocksTravel = isWall && !isShrineGate
+        const isWater = layoutTile === 'B'
+        const blocksTravel = (isWall && !isShrineGate) || isWater
         const x = tileX * TILE_SIZE
         const y = tileY * TILE_SIZE
         const terrain = layoutTile === 'P' ? 'path' : layoutTile === 'B' ? 'water' : layoutTile === 'R' ? 'path' : isWall ? 'wall' : 'grass'
@@ -2360,11 +2365,20 @@ export class OverworldScene extends Phaser.Scene {
     return itemId ? ITEMS_BY_ID[itemId]?.name ?? itemId : 'None'
   }
 
+  private handleCameraZoom(deltaY: number) {
+    if (!this.player) return
+    const zoomStep = deltaY < 0 ? 0.15 : -0.15
+    this.cameraZoom = Phaser.Math.Clamp(this.cameraZoom + zoomStep, 0.4, 2)
+    this.tweens.killTweensOf(this.cameras.main)
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
+    this.cameras.main.zoomTo(this.cameraZoom, 200, 'Sine.easeInOut', true)
+  }
+
   private createMiniMap() {
-    const container = this.add.container(this.scale.width - 136, 18).setScrollFactor(0).setDepth(120).setVisible(false)
+    const container = this.add.container(this.scale.width - 176, 18).setScrollFactor(0).setDepth(120).setVisible(true)
     const graphics = this.add.graphics()
     container.add(graphics)
-    this.miniMap = { container, graphics, visible: false }
+    this.miniMap = { container, graphics, visible: true }
     this.updateMiniMap()
   }
 
@@ -2378,33 +2392,32 @@ export class OverworldScene extends Phaser.Scene {
   private updateMiniMap() {
     if (!this.miniMap || !this.miniMap.visible || !this.player) return
     const graphics = this.miniMap.graphics
-    const width = 120
-    const height = 90
-    const radius = 20
-    const scaleX = width / (radius * 2)
-    const scaleY = height / (radius * 2)
+    const width = 160
+    const height = 120
+    const padding = 8
+    const mapWidth = width - padding * 2
+    const mapHeight = height - padding * 2
+    const scaleX = mapWidth / MAP_WIDTH
+    const scaleY = mapHeight / MAP_HEIGHT
     const playerTile = this.worldToTile(this.player.x, this.player.y)
     graphics.clear()
     graphics.fillStyle(0x02030a, 0.72).fillRoundedRect(0, 0, width, height, 8)
-    for (let y = playerTile.y - radius; y <= playerTile.y + radius; y += 2) {
-      for (let x = playerTile.x - radius; x <= playerTile.x + radius; x += 2) {
-        if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) continue
+    for (let y = 0; y < MAP_HEIGHT; y += 1) {
+      for (let x = 0; x < MAP_WIDTH; x += 1) {
         const tile = MAP_LAYOUT[y]?.[x] ?? 'G'
-        const miniX = width / 2 + (x - playerTile.x) * scaleX
-        const miniY = height / 2 + (y - playerTile.y) * scaleY
-        graphics.fillStyle(tile === 'W' || tile === 'B' || tile === 'R' ? 0x2d3142 : tile === 'P' ? 0xad8f66 : 0x3d8b37, 0.64).fillRect(miniX, miniY, 2, 2)
+        const color = tile === 'W' || tile === 'B' ? 0x1f2433 : tile === 'P' || tile === 'R' ? 0xd2b48c : 0x8fcf88
+        graphics.fillStyle(color, 0.78).fillRect(padding + x * scaleX, padding + y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY))
       }
     }
     const dot = (tile: { x: number; y: number }, color: number, size = 2.4) => {
-      if (Math.abs(tile.x - playerTile.x) > radius || Math.abs(tile.y - playerTile.y) > radius) return
-      graphics.fillStyle(color, 1).fillCircle(width / 2 + (tile.x - playerTile.x) * scaleX, height / 2 + (tile.y - playerTile.y) * scaleY, size)
+      graphics.fillStyle(color, 1).fillCircle(padding + (tile.x + 0.5) * scaleX, padding + (tile.y + 0.5) * scaleY, size)
     }
     ;[GUIDE_TILE, ELDER_TILE, MERCHANT_TILE, ALLY_TILE].forEach((tile) => dot(tile, 0xfacc15))
-    this.companions.filter((companion) => companion.state !== 'dead').forEach((companion) => dot(this.worldToTile(companion.x, companion.y), 0x60a5fa, 2.4))
+    this.companions.filter((companion) => companion.state !== 'dead').forEach((companion, index) => dot(this.worldToTile(companion.x, companion.y), index % 2 === 0 ? 0x22c55e : 0x60a5fa, 2.4))
     this.treasureChests.filter((chest) => !chest.opened).forEach((chest) => dot(chest.tile, 0xffd166, 2.2))
     this.groundLoot.forEach((loot) => dot(this.worldToTile(loot.x, loot.y), 0xffd166, 1.8))
     this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => dot(this.worldToTile(enemy.x, enemy.y), 0xef4444, enemy.isBoss ? 3.6 : 2.4))
-    dot(playerTile, 0x45e67a, 3)
+    dot(playerTile, 0xf8fafc, 3.6)
     graphics.lineStyle(1, 0xd4a84b, 0.72).strokeRoundedRect(0.5, 0.5, width - 1, height - 1, 8)
   }
 
