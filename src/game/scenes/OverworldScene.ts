@@ -118,7 +118,8 @@ type OverworldInitData = {
 type MapEnemy = {
   id: string
   enemyId: string
-  sprite: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc
+  sprite: Phaser.GameObjects.Container
+  body: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc | Phaser.GameObjects.Ellipse
   aura?: Phaser.GameObjects.Arc
   hpBar: Phaser.GameObjects.Graphics
   hpBarBg: Phaser.GameObjects.Graphics
@@ -155,6 +156,7 @@ type PartyCompanion = {
   name: string
   container: Phaser.GameObjects.Container
   body: Phaser.GameObjects.Rectangle
+  aura: Phaser.GameObjects.Arc
   sprite?: Phaser.GameObjects.Sprite
   nameText: Phaser.GameObjects.Text
   hpBar: Phaser.GameObjects.Graphics
@@ -352,7 +354,8 @@ export class OverworldScene extends Phaser.Scene {
 
     const startX = this.saveData.position.x
     const startY = this.saveData.position.y
-    this.playerShadow = this.add.ellipse(startX, startY + 18, 34, 14, 0x101014, 0.32).setDepth(10)
+    this.playerShadow = this.add.ellipse(startX, startY + 18, 44, 18, 0x101014, 0.32).setDepth(10).setStrokeStyle(3, 0xfff1a8, 0.72)
+    this.tweens.add({ targets: this.playerShadow, scaleX: 1.16, scaleY: 1.08, alpha: 0.62, yoyo: true, repeat: -1, duration: 1050, ease: 'Sine.easeInOut' })
     this.player = this.createPlayer(startX, startY)
     this.createPetFollower(startX - 28, startY + 18)
     this.createMiraCompanion(startX + 28, startY + 18)
@@ -533,14 +536,18 @@ export class OverworldScene extends Phaser.Scene {
           if ((tileX * 5 + tileY * 11) % 4 === 0) {
             this.add.rectangle(x + 8, y + 18, 7, 3, 0xad8f66, 0.22).setOrigin(0).setDepth(0.1)
           }
+          this.drawPathDetails(x, y, tileX, tileY)
         } else if (layoutTile === 'B') {
           this.add.rectangle(x + 4, y + 14, TILE_SIZE - 8, 3, 0x9bdcff, 0.18).setOrigin(0).setDepth(0.1)
+          this.drawWaterDetails(x, y, tileX, tileY)
         } else if (isWall) {
           this.add.rectangle(x + 4, y + 12, TILE_SIZE - 8, 2, 0xffffff, 0.08).setOrigin(0).setDepth(1.2)
+          this.drawWallDetails(x, y, tileX, tileY)
         } else {
           if ((tileX + tileY) % 3 === 0) {
             this.add.rectangle(x + 9, y + 11, 12, 3, 0x2d722d, 0.18).setOrigin(0).setDepth(0.1)
           }
+          this.drawGrassDetails(x, y, tileX, tileY, areaTint)
           if (layoutTile === 'F') {
             for (let index = 0; index < 3; index += 1) {
               const flowerX = x + 12 + ((tileX * 9 + tileY * 5 + index * 11) % 25)
@@ -558,6 +565,54 @@ export class OverworldScene extends Phaser.Scene {
 
     this.createWaterShimmer()
     this.drawAreaPolish()
+  }
+
+  private drawGrassDetails(x: number, y: number, tileX: number, tileY: number, areaTint: number) {
+    const shade = (tileX * 17 + tileY * 23) % 2 === 0 ? 0x69a64f : 0x2f7133
+    this.add.rectangle(x, y + TILE_SIZE - 7, TILE_SIZE, 7, areaTint, 0.18).setOrigin(0).setDepth(0.04)
+    for (let index = 0; index < 3; index += 1) {
+      const bladeX = x + 7 + ((tileX * 13 + tileY * 7 + index * 12) % 34)
+      const bladeY = y + 9 + ((tileX * 5 + tileY * 19 + index * 9) % 28)
+      this.add.rectangle(bladeX, bladeY, 2, 7, shade, 0.28).setOrigin(0.5, 1).setRotation(Phaser.Math.DegToRad(((tileX + tileY + index) % 3 - 1) * 12)).setDepth(0.12)
+    }
+    if ((tileX * 31 + tileY * 11) % 17 === 0) this.drawBush(x + 24, y + 25, 0.16)
+    if ((tileX * 7 + tileY * 29) % 23 === 0) this.drawRock(x + 16, y + 30, 0.16)
+  }
+
+  private drawPathDetails(x: number, y: number, tileX: number, tileY: number) {
+    this.add.rectangle(x, y, 4, TILE_SIZE, 0x5f8d4a, 0.16).setOrigin(0).setDepth(0.08)
+    this.add.rectangle(x + TILE_SIZE - 4, y, 4, TILE_SIZE, 0x5f8d4a, 0.16).setOrigin(0).setDepth(0.08)
+    for (let index = 0; index < 3; index += 1) {
+      const pebbleX = x + 8 + ((tileX * 9 + index * 13) % 31)
+      const pebbleY = y + 10 + ((tileY * 15 + index * 11) % 27)
+      this.add.ellipse(pebbleX, pebbleY, 6, 3, index % 2 ? 0xe0c899 : 0x8d7657, 0.28).setDepth(0.14)
+    }
+  }
+
+  private drawWaterDetails(x: number, y: number, tileX: number, tileY: number) {
+    for (let index = 0; index < 2; index += 1) {
+      const wave = this.add.arc(x + 12 + index * 20, y + 17 + ((tileX + tileY + index) % 3) * 7, 8, 200, 340, false, 0x9bdcff, 0).setStrokeStyle(2, 0xc7f9ff, 0.22).setDepth(0.18)
+      this.tweens.add({ targets: wave, x: wave.x + 5, alpha: 0.06, yoyo: true, repeat: -1, duration: 1500 + index * 250, ease: 'Sine.easeInOut' })
+    }
+  }
+
+  private drawWallDetails(x: number, y: number, tileX: number, tileY: number) {
+    this.add.rectangle(x, y + TILE_SIZE - 10, TILE_SIZE, 10, 0x241b16, 0.28).setOrigin(0).setDepth(1.22)
+    this.add.rectangle(x + 2, y + 7, TILE_SIZE - 4, 2, 0x8a745f, 0.28).setOrigin(0).setDepth(1.23)
+    this.add.rectangle(x + 2, y + 24, TILE_SIZE - 4, 2, 0x31271f, 0.22).setOrigin(0).setDepth(1.23)
+    this.add.rectangle(x + ((tileX + tileY) % 2 ? 15 : 30), y + 9, 2, 15, 0x34291f, 0.2).setDepth(1.24)
+    if ((tileX * 5 + tileY) % 11 === 0) this.drawBush(x + 24, y + 40, 1.31)
+  }
+
+  private drawBush(x: number, y: number, depth: number) {
+    this.add.circle(x - 7, y + 2, 7, 0x2f7d3f, 0.92).setDepth(depth)
+    this.add.circle(x, y - 2, 9, 0x3fa456, 0.92).setDepth(depth)
+    this.add.circle(x + 8, y + 3, 7, 0x256d36, 0.92).setDepth(depth)
+  }
+
+  private drawRock(x: number, y: number, depth: number) {
+    this.add.ellipse(x, y, 14, 9, 0x7c8076, 0.72).setDepth(depth).setStrokeStyle(1, 0xb8b49f, 0.28)
+    this.add.ellipse(x - 2, y - 2, 7, 3, 0xc0c6b5, 0.18).setDepth(depth + 0.01)
   }
 
   private createWaterShimmer() {
@@ -926,7 +981,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private createPlayer(x: number, y: number): Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle {
     if (hasTexture(this, GENERATED_ASSETS.heroes.nara)) {
-      const player = this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setScale(0.65).setDepth(11)
+      const player = this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setScale(0.72).setDepth(11)
       player.play('nara-idle-down')
       return player
     }
@@ -1003,7 +1058,8 @@ export class OverworldScene extends Phaser.Scene {
       .setStrokeStyle(2, isKael ? 0xb8d8a8 : 0xe0f2fe, 0.78)
       .setVisible(false)
     const textureKey = member.characterId === 'kael' ? GENERATED_ASSETS.heroes.kael : member.characterId === 'io' ? GENERATED_ASSETS.heroes.io : null
-    const sprite = textureKey && hasTexture(this, textureKey) ? this.add.sprite(0, 0, textureKey, 0).setScale(0.5).setDepth(10.51) : undefined
+    const aura = this.add.circle(0, 14, 20, isKael ? 0x55d27a : 0x60a5fa, 0.16).setStrokeStyle(3, isKael ? 0x86efac : 0x93c5fd, 0.72)
+    const sprite = textureKey && hasTexture(this, textureKey) ? this.add.sprite(0, 0, textureKey, 0).setScale(0.58).setDepth(10.51) : undefined
     const fallbackVisuals: Phaser.GameObjects.GameObject[] = sprite ? [] : [
       this.add.rectangle(0, 0, 32, 32, isKael ? 0x5c8a4d : 0x7fb3ff, 0.96).setStrokeStyle(2, isKael ? 0xd9f7c8 : 0xe0f2fe, 0.8),
       this.add.rectangle(0, -5, 22, 10, isKael ? 0x79b35f : 0xbfe3ff, 0.62),
@@ -1014,13 +1070,15 @@ export class OverworldScene extends Phaser.Scene {
     const hpBarBg = this.add.graphics().setDepth(10.55)
     const hpBar = this.add.graphics().setDepth(10.56)
     const mpBar = this.add.graphics().setDepth(10.57)
-    container.add(sprite ? [body, sprite, nameText] : [body, ...fallbackVisuals, nameText])
+    container.add(sprite ? [aura, body, sprite, nameText] : [aura, body, ...fallbackVisuals, nameText])
+    this.tweens.add({ targets: aura, scaleX: 1.12, scaleY: 1.08, alpha: 0.34, yoyo: true, repeat: -1, duration: isKael ? 900 : 1100, ease: 'Sine.easeInOut' })
 
     const companion: PartyCompanion = {
       characterId: member.characterId,
       name: character.name,
       container,
       body,
+      aura,
       sprite,
       nameText,
       hpBar,
@@ -1062,11 +1120,12 @@ export class OverworldScene extends Phaser.Scene {
         const distance = Phaser.Math.Distance.Between(companion.x, companion.y, nearestEnemy.x, nearestEnemy.y)
         if (distance > attackRange) {
           const previousX = companion.x
+          const previousY = companion.y
           const nextX = Phaser.Math.Linear(companion.x, nearestEnemy.x, 0.05)
           const nextY = Phaser.Math.Linear(companion.y, nearestEnemy.y, 0.05)
           if (!this.isWallAtWorld(nextX, companion.y)) companion.x = Phaser.Math.Clamp(nextX, 8, MAP_WIDTH * TILE_SIZE - 8)
           if (!this.isWallAtWorld(companion.x, nextY)) companion.y = Phaser.Math.Clamp(nextY, 8, MAP_HEIGHT * TILE_SIZE - 8)
-          if (companion.sprite && Math.abs(companion.x - previousX) > 0.15) companion.sprite.setFlipX(companion.x < previousX)
+          if (companion.sprite) this.playCompanionAnimation(companion, true, companion.x - previousX, companion.y - previousY)
           companion.container.setPosition(companion.x, companion.y)
           this.updateCompanionBars(companion)
           return
@@ -1078,10 +1137,11 @@ export class OverworldScene extends Phaser.Scene {
           const swing = this.add.arc(nearestEnemy.x, nearestEnemy.y, 24, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0xff9f1c, 0.38).setDepth(25).setStrokeStyle(4, 0xffd166, 0.8)
           this.tweens.add({ targets: swing, alpha: 0, duration: 180, onComplete: () => swing.destroy() })
           this.spawnKaelSlash(companion, nearestEnemy)
+          if (companion.sprite) companion.sprite.play(`${companion.characterId}-attack-${this.directionFromVector(nearestEnemy.x - companion.x, nearestEnemy.y - companion.y)}`, true)
           this.tweens.add({ targets: companion.body, scale: 1.15, yoyo: true, duration: 75 })
           nearestEnemy.currentHp = Math.max(0, nearestEnemy.currentHp - damage)
           nearestEnemy.hitFlashTimer = 120
-          nearestEnemy.sprite.setFillStyle(0xffffff)
+          nearestEnemy.body.setFillStyle(0xffffff)
           this.showDamageNumber(nearestEnemy.x, nearestEnemy.y - 22, damage, 'player')
           this.updateEnemyBars(nearestEnemy)
           companion.lastAttackTime = this.time.now
@@ -1139,7 +1199,7 @@ export class OverworldScene extends Phaser.Scene {
               const damage = Math.max(1, Math.round(CombatSystem.calculateRealtimePlayerDamage(stats.mag, nearestEnemy.stats.def) * 0.7))
               nearestEnemy.currentHp = Math.max(0, nearestEnemy.currentHp - damage)
               nearestEnemy.hitFlashTimer = 120
-              nearestEnemy.sprite.setFillStyle(0xffffff)
+              nearestEnemy.body.setFillStyle(0xffffff)
               this.showDamageNumber(nearestEnemy.x, nearestEnemy.y - 22, damage, 'player')
               this.updateEnemyBars(nearestEnemy)
               if (nearestEnemy.currentHp <= 0) this.killEnemy(nearestEnemy)
@@ -1156,6 +1216,7 @@ export class OverworldScene extends Phaser.Scene {
       const targetX = this.player!.x + companion.offsetX
       const targetY = this.player!.y + companion.offsetY
       const previousX = companion.x
+      const previousY = companion.y
       const nextX = Phaser.Math.Linear(companion.x, targetX, 0.12)
       const nextY = Phaser.Math.Linear(companion.y, targetY, 0.12)
       if (!this.isWallAtWorld(nextX, companion.y)) companion.x = Phaser.Math.Clamp(nextX, 8, MAP_WIDTH * TILE_SIZE - 8)
@@ -1163,13 +1224,25 @@ export class OverworldScene extends Phaser.Scene {
       if (companion.sprite) {
         const moving = Phaser.Math.Distance.Between(previousX, companion.y, companion.x, companion.y) > 0.2 || Phaser.Math.Distance.Between(companion.x, companion.y, targetX, targetY) > 3
         companion.sprite.y = Math.sin(this.time.now * 0.005 + companion.bobSeed) * 2
-        if (Math.abs(companion.x - previousX) > 0.15) companion.sprite.setFlipX(companion.x < previousX)
-        const animKey = `${companion.characterId}-${moving ? 'walk' : 'idle'}-down`
-        if (this.anims.exists(animKey) && companion.sprite.anims.currentAnim?.key !== animKey) companion.sprite.play(animKey)
+        this.playCompanionAnimation(companion, moving, companion.x - previousX, companion.y - previousY)
       }
       companion.container.setPosition(companion.x, companion.y)
       this.updateCompanionBars(companion)
     })
+  }
+
+  private playCompanionAnimation(companion: PartyCompanion, moving: boolean, deltaX: number, deltaY: number) {
+    if (!companion.sprite) return
+    if (companion.sprite.anims.currentAnim?.key?.includes('-attack-') && companion.sprite.anims.isPlaying) return
+    const direction = this.directionFromVector(deltaX, deltaY)
+    const animKey = `${companion.characterId}-${moving ? 'walk' : 'idle'}-${direction}`
+    if (this.anims.exists(animKey) && companion.sprite.anims.currentAnim?.key !== animKey) companion.sprite.play(animKey)
+  }
+
+  private directionFromVector(deltaX: number, deltaY: number): Direction {
+    if (Math.abs(deltaX) > Math.abs(deltaY)) return deltaX < 0 ? 'left' : 'right'
+    if (Math.abs(deltaY) > 0.1) return deltaY < 0 ? 'up' : 'down'
+    return 'down'
   }
 
   private getNearestEnemy(x: number, y: number, maxDistance: number): MapEnemy | null {
@@ -1282,6 +1355,9 @@ export class OverworldScene extends Phaser.Scene {
         if (!this.anims.exists(`nara-idle-${direction}`)) {
           this.anims.create({ key: `nara-idle-${direction}`, frames: [{ key: GENERATED_ASSETS.heroes.nara, frame: row * 4 }], frameRate: 1 })
         }
+        if (!this.anims.exists(`nara-attack-${direction}`)) {
+          this.anims.create({ key: `nara-attack-${direction}`, frames: this.anims.generateFrameNumbers(GENERATED_ASSETS.heroes.nara, { start: row * 4 + 1, end: row * 4 + 3 }), frameRate: 14, repeat: 0 })
+        }
       }
     }
     for (const [characterId, assetKey] of Object.entries({ kael: GENERATED_ASSETS.heroes.kael, io: GENERATED_ASSETS.heroes.io })) {
@@ -1293,6 +1369,9 @@ export class OverworldScene extends Phaser.Scene {
         }
         if (!this.anims.exists(`${characterId}-idle-${direction}`)) {
           this.anims.create({ key: `${characterId}-idle-${direction}`, frames: [{ key: assetKey, frame: row * 4 }], frameRate: 1 })
+        }
+        if (!this.anims.exists(`${characterId}-attack-${direction}`)) {
+          this.anims.create({ key: `${characterId}-attack-${direction}`, frames: this.anims.generateFrameNumbers(assetKey, { start: row * 4 + 1, end: row * 4 + 3 }), frameRate: 13, repeat: 0 })
         }
       }
     }
@@ -1308,6 +1387,9 @@ export class OverworldScene extends Phaser.Scene {
       return
     }
     const key = `nara-${isMoving ? 'walk' : 'idle'}-${this.facing}`
+    if (this.player.anims.currentAnim?.key?.startsWith('nara-attack') && this.player.anims.isPlaying) {
+      return
+    }
     if (this.player.anims.currentAnim?.key !== key) {
       this.player.play(key)
     }
@@ -2552,16 +2634,16 @@ export class OverworldScene extends Phaser.Scene {
     const x = this.tileCenter(tileX)
     const y = this.tileCenter(tileY)
     const color = isBoss ? 0xb91c1c : enemyId === 'moonwake_guardian' ? 0x4da6ff : enemyId === 'thornheart' ? 0x3aa657 : enemyId === 'cartographers_lie' ? 0x8f63ff : data.region === 'moonwake' ? 0x8bd6ff : data.region === 'skywell' ? 0xbda7ff : 0x75c46b
-    const size = isBoss ? 66 : 22
-    const aura = isBoss ? this.add.circle(x, y, size * 0.68, 0xff2d2d, 0.16).setDepth(17) : undefined
-    const sprite = this.add.rectangle(x, y, size, size, color, 0.95).setDepth(18).setStrokeStyle(isBoss ? 4 : 2, isBoss ? 0xff6b6b : 0xffffff, isBoss ? 0.75 : 0.35)
+    const size = isBoss ? 92 : 44
+    const aura = isBoss ? this.add.circle(x, y, size * 0.72, color, 0.18).setDepth(17).setStrokeStyle(4, 0xfff1a8, 0.26) : undefined
+    const { container: sprite, body } = this.createEnemyVisual(enemyId, x, y, color, isBoss)
     sprite.setAlpha(0).setScale(0.5)
     const hpBarBg = this.add.graphics().setDepth(19)
     const hpBar = this.add.graphics().setDepth(20)
     const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
     nameText.setAlpha(0)
     const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : data.stats.hp, atk: Math.max(1, Math.round((isBoss ? data.stats.atk * 2 : data.stats.atk) * 0.92)) }
-    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
+    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, body, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
     this.mapEnemies.push(enemy)
     this.updateEnemyBars(enemy)
     this.tweens.add({ targets: sprite, alpha: 0.95, scale: 1, duration: 400, ease: 'Back.easeOut' })
@@ -2569,6 +2651,43 @@ export class OverworldScene extends Phaser.Scene {
     if (aura) this.tweens.add({ targets: aura, scale: 1.12, alpha: 0.08, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' })
     this.tweens.add({ targets: nameText, alpha: 1, duration: 320 })
     if (isBoss) this.createBossHud(enemy)
+  }
+
+  private createEnemyVisual(enemyId: string, x: number, y: number, color: number, isBoss: boolean) {
+    const container = this.add.container(x, y).setDepth(18).setName(`enemy:${enemyId}`)
+    const scale = isBoss ? 1.55 : 1
+    const shadow = this.add.ellipse(0, 20 * scale, 42 * scale, 14 * scale, 0x050713, 0.34)
+    const body = this.add.ellipse(0, 0, 34 * scale, 40 * scale, color, 0.96).setStrokeStyle(isBoss ? 4 : 2, isBoss ? 0xfff1a8 : 0xffffff, isBoss ? 0.72 : 0.38)
+    const eyeColor = enemyId.includes('moon') ? 0xc7f9ff : enemyId.includes('thorn') ? 0xfff1a8 : enemyId.includes('cartographer') ? 0xf0abfc : 0xffef9f
+    const details: Phaser.GameObjects.GameObject[] = [shadow]
+
+    if (enemyId.includes('thorn') || enemyId.includes('sprig') || enemyId.includes('root')) {
+      details.push(this.add.triangle(-12 * scale, -19 * scale, 0, 16, 8, -12, 16, 16, 0x173b20, 0.9))
+      details.push(this.add.triangle(12 * scale, -19 * scale, 0, 16, 8, -12, 16, 16, 0x173b20, 0.9))
+      details.push(this.add.rectangle(-19 * scale, 5 * scale, 14 * scale, 5 * scale, 0x2f7d3f, 0.85).setRotation(-0.55))
+      details.push(this.add.rectangle(19 * scale, 5 * scale, 14 * scale, 5 * scale, 0x2f7d3f, 0.85).setRotation(0.55))
+    } else if (enemyId.includes('moon') || enemyId.includes('tide')) {
+      details.push(this.add.arc(-20 * scale, 1 * scale, 18 * scale, 292, 68, false, 0x9bdcff, 0.2).setStrokeStyle(5 * scale, 0xc7f9ff, 0.72))
+      details.push(this.add.arc(20 * scale, 1 * scale, 18 * scale, 112, 248, false, 0x9bdcff, 0.2).setStrokeStyle(5 * scale, 0xc7f9ff, 0.72))
+      details.push(this.add.ellipse(0, 12 * scale, 22 * scale, 6 * scale, 0xe0f2fe, 0.28))
+    } else if (enemyId.includes('cartographer') || enemyId.includes('sky')) {
+      details.push(this.add.triangle(0, -27 * scale, 0, -16, 10, 8, -10, 8, 0x2e1065, 0.95))
+      details.push(this.add.circle(-18 * scale, -6 * scale, 6 * scale, 0xbda7ff, 0.42))
+      details.push(this.add.circle(18 * scale, -6 * scale, 6 * scale, 0xbda7ff, 0.42))
+      details.push(this.add.rectangle(0, 16 * scale, 26 * scale, 4 * scale, 0xf0abfc, 0.45).setRotation(0.28))
+    } else {
+      details.push(this.add.triangle(-12 * scale, -22 * scale, 0, 16, 8, -10, 16, 16, 0x3b2417, 0.92))
+      details.push(this.add.triangle(12 * scale, -22 * scale, 0, 16, 8, -10, 16, 16, 0x3b2417, 0.92))
+      details.push(this.add.arc(0, 9 * scale, 16 * scale, 20, 160, false, 0xffd166, 0).setStrokeStyle(3 * scale, 0xffd166, 0.55))
+    }
+
+    details.push(body)
+    details.push(this.add.circle(-7 * scale, -5 * scale, 3.5 * scale, eyeColor, 0.98))
+    details.push(this.add.circle(7 * scale, -5 * scale, 3.5 * scale, eyeColor, 0.98))
+    details.push(this.add.circle(-6 * scale, -6 * scale, 1.2 * scale, 0x111827, 0.95))
+    details.push(this.add.circle(8 * scale, -6 * scale, 1.2 * scale, 0x111827, 0.95))
+    container.add(details)
+    return { container, body }
   }
 
   private updateMapEnemies(delta: number) {
@@ -2586,7 +2705,7 @@ export class OverworldScene extends Phaser.Scene {
         if (companionTarget) this.tryEnemyAttackCompanion(enemy, companionTarget)
         else this.tryEnemyAttack(enemy)
       }
-      if (enemy.hitFlashTimer > 0) { enemy.hitFlashTimer -= delta; if (enemy.hitFlashTimer <= 0) enemy.sprite.setFillStyle(this.getEnemyColor(enemy)) }
+      if (enemy.hitFlashTimer > 0) { enemy.hitFlashTimer -= delta; if (enemy.hitFlashTimer <= 0) enemy.body.setFillStyle(this.getEnemyColor(enemy)) }
       enemy.sprite.setPosition(enemy.x, enemy.y)
       enemy.aura?.setPosition(enemy.x, enemy.y)
       this.updateEnemyBars(enemy)
@@ -2631,6 +2750,7 @@ export class OverworldScene extends Phaser.Scene {
     this.nextPlayerAttackAt = this.time.now + 320
     if (pointerX !== undefined && pointerY !== undefined) this.updateFacingFromVector(pointerX - this.player.x, pointerY - this.player.y)
     const angle = this.facingToAngle()
+    if (this.player instanceof Phaser.GameObjects.Sprite) this.player.play(`nara-attack-${this.facing}`, true)
     const swingX = this.player.x + Math.cos(angle) * 34
     const swingY = this.player.y + Math.sin(angle) * 34
     const swing = this.add.arc(swingX, swingY, 38, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0x9ff3ff, 0.32).setDepth(25).setStrokeStyle(7, 0xf8fdff, 0.9)
@@ -2651,7 +2771,7 @@ export class OverworldScene extends Phaser.Scene {
     const critical = damage > heroStats.atk * 1.5
     enemy.currentHp = Math.max(0, enemy.currentHp - damage)
     enemy.hitFlashTimer = 80
-    enemy.sprite.setFillStyle(0xffffff)
+    enemy.body.setFillStyle(0xffffff)
     this.showDamageNumber(enemy.x, enemy.y - 22, damage, 'player', critical)
     this.triggerHitstop(enemy.isBoss ? 50 : 30)
     this.updateEnemyBars(enemy)
@@ -2713,7 +2833,7 @@ export class OverworldScene extends Phaser.Scene {
   private tryEnemyAttack(enemy: MapEnemy) {
     if (!this.player || this.time.now - enemy.lastAttackTime < enemy.attackCooldown) return
     enemy.lastAttackTime = this.time.now
-    enemy.sprite.setFillStyle(0xff4d4d)
+    enemy.body.setFillStyle(0xff4d4d)
     this.time.delayedCall(300, () => {
       if (enemy.dead || !this.player || this.time.now < this.playerInvulnerableUntil || Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) > enemy.attackRange + 12) return
       const blocking = this.isBlocking
@@ -2736,7 +2856,7 @@ export class OverworldScene extends Phaser.Scene {
   private tryEnemyAttackCompanion(enemy: MapEnemy, companion: PartyCompanion) {
     if (this.time.now - enemy.lastAttackTime < enemy.attackCooldown) return
     enemy.lastAttackTime = this.time.now
-    enemy.sprite.setFillStyle(0xff4d4d)
+    enemy.body.setFillStyle(0xff4d4d)
     this.time.delayedCall(300, () => {
       if (enemy.dead || companion.state === 'dead' || Phaser.Math.Distance.Between(enemy.x, enemy.y, companion.x, companion.y) > enemy.attackRange + 12) return
       const member = this.saveData.party[companion.partyIndex]
@@ -2763,7 +2883,7 @@ export class OverworldScene extends Phaser.Scene {
     enemy.dead = true
     enemy.state = 'dead'
     this.killCount += 1
-    enemy.sprite.setFillStyle(0xffffff)
+    enemy.body.setFillStyle(0xffffff)
     this.cameras.main.shake(enemy.isBoss ? 400 : 200, enemy.isBoss ? 0.008 : 0.004)
     if (enemy.isBoss) this.triggerSlowMo(300, 0.3)
     this.spawnDeathExplosion(enemy.x, enemy.y, this.getEnemyColor(enemy))
