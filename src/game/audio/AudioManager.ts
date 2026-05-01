@@ -90,6 +90,11 @@ export class AudioManager {
   private masterGain: GainNode | null = null
   private musicGeneration = 0
   private musicGain: GainNode | null = null
+  private musicFilter: BiquadFilterNode | null = null
+  private sfxPitchHistory: Partial<Record<SfxName, number[]>> = {}
+  private musicDuckedUntil = 0
+  private pausedAudio = false
+  private sfxPitchMultiplier = 1
   private settings: AudioSettings = this.loadSettings()
   private sfxGain: GainNode | null = null
   private unlockListenersBound = false
@@ -183,6 +188,8 @@ export class AudioManager {
 
     const startTime = context.currentTime + 0.01
     const sfxGain = this.sfxGain
+    const pitch = this.nextSfxPitch(name)
+    this.sfxPitchMultiplier = pitch
 
     switch (name) {
       case 'ui_blip':
@@ -416,10 +423,72 @@ export class AudioManager {
         })
         break
     }
+    this.sfxPitchMultiplier = 1
   }
 
   playSFX(name: SfxName): void {
     this.playSfx(name)
+  }
+
+  playHitSfx(kind: 'normal' | 'critical' | 'weakness' = 'normal'): void {
+    const context = this.ensureContext()
+    if (!context || !this.sfxGain) return
+    void this.resume()
+    const pitch = this.nextSfxPitch(kind === 'critical' ? 'critical_flash' : 'hit_physical') * (kind === 'critical' ? 1.15 : kind === 'weakness' ? 1.08 : 1)
+    const startTime = context.currentTime + 0.01
+    this.scheduleTone({ destination: this.sfxGain, duration: 0.08, endFrequency: 55 * pitch, frequency: 100 * pitch, gain: 0.22, release: 0.06, startTime, type: 'sine' })
+    this.scheduleNoise({ destination: this.sfxGain, duration: 0.08, filterFrequency: kind === 'weakness' ? 720 : 180, filterQ: 1.1, filterType: kind === 'weakness' ? 'bandpass' : 'lowpass', gain: kind === 'weakness' ? 0.14 : 0.18, release: 0.055, startTime })
+    if (kind === 'critical') this.playSfx('critical_flash')
+  }
+
+  duckMusic(amount = 0.15, durationMs = 80): void {
+    const context = this.ensureContext()
+    if (!context || !this.musicGain) return
+    const until = Date.now() + durationMs
+    this.musicDuckedUntil = Math.max(this.musicDuckedUntil, until)
+    this.musicGain.gain.cancelScheduledValues(context.currentTime)
+    this.musicGain.gain.setTargetAtTime(this.settings.musicVolume * (1 - amount), context.currentTime, 0.01)
+    window.setTimeout(() => {
+      if (Date.now() >= this.musicDuckedUntil && !this.pausedAudio) this.musicGain?.gain.setTargetAtTime(this.settings.musicVolume, this.context?.currentTime ?? 0, 0.02)
+    }, durationMs)
+  }
+
+  setLowHpHeartbeat(hpPercent: number): void {
+    const clamped = Math.max(0, Math.min(1, hpPercent))
+    if (clamped >= 0.3) return
+    const context = this.ensureContext()
+    if (!context || !this.sfxGain) return
+    const intensity = (0.3 - clamped) / 0.3
+    const startTime = context.currentTime + 0.01
+    this.scheduleTone({ attack: 0.02, destination: this.sfxGain, duration: 0.18, endFrequency: 38, frequency: 52, gain: 0.025 + intensity * 0.05, release: 0.14, startTime, type: 'sine' })
+  }
+
+  setPaused(paused: boolean): void {
+    const context = this.ensureContext()
+    if (!context || !this.musicGain || !this.musicFilter) return
+    this.pausedAudio = paused
+    this.musicFilter.frequency.setTargetAtTime(paused ? 700 : 20000, context.currentTime, 0.03)
+    this.musicGain.gain.setTargetAtTime(this.settings.musicVolume * (paused ? 0.4 : 1), context.currentTime, 0.03)
+  }
+
+  fadeAll(duration = 0.5): void {
+    const context = this.ensureContext()
+    if (!context || !this.masterGain) return
+    this.masterGain.gain.cancelScheduledValues(context.currentTime)
+    this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, context.currentTime)
+    this.masterGain.gain.linearRampToValueAtTime(0, context.currentTime + duration)
+    window.setTimeout(() => this.masterGain?.gain.setTargetAtTime(this.settings.masterVolume, this.context?.currentTime ?? 0, 0.05), duration * 1000 + 250)
+  }
+
+  private nextSfxPitch(name: SfxName): number {
+    const history = this.sfxPitchHistory[name] ?? []
+    let pitch = 1
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      pitch = Math.round((0.96 + Math.random() * 0.08) * 1000) / 1000
+      if (!(history.length >= 2 && history[history.length - 1] === pitch && history[history.length - 2] === pitch)) break
+    }
+    this.sfxPitchHistory[name] = [...history.slice(-1), pitch]
+    return pitch
   }
 
   playResonancePulse(mode: 'objective' | 'event' | 'reward' = 'event'): void {
@@ -634,13 +703,18 @@ export class AudioManager {
     const musicGain = context.createGain()
     const sfxGain = context.createGain()
 
-    musicGain.connect(masterGain)
+    const musicFilter = context.createBiquadFilter()
+    musicFilter.type = 'lowpass'
+    musicFilter.frequency.value = 20000
+    musicGain.connect(musicFilter)
+    musicFilter.connect(masterGain)
     sfxGain.connect(masterGain)
     masterGain.connect(context.destination)
 
     this.context = context
     this.masterGain = masterGain
     this.musicGain = musicGain
+    this.musicFilter = musicFilter
     this.sfxGain = sfxGain
     this.applyVolumeSettings()
 
@@ -1016,10 +1090,11 @@ export class AudioManager {
     const endTime = options.startTime + options.duration
 
     oscillator.type = options.type ?? 'sine'
-    oscillator.frequency.setValueAtTime(options.frequency, options.startTime)
+    const pitch = options.destination === this.sfxGain ? this.sfxPitchMultiplier : 1
+    oscillator.frequency.setValueAtTime(options.frequency * pitch, options.startTime)
 
     if (options.endFrequency) {
-      oscillator.frequency.exponentialRampToValueAtTime(options.endFrequency, endTime)
+      oscillator.frequency.exponentialRampToValueAtTime(options.endFrequency * pitch, endTime)
     }
 
     this.connectEnvelope(gain, options.startTime, options.duration, options.gain, options.attack, options.release)

@@ -4,7 +4,7 @@ import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
 import { CHARACTERS, type CharacterStats } from '../data/characters'
 import { ENEMIES_BY_ID, type EnemySkill } from '../data/enemies'
 import { ITEMS_BY_ID } from '../data/items'
-import { CONTROLS, CONTROLS_DISPLAY } from '../controls'
+import { CONTROLS, CONTROLS_DISPLAY, CONTROLS_SHORT } from '../controls'
 import { SaveSystem, type SaveData } from '../systems/SaveSystem'
 import { CombatSystem } from '../systems/CombatSystem'
 
@@ -15,6 +15,12 @@ const PLAYER_SPEED = 175
 const REGULAR_ENEMY_TARGET_COUNT = 7
 const ENEMY_RESPAWN_DELAY = 15000
 const DEV_MODE = false
+const BOSS_PHASE_THRESHOLDS = [
+  { hpPercent: 1.0, phase: 1, label: 'Guardian awakens' },
+  { hpPercent: 0.70, phase: 2, label: 'Guardian channels power' },
+  { hpPercent: 0.40, phase: 3, label: 'Guardian shatters the seal' },
+  { hpPercent: 0.15, phase: 4, label: 'Last stand' },
+] as const
 const ENTITY_SCALE = {
   hero: 0.72,
   npc: 0.65,
@@ -177,6 +183,8 @@ type MapEnemy = {
   expReward: number
   goldReward: number
   battleId?: string
+  bossPhase?: number
+  recoveringUntil?: number
 }
 
 type PartyCompanion = {
@@ -328,9 +336,24 @@ export class OverworldScene extends Phaser.Scene {
   private cameraZoom = 1
   private visualHp = 0
   private visualHpTarget = 0
+  private shownHints: Set<string> = new Set()
+  private hintContainer?: Phaser.GameObjects.Container
+  private hintQueue: Array<{ id: string; text: string; duration?: number }> = []
+  private movementMs = 0
+  private learnedAttack = false
+  private learnedInteract = false
+  private firstDamageTaken = false
+  private fpsText?: Phaser.GameObjects.Text
+  private lastHeartbeatAt = 0
+  private damageNumberPool: Phaser.GameObjects.Text[] = []
 
   constructor() {
     super('OverworldScene')
+  }
+
+  private readonly handleVisibilityChange = () => {
+    if (document.hidden) this.openMenu()
+    else void audioManager.resume()
   }
 
   init(data: OverworldInitData) {
@@ -410,6 +433,16 @@ export class OverworldScene extends Phaser.Scene {
     this.menuOverlay = undefined
     this.miniMap = undefined
     this.helpOverlay = undefined
+    this.shownHints = new Set()
+    this.hintQueue = []
+    this.hintContainer = undefined
+    this.movementMs = 0
+    this.learnedAttack = false
+    this.learnedInteract = false
+    this.firstDamageTaken = false
+    this.fpsText = undefined
+    this.damageNumberPool.forEach((text) => text.destroy())
+    this.damageNumberPool = []
 
     const continuedSave = this.initData.continueGame ? SaveSystem.load(this.initData.saveSlot ?? SaveSystem.getAutoSaveSlot()) : null
     this.saveData = continuedSave ?? this.createDefaultSaveData()
@@ -456,9 +489,13 @@ export class OverworldScene extends Phaser.Scene {
     this.createHud()
     this.createMiniMap()
     this.createTouchControls()
+    if (DEV_MODE) this.fpsText = this.add.text(8, this.scale.height - 20, '', { color: '#86efac', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setScrollFactor(0).setDepth(200)
     this.refreshHud()
-    this.cameras.main.fadeIn(420, 5, 6, 18)
+    this.cameras.main.fadeIn(260, 5, 6, 18)
     this.showAreaBanner('Luma Quay', 'A harbor village holding its breath beneath emberlit glass.')
+    this.queueHint('move', 'WASD to move', 5000)
+    document.addEventListener('visibilitychange', this.handleVisibilityChange)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => document.removeEventListener('visibilitychange', this.handleVisibilityChange))
     if (!continuedSave && !this.initData.continueGame) {
       this.time.delayedCall(850, () => this.showFirstSessionGuide())
     }
@@ -523,6 +560,11 @@ export class OverworldScene extends Phaser.Scene {
     }
     const dashing = this.time.now < this.dashUntil
     const isMoving = velocityX !== 0 || velocityY !== 0
+    if (isMoving) {
+      this.movementMs += delta
+      this.dismissHint('move')
+      if (this.movementMs >= 10000) this.queueHint('dash', 'Shift to dash')
+    }
     const speedMultiplier = (dashing ? this.DASH_MULTIPLIER * this.dashSlideMultiplier : 1) * (this.isBlocking ? 0.58 : 1)
     this.movePlayer(velocityX * seconds * speedMultiplier, velocityY * seconds * speedMultiplier)
     if (dashing && isMoving) this.updateDashTrail()
@@ -548,6 +590,9 @@ export class OverworldScene extends Phaser.Scene {
     this.updateComboHud()
     this.updatePlayerBars()
     this.updateInteractionPrompt()
+    this.updateOnboardingHints()
+    this.updateLowHpHeartbeat()
+    if (DEV_MODE && this.fpsText) this.fpsText.setText(`FPS: ${this.game.loop.actualFps.toFixed(0)}`)
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
       this.openMenu()
@@ -568,10 +613,10 @@ export class OverworldScene extends Phaser.Scene {
       this.useHealthPotion()
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.keys.one)) this.useRealtimeSkill(0)
-    if (Phaser.Input.Keyboard.JustDown(this.keys.two)) this.useRealtimeSkill(1)
-    if (Phaser.Input.Keyboard.JustDown(this.keys.three)) this.useRealtimeSkill(2)
-    if (Phaser.Input.Keyboard.JustDown(this.keys.four)) this.useRealtimeSkill(3)
+    if (Phaser.Input.Keyboard.JustDown(this.keys.one)) { this.queueHint('skills', '1-4 for skills'); this.useRealtimeSkill(0) }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.two)) { this.queueHint('skills', '1-4 for skills'); this.useRealtimeSkill(1) }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.three)) { this.queueHint('skills', '1-4 for skills'); this.useRealtimeSkill(2) }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.four)) { this.queueHint('skills', '1-4 for skills'); this.useRealtimeSkill(3) }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.space) && !this.isBlocking) {
       if (!this.performPlayerAttack()) this.bufferInput('attack')
@@ -1577,7 +1622,7 @@ export class OverworldScene extends Phaser.Scene {
     const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
     areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
-    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 24, CONTROLS_DISPLAY, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px', backgroundColor: '#08091acc', padding: { x: 12, y: 6 }, wordWrap: { width: this.uiWidth(0.86, 760) } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 24, 'WASD: Move | Space: Attack', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px', backgroundColor: '#08091acc', padding: { x: 12, y: 6 }, wordWrap: { width: this.uiWidth(0.86, 760) } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
     this.tweens.add({ targets: this.promptText, alpha: 0, delay: 10000, duration: 900 })
     this.createSkillBar()
     this.playerHpBarBg = this.add.graphics().setDepth(22)
@@ -1600,19 +1645,32 @@ export class OverworldScene extends Phaser.Scene {
     ]
 
     controls.forEach((control) => {
-      const button = this.add.circle(control.x, control.y, 26, 0x08091a, 0.46).setScrollFactor(0).setDepth(96).setStrokeStyle(2, 0xffffff, 0.34).setInteractive({ useHandCursor: true })
+      const button = this.add.circle(control.x, control.y, 28, 0x08091a, 0.46).setScrollFactor(0).setDepth(96).setStrokeStyle(2, 0xffffff, 0.34).setInteractive({ useHandCursor: true })
       const label = this.add.text(control.x, control.y, control.label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(97)
-      button.on('pointerdown', () => { this.touchMove = control.move; button.setFillStyle(0x1b3762, 0.68) })
-      button.on('pointerup', () => { this.touchMove = null; button.setFillStyle(0x08091a, 0.46) })
+      button.on('pointerdown', () => { this.touchMove = control.move; this.touchFeedback(button, 0x1b3762) })
+      button.on('pointerup', () => { this.touchMove = null; button.setFillStyle(0x08091a, 0.46).setScale(1) })
       button.on('pointerout', () => { if (this.touchMove === control.move) { this.touchMove = null }; button.setFillStyle(0x08091a, 0.46) })
       this.touchButtons.push(button, label)
     })
 
-    const interact = this.add.text(width - 92, height - 94, 'E', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', backgroundColor: '#0a0a2e88', padding: { x: 20, y: 14 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
-    const menu = this.add.text(width - 88, height - 38, 'MENU', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px', backgroundColor: '#08091a88', padding: { x: 16, y: 8 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
-    interact.on('pointerdown', () => this.interact())
-    menu.on('pointerdown', () => this.openMenu())
-    this.touchButtons.push(interact, menu)
+    const attack = this.add.text(width - 154, height - 94, 'ATK', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', backgroundColor: '#2e0a0a88', padding: { x: 17, y: 17 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    const interact = this.add.text(width - 92, height - 94, 'E', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', backgroundColor: '#0a0a2e88', padding: { x: 21, y: 16 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    const menu = this.add.text(width - 88, height - 36, 'MENU', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px', backgroundColor: '#08091a88', padding: { x: 18, y: 13 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
+    attack.on('pointerdown', () => { this.touchTextFeedback(attack); this.performPlayerAttack() })
+    interact.on('pointerdown', () => { this.touchTextFeedback(interact); this.interact() })
+    menu.on('pointerdown', () => { this.touchTextFeedback(menu); this.openMenu() })
+    this.touchButtons.push(attack, interact, menu)
+  }
+
+  private touchFeedback(button: Phaser.GameObjects.Arc, color: number) {
+    button.setScale(0.94).setFillStyle(color, 0.78)
+    navigator.vibrate?.(12)
+  }
+
+  private touchTextFeedback(button: Phaser.GameObjects.Text) {
+    button.setScale(0.94).setColor('#ffd36e')
+    this.time.delayedCall(90, () => button.setScale(1).setColor('#ffffff'))
+    navigator.vibrate?.(12)
   }
 
   private movePlayer(deltaX: number, deltaY: number) {
@@ -1649,6 +1707,50 @@ export class OverworldScene extends Phaser.Scene {
       { x: x - halfWidth + 3, y: y + halfHeight - 3 },
       { x: x + halfWidth - 3, y: y + halfHeight - 3 },
     ].some((point) => this.isWallAtWorld(point.x, point.y))
+  }
+
+  private queueHint(id: string, text: string, duration = 4000) {
+    if (this.shownHints.has(id) || this.hintQueue.some((hint) => hint.id === id)) return
+    this.shownHints.add(id)
+    this.hintQueue.push({ id, text, duration })
+    if (!this.hintContainer) this.showNextHint()
+  }
+
+  private showNextHint() {
+    const hint = this.hintQueue.shift()
+    if (!hint) return
+    const y = this.scale.height - 62
+    const width = Math.min(960, this.scale.width - 48)
+    const panel = this.add.rectangle(0, 0, width, 30, 0x050713, 0.88).setStrokeStyle(1, 0xffd36e, 0.86)
+    const accent = this.add.rectangle(-width / 2 + 4, 0, 3, 22, 0xffd36e, 0.95)
+    const label = this.add.text(0, 0, hint.text, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px' }).setOrigin(0.5)
+    const container = this.add.container(this.scale.width / 2, y, [panel, accent, label]).setScrollFactor(0).setDepth(140).setAlpha(0)
+    container.setName(`hint:${hint.id}`)
+    this.hintContainer = container
+    this.tweens.add({ targets: container, alpha: 1, duration: 200, ease: 'Sine.easeOut' })
+    this.time.delayedCall(hint.duration ?? 4000, () => this.dismissHint(hint.id))
+  }
+
+  private dismissHint(id?: string) {
+    if (!this.hintContainer || (id && this.hintContainer.name !== `hint:${id}`)) return
+    const container = this.hintContainer
+    this.hintContainer = undefined
+    this.tweens.add({ targets: container, alpha: 0, duration: 300, ease: 'Sine.easeIn', onComplete: () => { container.destroy(); this.showNextHint() } })
+  }
+
+  private updateOnboardingHints() {
+    if (!this.player) return
+    if (this.mapEnemies.some((enemy) => !enemy.dead && Phaser.Math.Distance.Between(this.player!.x, this.player!.y, enemy.x, enemy.y) <= 200)) this.queueHint('attack', 'Space to attack')
+    if (this.saveData.party[0]?.level >= 2) this.queueHint('skills', '1-4 for skills')
+  }
+
+  private updateLowHpHeartbeat() {
+    const hero = this.saveData.party[0]
+    const pct = hero.currentHp / this.getPlayerCombatStats().hp
+    if (pct < 0.3 && this.time.now - this.lastHeartbeatAt > 1500) {
+      this.lastHeartbeatAt = this.time.now
+      audioManager.setLowHpHeartbeat(pct)
+    }
   }
 
   private checkSavePoint() {
@@ -1751,6 +1853,8 @@ export class OverworldScene extends Phaser.Scene {
 
   private interact(): boolean {
     audioManager.playSfx('field_interact')
+    this.learnedInteract = true
+    this.updatePromptLearning()
     const tile = this.getInteractionTile()
     const playerTile = this.player ? this.worldToTile(this.player.x, this.player.y) : null
     const isAt = (target: { x: number; y: number }) => this.matchesTile(tile, target) || this.matchesTile(playerTile, target)
@@ -1807,20 +1911,22 @@ export class OverworldScene extends Phaser.Scene {
       this.showToast('The treasure chest is empty.')
       return
     }
-    this.saveData.openedChests.push(chestId)
-    this.setFlag(`chest_${chestId}`)
-    const reward = this.rollChestReward(chestId)
-    if (reward.gold > 0) this.saveData.gold += reward.gold
-    reward.items.forEach((item) => this.addInventory(item.itemId, item.quantity))
-    if (reward.equipCharm) this.saveData.party[0].equipment.charm = reward.equipCharm
-    audioManager.playSfx('chest_open')
-    this.animateChestOpen(chestId)
-    this.time.delayedCall(230, () => audioManager.playSfx('equipment_gain'))
-    this.showToast(`Treasure chest: ${reward.label}`)
-    this.persist()
-    if (this.objectiveText && this.inventoryText) {
-      this.refreshHud()
-    }
+    const chest = this.treasureChests.find((entry) => entry.id === chestId)
+    if (chest) this.tweens.add({ targets: [chest.base, chest.lid, chest.trim], x: '+=3', yoyo: true, repeat: 3, duration: 35 })
+    this.time.delayedCall(200, () => {
+      this.saveData.openedChests.push(chestId)
+      this.setFlag(`chest_${chestId}`)
+      const reward = this.rollChestReward(chestId)
+      if (reward.gold > 0) this.saveData.gold += reward.gold
+      reward.items.forEach((item) => this.addInventory(item.itemId, item.quantity))
+      if (reward.equipCharm) this.saveData.party[0].equipment.charm = reward.equipCharm
+      audioManager.playSfx('chest_open')
+      this.animateChestOpen(chestId)
+      this.time.delayedCall(230, () => audioManager.playSfx('equipment_gain'))
+      this.showToast(`Treasure chest: ${reward.label}`)
+      this.persist()
+      if (this.objectiveText && this.inventoryText) this.refreshHud()
+    })
   }
 
   private rollChestReward(chestId: string): { gold: number; items: Array<{ itemId: string; quantity: number }>; equipCharm?: string; label: string } {
@@ -2288,7 +2394,7 @@ export class OverworldScene extends Phaser.Scene {
     const heading = this.add.text(width / 2, 62, title, { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: `${Math.min(26, Math.max(18, Math.floor(width / 37)))}px`, wordWrap: { width: bannerW - 32 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
     const body = this.add.text(width / 2, 92, subtitle, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: bannerW - 60 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
     this.activeBanners.push(glow, panel, rule, heading, body)
-    this.tweens.add({ targets: [glow, panel, rule, heading, body], alpha: 0, delay: 2300, duration: 600, onComplete: () => { glow.destroy(); panel.destroy(); rule.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
+    this.tweens.add({ targets: [glow, panel, rule, heading, body], alpha: 0, delay: 1500, duration: 260, onComplete: () => { glow.destroy(); panel.destroy(); rule.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
   }
 
   private showEventBanner(title: string, subtitle: string) {
@@ -2352,9 +2458,12 @@ export class OverworldScene extends Phaser.Scene {
     const { width, height } = this.scale
     const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0).setScrollFactor(0).setDepth(240)
     const credits = this.add.text(width / 2, height + 80, 'Emberglass: Covenant of the Skywell\nA handcrafted JRPG experience\n\nGame Design & Development\nZai & Hermes\n\nArt\nProgrammatic Pixel Art (Pillow)\n\nMusic & SFX\nWeb Audio API\n\nThank you for playing.', { align: 'center', color: '#ffffff', fontFamily: 'Georgia, serif', fontSize: `${Math.min(25, Math.max(18, Math.floor(width / 38)))}px`, lineSpacing: 14, wordWrap: { width: this.uiWidth(0.84, 800) } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(241)
-    this.tweens.add({ targets: overlay, alpha: 0.86, duration: 900, ease: 'Sine.easeInOut' })
+    const skip = () => this.scene.start('TitleScene')
+    this.input.keyboard?.once('keydown-ESC', skip)
+    this.input.keyboard?.once('keydown-ENTER', skip)
+    this.tweens.add({ targets: overlay, alpha: 0.86, duration: 260, ease: 'Sine.easeInOut' })
     this.tweens.add({ targets: credits, y: -360, duration: 8000, ease: 'Linear', onComplete: () => {
-      this.tweens.add({ targets: [overlay, credits], alpha: 0, duration: 800, onComplete: () => this.scene.start('TitleScene') })
+      this.tweens.add({ targets: [overlay, credits], alpha: 0, duration: 260, onComplete: () => this.scene.start('TitleScene') })
     } })
   }
 
@@ -2371,6 +2480,7 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     this.busy = true
+    audioManager.setPaused(true)
     audioManager.playSfx('ui_menu_open')
     const { width, height } = this.scale
     const container = this.add.container(0, 0).setScrollFactor(0).setDepth(130)
@@ -2512,6 +2622,7 @@ export class OverworldScene extends Phaser.Scene {
     this.menuOverlay?.container.destroy()
     this.menuOverlay = undefined
     this.busy = false
+    audioManager.setPaused(false)
     audioManager.playSfx('ui_cancel')
   }
 
@@ -2813,7 +2924,7 @@ export class OverworldScene extends Phaser.Scene {
   private spawnRegularEnemiesForStage() {
     const regularByStage: Record<SaveData['stage'], Array<{ ids: string[]; x: number; y: number }>> = {
       quay: [
-        { ids: ['ash_slime', 'frost_shard', 'vinecrawler'], x: 8, y: 10 }, { ids: ['ash_slime', 'frost_shard'], x: 12, y: 13 }, { ids: ['vinecrawler', 'ash_slime'], x: 18, y: 10 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 31, y: 7 },
+        { ids: ['ash_slime'], x: 5, y: 6 }, { ids: ['ash_slime', 'frost_shard', 'vinecrawler'], x: 8, y: 10 }, { ids: ['ash_slime', 'frost_shard'], x: 12, y: 13 }, { ids: ['vinecrawler', 'ash_slime'], x: 18, y: 10 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 31, y: 7 },
       ],
       field: [
         { ids: ['ash_slime', 'frost_shard'], x: 9, y: 10 }, { ids: ['vinecrawler', 'moss_knight', 'sporefiend'], x: 20, y: 9 }, { ids: ['moss_knight', 'sporefiend', 'glass_scorpion'], x: 25, y: 12 }, { ids: ['storm_wisp', 'hollow_wisp', 'clay_sentinel'], x: 33, y: 8 }, { ids: ['storm_wisp', 'clay_sentinel'], x: 36, y: 11 },
@@ -2895,8 +3006,9 @@ export class OverworldScene extends Phaser.Scene {
     const hpBar = this.add.graphics().setDepth(20)
     const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
     nameText.setAlpha(0)
-    const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : data.stats.hp, atk: Math.max(1, Math.round((isBoss ? data.stats.atk * 2 : data.stats.atk) * 0.92)) }
-    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, body, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, visualHp: stats.hp, visualHpTarget: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
+    const isFirstEnemy = uniqueId === 'quay-0'
+    const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : isFirstEnemy ? Math.max(1, Math.floor(data.stats.hp * 0.5)) : data.stats.hp, atk: Math.max(1, Math.round((isBoss ? data.stats.atk * 2 : data.stats.atk) * 0.92)) }
+    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, body, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, visualHp: stats.hp, visualHpTarget: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : isFirstEnemy ? 36 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId, bossPhase: isBoss ? 1 : undefined }
     this.mapEnemies.push(enemy)
     this.updateEnemyBars(enemy)
     this.tweens.add({ targets: sprite, alpha: 0.95, scale: targetScale, duration: 400, ease: 'Back.easeOut' })
@@ -2953,6 +3065,18 @@ export class OverworldScene extends Phaser.Scene {
         enemy.aura?.setPosition(enemy.x, enemy.y)
         this.updateEnemyBars(enemy)
         return
+      }
+      if ((enemy.recoveringUntil ?? 0) > this.time.now) {
+        enemy.sprite.setAlpha(0.78)
+        enemy.sprite.setScale((enemy.isBoss ? ENTITY_SCALE.bossEnemy : ENTITY_SCALE.enemy) * 0.96, (enemy.isBoss ? ENTITY_SCALE.bossEnemy : ENTITY_SCALE.enemy) * 0.9)
+        enemy.sprite.setPosition(enemy.x, enemy.y + 3)
+        enemy.aura?.setPosition(enemy.x, enemy.y)
+        this.updateEnemyBars(enemy)
+        return
+      } else if (enemy.recoveringUntil) {
+        enemy.recoveringUntil = undefined
+        enemy.sprite.setAlpha(0.95)
+        enemy.sprite.setScale(enemy.isBoss ? ENTITY_SCALE.bossEnemy : ENTITY_SCALE.enemy)
       }
       const companionTarget = Math.random() < 0.3 ? this.getNearestCompanion(enemy) : null
       const targetX = companionTarget?.x ?? this.player!.x
@@ -3013,10 +3137,26 @@ export class OverworldScene extends Phaser.Scene {
     this.attackHitResolved = false
     this.cancelDashRecoveryAfterHit()
     if (pointerX !== undefined && pointerY !== undefined) this.updateFacingFromVector(pointerX - this.player.x, pointerY - this.player.y)
+    else this.autoAimNearestEnemy()
     if (this.player instanceof Phaser.GameObjects.Sprite) this.player.play(`nara-attack-${this.facing}`, true)
     this.time.delayedCall(this.ATTACK_HITBOX_DELAY_MS, () => this.resolvePlayerAttackContact())
-    audioManager.playSfx('field_interact')
+    audioManager.playSfx('attack_swing')
+    this.learnedAttack = true
+    this.dismissHint('attack')
+    this.updatePromptLearning()
     return true
+  }
+
+  private autoAimNearestEnemy() {
+    if (!this.player || !this.sys.game.device.input.touch) return
+    const nearest = this.mapEnemies.filter((enemy) => !enemy.dead).sort((a, b) => Phaser.Math.Distance.Between(this.player!.x, this.player!.y, a.x, a.y) - Phaser.Math.Distance.Between(this.player!.x, this.player!.y, b.x, b.y))[0]
+    if (nearest && Phaser.Math.Distance.Between(this.player.x, this.player.y, nearest.x, nearest.y) <= 86) this.updateFacingFromVector(nearest.x - this.player.x, nearest.y - this.player.y)
+  }
+
+  private updatePromptLearning() {
+    if (!this.promptText) return
+    this.promptText.setAlpha(1)
+    this.promptText.setText(this.learnedInteract ? CONTROLS_SHORT : this.learnedAttack ? 'WASD: Move | Space: Attack | Shift: Dash | F: Block' : 'WASD: Move | Space: Attack')
   }
 
   private canStartPlayerAttack(): boolean {
@@ -3063,10 +3203,13 @@ export class OverworldScene extends Phaser.Scene {
     enemy.body.setFillStyle(0xffffff)
     this.tweens.add({ targets: enemy.sprite, scaleX: critical ? 1.25 : 1.15, scaleY: critical ? 0.75 : 0.85, yoyo: true, duration: 50, ease: 'Sine.easeOut' })
     this.showDamageNumber(enemy.x, enemy.y - 22, damage, 'player', critical, enemy.weaknesses.includes('neutral'), enemy.resists.includes('neutral'))
+    audioManager.playHitSfx(critical ? 'critical' : enemy.weaknesses.includes('neutral') ? 'weakness' : 'normal')
+    audioManager.duckMusic()
     this.spawnHitParticles(enemy)
     this.triggerHitstop(enemy.isBoss || multiplier > 1 ? this.HITSTOP_HEAVY_MS : this.HITSTOP_LIGHT_MS)
     this.cameras.main.shake(enemy.isBoss ? 160 : multiplier > 1 ? 140 : 80, enemy.isBoss ? 0.022 : multiplier > 1 ? 0.018 : 0.008)
     this.updateEnemyBars(enemy)
+    if (enemy.isBoss) this.updateBossPhase(enemy)
     if (enemy.currentHp <= 0) this.killEnemy(enemy)
   }
 
@@ -3136,8 +3279,10 @@ export class OverworldScene extends Phaser.Scene {
   private tryEnemyAttack(enemy: MapEnemy) {
     if (!this.player || this.time.now - enemy.lastAttackTime < enemy.attackCooldown) return
     enemy.lastAttackTime = this.time.now
-    enemy.body.setFillStyle(0xff4d4d)
-    this.time.delayedCall(300, () => {
+    const attackKind = enemy.isBoss ? Phaser.Math.Between(0, 2) : 0
+    const tell = enemy.isBoss ? attackKind === 2 ? 1000 : attackKind === 1 ? 700 : 360 : 300
+    this.showEnemyTelegraph(enemy, attackKind, tell)
+    this.time.delayedCall(tell + (enemy.isBoss ? 80 : 0), () => {
       if (enemy.dead || !this.player || this.time.now < this.playerInvulnerableUntil || Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) > enemy.attackRange + 12) return
       const blocking = this.isBlocking
       if (blocking && this.time.now - this.blockStartTime <= this.PARRY_WINDOW_MS) {
@@ -3156,8 +3301,42 @@ export class OverworldScene extends Phaser.Scene {
       this.showDamageNumber(this.player.x, this.player.y - 26, damage, 'enemy')
       this.refreshHud()
       this.updatePlayerBars()
+      if (!this.firstDamageTaken) { this.firstDamageTaken = true; this.queueHint('block', 'F to block') }
+      if (blocking) this.dismissHint('block')
       if (hero.currentHp <= 0) this.handlePlayerDefeat()
     })
+    if (enemy.isBoss && attackKind > 0) enemy.recoveringUntil = this.time.now + tell + 80 + Phaser.Math.Between(800, 1400)
+  }
+
+  private showEnemyTelegraph(enemy: MapEnemy, kind: number, duration: number) {
+    enemy.body.setFillStyle(0xff4d4d)
+    if (!enemy.isBoss) return
+    const angle = this.player ? Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y) : 0
+    if (kind === 0) {
+      this.tweens.add({ targets: enemy.sprite, alpha: 0.45, yoyo: true, repeat: 2, duration: duration / 5 })
+    } else if (kind === 1) {
+      audioManager.playSfx('impact_heavy')
+      this.tweens.add({ targets: enemy.sprite, scale: ENTITY_SCALE.bossEnemy * 1.1, y: enemy.sprite.y - 8, yoyo: true, duration: duration * 0.5 })
+      const crack = this.add.rectangle(enemy.x + Math.cos(angle) * 42, enemy.y + Math.sin(angle) * 42, 92, 5, 0xff8a3d, 0.72).setRotation(angle).setDepth(16)
+      this.tweens.add({ targets: crack, alpha: 0, duration, onComplete: () => crack.destroy() })
+    } else {
+      const ring = this.add.circle(enemy.x, enemy.y, 18, 0xff4d1f, 0.12).setStrokeStyle(4, 0xff8a3d, 0.82).setDepth(16)
+      this.tweens.add({ targets: ring, scale: 4.8, alpha: 0.4, duration, ease: 'Sine.easeInOut', onComplete: () => ring.destroy() })
+      this.tweens.add({ targets: ring, lineWidth: 8, yoyo: true, repeat: 1, duration: duration / 4 })
+    }
+  }
+
+  private updateBossPhase(enemy: MapEnemy) {
+    const pct = enemy.currentHp / enemy.maxHp
+    const next = [...BOSS_PHASE_THRESHOLDS].reverse().find((phase) => pct <= phase.hpPercent)
+    if (!next || next.phase <= (enemy.bossPhase ?? 1)) return
+    enemy.bossPhase = next.phase
+    enemy.recoveringUntil = this.time.now + 1300
+    enemy.sprite.setAlpha(0.55)
+    this.cameras.main.zoomTo(0.92, 300, 'Sine.easeOut', true)
+    this.time.delayedCall(1100, () => this.cameras.main.zoomTo(1, 260, 'Sine.easeInOut', true))
+    this.showEventBanner(`Phase ${next.phase}`, next.label)
+    audioManager.playSfx('boss_sting')
   }
 
   private tryEnemyAttackCompanion(enemy: MapEnemy, companion: PartyCompanion) {
@@ -3192,20 +3371,23 @@ export class OverworldScene extends Phaser.Scene {
     this.killCount += 1
     enemy.body.setFillStyle(0xffffff)
     this.cameras.main.shake(enemy.isBoss ? 400 : 200, enemy.isBoss ? 0.008 : 0.004)
-    if (enemy.isBoss) this.triggerSlowMo(300, 0.3)
+    if (enemy.isBoss) this.triggerSlowMo(1000, 0.3)
     this.spawnDeathExplosion(enemy.x, enemy.y, this.getEnemyColor(enemy))
     if (enemy.isBoss) {
       this.spawnBossExplosion(enemy.x, enemy.y)
       this.bossHud?.container.destroy()
       this.bossHud = undefined
+      audioManager.playSfx('victory_fanfare')
+      this.cameras.main.zoomTo(0.82, 2400, 'Sine.easeInOut', true)
     }
     this.registerComboKill(enemy.x, enemy.y)
     this.showFloatingText(enemy.x, enemy.y - 34, `+${enemy.goldReward}g`, '#ffd166')
     this.spawnGroundLoot(enemy.x, enemy.y, 'gold', 'gold', enemy.goldReward)
     this.spawnGroundLoot(enemy.x + 12, enemy.y, 'exp', 'exp', enemy.expReward)
     if (Math.random() < 0.35) this.spawnGroundLoot(enemy.x - 12, enemy.y, 'item', 'health_potion', 1)
-    this.tweens.add({ targets: [enemy.sprite, enemy.aura, enemy.nameText], alpha: 0, delay: 100, duration: 260, onComplete: () => this.destroyEnemy(enemy) })
-    if (enemy.battleId) this.completeOverworldBattle(enemy.battleId)
+    this.tweens.add({ targets: [enemy.sprite, enemy.aura, enemy.nameText], alpha: 0, scale: 1.3, delay: 100, duration: enemy.isBoss ? 600 : 460, onComplete: () => this.destroyEnemy(enemy) })
+    if (enemy.battleId) this.time.delayedCall(enemy.isBoss ? 2300 : 0, () => this.completeOverworldBattle(enemy.battleId!))
+    if (!enemy.isBoss) this.queueHint('potion_interact', 'Q for potion / E to interact', 8000)
     this.checkRespawnTimer()
     this.refreshHud()
     this.persist()
@@ -3230,6 +3412,7 @@ export class OverworldScene extends Phaser.Scene {
     const label = this.add.text(x, y - 20, labelText, { color: kind === 'exp' ? '#bfdbfe' : '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '11px', fontStyle: 'bold' }).setOrigin(0.5).setDepth(18)
     const bobTween = this.tweens.add({ targets: [sprite, label], y: '+=3', yoyo: true, repeat: -1, duration: 760, ease: 'Sine.easeInOut' })
     if (kind === 'gold') this.tweens.add({ targets: sprite, scaleX: 1.18, scaleY: 0.82, yoyo: true, repeat: -1, duration: 420, ease: 'Sine.easeInOut' })
+    if (kind === 'gold') this.tweens.add({ targets: sprite, y: sprite.y - 20, duration: 300, ease: 'Sine.easeOut', yoyo: true })
     const loot: GroundLoot = { x, y, itemId, quantity, sprite, label, bobTween, kind }
     loot.expireTween = this.tweens.add({ targets: [sprite, label], alpha: 0, delay: 14500, duration: 500, onComplete: () => this.destroyGroundLoot(loot) })
     this.groundLoot.push(loot)
@@ -3453,6 +3636,7 @@ export class OverworldScene extends Phaser.Scene {
     this.dashWallSlideUsed = false
     this.lastDashAfterimageAt = 0
     audioManager.playSfx('scene_whoosh')
+    this.dismissHint('dash')
     this.spawnDashDust()
     this.cameras.main.zoomTo(1.03, 80, 'Sine.easeOut', true)
     this.time.delayedCall(120, () => this.cameras.main.zoomTo(1, 120, 'Sine.easeInOut', true))
@@ -3593,13 +3777,27 @@ export class OverworldScene extends Phaser.Scene {
     const offsetX = Phaser.Math.Between(-10, 10)
     const color = resisted ? '#74788f' : kind === 'heal' ? '#86efac' : kind === 'enemy' ? '#ff5f5f' : critical ? '#ffd36e' : '#ffffff'
     const text = kind === 'heal' ? `+${amount}` : `${amount}`
-    const label = this.add.text(x + offsetX, y, text, { color, fontFamily: 'Arial, sans-serif', fontSize: critical ? '20px' : resisted ? '10px' : '13px', fontStyle: 'bold', stroke: '#050509', strokeThickness: critical ? 4 : 3, shadow: { offsetX: 1, offsetY: 2, color: '#000000', blur: 2, fill: true } }).setOrigin(0.5).setDepth(82)
+    const label = this.acquireDamageNumber()
+    label.setPosition(x + offsetX, y).setText(text).setColor(color).setFontSize(critical ? 20 : resisted ? 10 : 13).setStroke('#050509', critical ? 4 : 3).setAlpha(1).setScale(1).setVisible(true).setActive(true)
     if (critical) { this.tweens.add({ targets: label, x: label.x + 2, yoyo: true, repeat: 3, duration: 28 }); this.cameras.main.shake(60, 0.004) }
     if (weak) {
       const weakLabel = this.add.text(label.x, y + 13, 'WEAK', { color: '#9ff3ff', fontFamily: 'Arial, sans-serif', fontSize: '9px', fontStyle: 'bold', stroke: '#050509', strokeThickness: 2 }).setOrigin(0.5).setDepth(82)
       this.tweens.add({ targets: weakLabel, y: y - 17, alpha: 0, duration: 800, ease: 'Quad.easeOut', onComplete: () => weakLabel.destroy() })
     }
-    this.tweens.add({ targets: label, y: y - 30, alpha: 0, duration: 800, ease: 'Quad.easeOut', onComplete: () => label.destroy() })
+    this.tweens.add({ targets: label, y: y - 30, alpha: 0, duration: 800, ease: 'Quad.easeOut', onComplete: () => this.releaseDamageNumber(label) })
+  }
+
+  private acquireDamageNumber() {
+    let label = this.damageNumberPool.find((entry) => !entry.active)
+    if (!label && this.damageNumberPool.length < 20) {
+      label = this.add.text(0, 0, '', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold', stroke: '#050509', strokeThickness: 3, shadow: { offsetX: 1, offsetY: 2, color: '#000000', blur: 2, fill: true } }).setOrigin(0.5).setDepth(82).setActive(false).setVisible(false)
+      this.damageNumberPool.push(label)
+    }
+    return label ?? this.damageNumberPool[0]
+  }
+
+  private releaseDamageNumber(label: Phaser.GameObjects.Text) {
+    label.setActive(false).setVisible(false).setAlpha(0)
   }
 
   private spawnWhooshDust(x: number, y: number, angle: number) {

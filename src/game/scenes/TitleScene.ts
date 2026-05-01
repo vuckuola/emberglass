@@ -454,6 +454,8 @@ export class TitleScene extends Phaser.Scene {
       })
     })
 
+    this.tweens.add({ targets: letters, scale: 1.025, duration: 1700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+
     this.tweens.addCounter({
       from: 0,
       to: 100,
@@ -694,11 +696,11 @@ export class TitleScene extends Phaser.Scene {
       fontSize: '20px',
     }).setOrigin(0.5).setAlpha(0).setDepth(82)
 
-    this.tweens.add({ targets: line, width: width * 0.72, duration: 360, ease: 'Sine.easeOut' })
-    this.tweens.add({ targets: caption, alpha: 1, y: caption.y - 8, duration: 360, ease: 'Sine.easeOut' })
-    this.tweens.add({ targets: veil, alpha: 1, delay: 220, duration: 520, ease: 'Sine.easeInOut' })
-    this.cameras.main.fadeOut(780, 5, 6, 18)
-    this.time.delayedCall(820, () => this.scene.start('OverworldScene', data))
+    this.tweens.add({ targets: line, width: width * 0.72, duration: 240, ease: 'Sine.easeOut' })
+    this.tweens.add({ targets: caption, alpha: 1, y: caption.y - 8, duration: 240, ease: 'Sine.easeOut' })
+    this.tweens.add({ targets: veil, alpha: 1, delay: 80, duration: 220, ease: 'Sine.easeInOut' })
+    this.cameras.main.fadeOut(280, 5, 6, 18)
+    this.time.delayedCall(300, () => this.scene.start('OverworldScene', data))
   }
 
   private showTitleNotice(message: string) {
