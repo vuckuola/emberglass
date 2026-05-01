@@ -15,12 +15,26 @@ const REGULAR_ENEMY_TARGET_COUNT = 7
 const ENEMY_RESPAWN_DELAY = 15000
 type Direction = 'up' | 'down' | 'left' | 'right'
 const HERO_ANIM_ROWS: Record<Direction, number> = { down: 0, left: 1, right: 2, up: 3 }
-const TILESET_CROPS = {
-  grass: { x: 0, y: 0 },
-  path: { x: 64, y: 0 },
-  water: { x: 128, y: 0 },
-  wall: { x: 192, y: 0 },
-} as const
+type TileVisual = 'grass' | 'path' | 'water' | 'wall' | 'shrine' | 'flowers' | 'ruins' | 'bridge' | 'lava' | 'gate'
+type TileDef = {
+  passable: boolean
+  swimPassable: boolean
+  visual: TileVisual
+  depth: number
+  eventOnStep?: string
+  eventOnInteract?: string
+  connectWith?: string[]
+}
+const TILE_DEFS: Record<string, TileDef> = {
+  G: { passable: true, swimPassable: true, visual: 'grass', depth: 0, connectWith: ['P', 'F', 'R'] },
+  P: { passable: true, swimPassable: true, visual: 'path', depth: 0, connectWith: ['G', 'F', 'R'] },
+  B: { passable: false, swimPassable: true, visual: 'water', depth: 0, connectWith: ['G', 'P', 'A'] },
+  W: { passable: false, swimPassable: false, visual: 'wall', depth: 1, connectWith: [] },
+  F: { passable: true, swimPassable: true, visual: 'flowers', depth: 0, connectWith: ['G', 'P'] },
+  R: { passable: true, swimPassable: true, visual: 'ruins', depth: 0, connectWith: ['G', 'P'] },
+  S: { passable: true, swimPassable: true, visual: 'shrine', depth: 0, connectWith: ['P', 'G'] },
+  A: { passable: true, swimPassable: true, visual: 'bridge', depth: 0, connectWith: ['G', 'P', 'B'] },
+}
 const MAP_LAYOUT = [
   'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
   'WGGGGGGGGGWWGGGGGGGGGGGGGGGGGGGGGGGGGGGW',
@@ -507,61 +521,15 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createMap() {
-    const flowerColors = [0xffd166, 0xff7aa2, 0xc7f9ff]
-    const useTileset = hasTexture(this, GENERATED_ASSETS.tileset)
+    const useTileset = false
+    void useTileset
 
     for (let tileY = 0; tileY < MAP_HEIGHT; tileY += 1) {
       for (let tileX = 0; tileX < MAP_WIDTH; tileX += 1) {
         const layoutTile = MAP_LAYOUT[tileY][tileX]
-        const isShrineGate = tileX === SHRINE_GATE_TILE.x && tileY === SHRINE_GATE_TILE.y && !this.flag('shrine_gate_seen')
-        const isWall = layoutTile === 'W'
-        const isWater = layoutTile === 'B'
-        const blocksTravel = (isWall && !isShrineGate) || isWater
-        const x = tileX * TILE_SIZE
-        const y = tileY * TILE_SIZE
-        const terrain = layoutTile === 'P' ? 'path' : layoutTile === 'B' ? 'water' : layoutTile === 'R' ? 'path' : isWall ? 'wall' : 'grass'
-        const areaTint = tileX <= 6 && tileY >= 9 ? 0x4f9342 : tileX >= 14 && tileY <= 8 ? 0x355c75 : tileX >= 12 ? 0x526b3c : tileY >= 10 ? 0x3f7c43 : 0x3d8b37
-
-        if (useTileset) {
-          const crop = TILESET_CROPS[terrain]
-          this.add.image(x, y, GENERATED_ASSETS.tileset).setOrigin(0).setCrop(crop.x, crop.y, TILE_SIZE, TILE_SIZE).setDepth(isWall ? 1 : 0)
-        } else if (layoutTile === 'P') {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0xc4a882).setOrigin(0).setDepth(0)
-        } else if (layoutTile === 'B') {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x357ec7).setOrigin(0).setDepth(0)
-        } else if (layoutTile === 'R') {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x68635d).setOrigin(0).setDepth(0)
-        } else if (isWall) {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x5a4a3a).setOrigin(0).setDepth(1)
-        } else {
-          this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, areaTint).setOrigin(0).setDepth(0)
-        }
-
-        if (layoutTile === 'P') {
-          if ((tileX * 5 + tileY * 11) % 4 === 0) {
-            this.add.rectangle(x + 8, y + 18, 7, 3, 0xad8f66, 0.22).setOrigin(0).setDepth(0.1)
-          }
-          this.drawPathDetails(x, y, tileX, tileY)
-        } else if (layoutTile === 'B') {
-          this.add.rectangle(x + 4, y + 14, TILE_SIZE - 8, 3, 0x9bdcff, 0.18).setOrigin(0).setDepth(0.1)
-          this.drawWaterDetails(x, y, tileX, tileY)
-        } else if (isWall) {
-          this.add.rectangle(x + 4, y + 12, TILE_SIZE - 8, 2, 0xffffff, 0.08).setOrigin(0).setDepth(1.2)
-          this.drawWallDetails(x, y, tileX, tileY)
-        } else {
-          if ((tileX + tileY) % 3 === 0) {
-            this.add.rectangle(x + 9, y + 11, 12, 3, 0x2d722d, 0.18).setOrigin(0).setDepth(0.1)
-          }
-          this.drawGrassDetails(x, y, tileX, tileY, areaTint)
-          if (layoutTile === 'F') {
-            for (let index = 0; index < 3; index += 1) {
-              const flowerX = x + 12 + ((tileX * 9 + tileY * 5 + index * 11) % 25)
-              const flowerY = y + 12 + ((tileX * 4 + tileY * 8 + index * 7) % 23)
-              this.add.circle(flowerX, flowerY, 2, flowerColors[index], 0.9).setDepth(0.2)
-            }
-          }
-        }
-
+        const def = TILE_DEFS[layoutTile] ?? TILE_DEFS.G
+        const blocksTravel = !this.checkGateOverrides(tileX, tileY, def)
+        this.renderTile(layoutTile, def, tileX, tileY)
         if (blocksTravel) {
           this.walls.add(this.tileKey(tileX, tileY))
         }
@@ -572,41 +540,131 @@ export class OverworldScene extends Phaser.Scene {
     this.drawAreaPolish()
   }
 
+  private checkGateOverrides(tileX: number, tileY: number, def: TileDef): boolean {
+    if (tileX === SHRINE_GATE_TILE.x && tileY === SHRINE_GATE_TILE.y && !this.flag('shrine_gate_seen')) return true
+    return def.passable
+  }
+
+  private renderTile(char: string, def: TileDef, tileX: number, tileY: number) {
+    const x = tileX * TILE_SIZE
+    const y = tileY * TILE_SIZE
+    const areaTint = tileX <= 6 && tileY >= 9 ? 0x4f9342 : tileX >= 14 && tileY <= 8 ? 0x355c75 : tileX >= 12 ? 0x526b3c : tileY >= 10 ? 0x3f7c43 : 0x3d8b37
+    if (def.visual === 'path' || def.visual === 'ruins') {
+      this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, def.visual === 'ruins' ? 0x827769 : 0xc4a882).setOrigin(0).setDepth(def.depth)
+      this.drawPathDetails(x, y, tileX, tileY)
+    } else if (def.visual === 'water') {
+      this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x1e64a8).setOrigin(0).setDepth(def.depth)
+      this.add.ellipse(x + 24, y + 24, 38, 34, 0x154f8e, 0.28).setDepth(def.depth + 0.02)
+      this.drawWaterDetails(x, y, tileX, tileY)
+    } else if (def.visual === 'wall') {
+      this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x5a4a3a).setOrigin(0).setDepth(def.depth)
+      this.drawWallDetails(x, y, tileX, tileY)
+    } else if (def.visual === 'shrine') {
+      this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x8d8374).setOrigin(0).setDepth(def.depth)
+      this.drawShrineDetails(x, y, tileX, tileY)
+    } else if (def.visual === 'bridge') {
+      this.drawBridgeTile(x, y, def.depth)
+    } else {
+      this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, areaTint).setOrigin(0).setDepth(def.depth)
+      this.drawGrassDetails(x, y, tileX, tileY, areaTint)
+      if (char === 'F') this.drawFlowerDetails(x, y, tileX, tileY)
+    }
+    this.drawTileBorders(char, x, y, tileX, tileY, def.depth)
+  }
+
   private drawGrassDetails(x: number, y: number, tileX: number, tileY: number, areaTint: number) {
-    const shade = (tileX * 17 + tileY * 23) % 2 === 0 ? 0x69a64f : 0x2f7133
+    const shade = [0x69a64f, 0x2f7133, 0x86bd5d][(tileX * 17 + tileY * 23) % 3]
+    this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, shade, 0.08).setOrigin(0).setDepth(0.03)
     this.add.rectangle(x, y + TILE_SIZE - 7, TILE_SIZE, 7, areaTint, 0.18).setOrigin(0).setDepth(0.04)
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < 4; index += 1) {
       const bladeX = x + 7 + ((tileX * 13 + tileY * 7 + index * 12) % 34)
       const bladeY = y + 9 + ((tileX * 5 + tileY * 19 + index * 9) % 28)
-      this.add.rectangle(bladeX, bladeY, 2, 7, shade, 0.28).setOrigin(0.5, 1).setRotation(Phaser.Math.DegToRad(((tileX + tileY + index) % 3 - 1) * 12)).setDepth(0.12)
+      this.add.triangle(bladeX, bladeY, 0, 7, 2, 0, 4, 7, shade, 0.34).setRotation(Phaser.Math.DegToRad(((tileX + tileY + index) % 3 - 1) * 14)).setDepth(0.12)
     }
     if ((tileX * 31 + tileY * 11) % 17 === 0) this.drawBush(x + 24, y + 25, 0.16)
-    if ((tileX * 7 + tileY * 29) % 23 === 0) this.drawRock(x + 16, y + 30, 0.16)
+    if ((tileX * 7 + tileY * 29) % 10 < 3) this.drawRock(x + 16 + ((tileX * 3) % 14), y + 28, 0.16)
   }
 
   private drawPathDetails(x: number, y: number, tileX: number, tileY: number) {
     this.add.rectangle(x, y, 4, TILE_SIZE, 0x5f8d4a, 0.16).setOrigin(0).setDepth(0.08)
     this.add.rectangle(x + TILE_SIZE - 4, y, 4, TILE_SIZE, 0x5f8d4a, 0.16).setOrigin(0).setDepth(0.08)
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < 5; index += 1) {
       const pebbleX = x + 8 + ((tileX * 9 + index * 13) % 31)
       const pebbleY = y + 10 + ((tileY * 15 + index * 11) % 27)
-      this.add.ellipse(pebbleX, pebbleY, 6, 3, index % 2 ? 0xe0c899 : 0x8d7657, 0.28).setDepth(0.14)
+      this.add.ellipse(pebbleX, pebbleY, 4 + (index % 3), 2 + (index % 2), index % 2 ? 0xe0c899 : 0x8d7657, 0.28).setDepth(0.14)
     }
+    if ((tileX * 5 + tileY * 11) % 4 === 0) this.add.ellipse(x + 18, y + 28, 8, 3, 0x6e563d, 0.18).setAngle(-12).setDepth(0.15)
   }
 
   private drawWaterDetails(x: number, y: number, tileX: number, tileY: number) {
+    this.add.rectangle(x + 3, y + 3, TILE_SIZE - 6, 2, 0x80cfff, 0.16).setOrigin(0).setDepth(0.08)
     for (let index = 0; index < 2; index += 1) {
       const wave = this.add.arc(x + 12 + index * 20, y + 17 + ((tileX + tileY + index) % 3) * 7, 8, 200, 340, false, 0x9bdcff, 0).setStrokeStyle(2, 0xc7f9ff, 0.22).setDepth(0.18)
       this.tweens.add({ targets: wave, x: wave.x + 5, alpha: 0.06, yoyo: true, repeat: -1, duration: 1500 + index * 250, ease: 'Sine.easeInOut' })
+    }
+    if ((tileX * 19 + tileY * 7) % 5 === 0) {
+      const sparkle = this.add.circle(x + 12 + ((tileX * 11) % 24), y + 14 + ((tileY * 13) % 22), 1.4, 0xffffff, 0.36).setDepth(0.2)
+      this.tweens.add({ targets: sparkle, alpha: 0.04, scale: 1.5, yoyo: true, repeat: -1, duration: 1200, ease: 'Sine.easeInOut' })
     }
   }
 
   private drawWallDetails(x: number, y: number, tileX: number, tileY: number) {
     this.add.rectangle(x, y + TILE_SIZE - 10, TILE_SIZE, 10, 0x241b16, 0.28).setOrigin(0).setDepth(1.22)
+    this.add.rectangle(x, y, TILE_SIZE, 3, 0x9b846c, 0.34).setOrigin(0).setDepth(1.24)
     this.add.rectangle(x + 2, y + 7, TILE_SIZE - 4, 2, 0x8a745f, 0.28).setOrigin(0).setDepth(1.23)
     this.add.rectangle(x + 2, y + 24, TILE_SIZE - 4, 2, 0x31271f, 0.22).setOrigin(0).setDepth(1.23)
-    this.add.rectangle(x + ((tileX + tileY) % 2 ? 15 : 30), y + 9, 2, 15, 0x34291f, 0.2).setDepth(1.24)
-    if ((tileX * 5 + tileY) % 11 === 0) this.drawBush(x + 24, y + 40, 1.31)
+    this.add.rectangle(x + ((tileX + tileY) % 2 ? 15 : 30), y + 9, 2, 15, 0x34291f, 0.25).setDepth(1.24)
+    this.add.rectangle(x + ((tileX + tileY) % 2 ? 30 : 14), y + 26, 2, 13, 0x34291f, 0.22).setDepth(1.24)
+    if ((tileX * 5 + tileY) % 5 === 0) this.drawBush(x + 24, y + 40, 1.31)
+  }
+
+  private drawFlowerDetails(x: number, y: number, tileX: number, tileY: number) {
+    const flowerColors = [0xffd166, 0xff7aa2, 0xc7f9ff, 0xffffff, 0xf3a0ff]
+    for (let index = 0; index < 5; index += 1) {
+      const flowerX = x + 9 + ((tileX * 9 + tileY * 5 + index * 11) % 30)
+      const flowerY = y + 10 + ((tileX * 4 + tileY * 8 + index * 7) % 26)
+      this.add.line(flowerX, flowerY + 4, 0, 0, 0, 5, 0x2d722d, 0.36).setDepth(0.18)
+      this.add.circle(flowerX, flowerY, 2, flowerColors[index], 0.9).setDepth(0.22)
+    }
+    if ((tileX * 13 + tileY * 17) % 20 < 3) {
+      this.add.ellipse(x + 30, y + 12, 5, 3, 0xffe47a, 0.72).setDepth(0.25)
+      this.add.circle(x + 27, y + 11, 2, 0xc7f9ff, 0.48).setDepth(0.26)
+      this.add.circle(x + 33, y + 11, 2, 0xc7f9ff, 0.48).setDepth(0.26)
+    }
+  }
+
+  private drawShrineDetails(x: number, y: number, tileX: number, tileY: number) {
+    this.add.circle(x + 24, y + 24, 14, 0x1a5f74, 0.24).setStrokeStyle(2, 0x9ff3ff, 0.62).setDepth(0.22)
+    this.add.arc(x + 24, y + 24, 8, 25, 320, false, 0x9ff3ff, 0).setStrokeStyle(2, 0xc7f9ff, 0.5).setDepth(0.24)
+    for (let index = 0; index < 2; index += 1) {
+      const mote = this.add.circle(x + 16 + ((tileX * 7 + index * 13) % 18), y + 14 + ((tileY * 9 + index * 11) % 20), 1.5, 0x9ff3ff, 0.32).setDepth(0.28)
+      this.tweens.add({ targets: mote, y: mote.y - 8, alpha: 0.06, yoyo: true, repeat: -1, duration: 1600 + index * 300, ease: 'Sine.easeInOut' })
+    }
+  }
+
+  private drawBridgeTile(x: number, y: number, depth: number) {
+    this.add.rectangle(x, y + 38, TILE_SIZE, 8, 0x1b120d, 0.28).setOrigin(0).setDepth(depth)
+    this.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x8a5a32).setOrigin(0).setDepth(depth + 0.02)
+    for (let index = 0; index < 5; index += 1) this.add.rectangle(x + 2, y + index * 10, TILE_SIZE - 4, 7, index % 2 ? 0x9d6a3d : 0x704522, 0.95).setOrigin(0).setDepth(depth + 0.06)
+    this.add.rectangle(x + 4, y, 4, TILE_SIZE, 0x4b2f1d, 0.95).setOrigin(0).setDepth(depth + 0.12)
+    this.add.rectangle(x + TILE_SIZE - 8, y, 4, TILE_SIZE, 0x4b2f1d, 0.95).setOrigin(0).setDepth(depth + 0.12)
+  }
+
+  private drawTileBorders(char: string, x: number, y: number, tileX: number, tileY: number, depth: number) {
+    const neighbors = [
+      { dx: 0, dy: -1, side: 'top' }, { dx: 1, dy: 0, side: 'right' }, { dx: 0, dy: 1, side: 'bottom' }, { dx: -1, dy: 0, side: 'left' },
+    ] as const
+    neighbors.forEach((neighbor) => {
+      const other = MAP_LAYOUT[tileY + neighbor.dy]?.[tileX + neighbor.dx]
+      if (!other || other === char) return
+      const pair = `${char}${other}`
+      const color = pair.includes('B') && pair.includes('W') ? 0x8b8d86 : pair.includes('B') ? 0xd6bd83 : pair.includes('W') ? 0x234421 : 0x9b7a4e
+      const alpha = pair.includes('B') ? 0.48 : 0.28
+      if (neighbor.side === 'top') this.add.rectangle(x + 2, y, TILE_SIZE - 4, 4, color, alpha).setOrigin(0).setDepth(depth + 0.3)
+      if (neighbor.side === 'bottom') this.add.rectangle(x + 2, y + TILE_SIZE - 4, TILE_SIZE - 4, 4, color, alpha).setOrigin(0).setDepth(depth + 0.3)
+      if (neighbor.side === 'left') this.add.rectangle(x, y + 2, 4, TILE_SIZE - 4, color, alpha).setOrigin(0).setDepth(depth + 0.3)
+      if (neighbor.side === 'right') this.add.rectangle(x + TILE_SIZE - 4, y + 2, 4, TILE_SIZE - 4, color, alpha).setOrigin(0).setDepth(depth + 0.3)
+    })
   }
 
   private drawBush(x: number, y: number, depth: number) {
@@ -774,8 +832,19 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private createBackdrop() {
-    if (hasTexture(this, GENERATED_ASSETS.overworldBg)) {
+    const useBgImage = false
+    if (useBgImage && hasTexture(this, GENERATED_ASSETS.overworldBg)) {
       this.add.image((MAP_WIDTH * TILE_SIZE) / 2, (MAP_HEIGHT * TILE_SIZE) / 2, GENERATED_ASSETS.overworldBg).setDisplaySize(MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE).setDepth(-10)
+    }
+    this.add.rectangle(0, 0, MAP_WIDTH * TILE_SIZE, (MAP_HEIGHT * TILE_SIZE) / 3, 0x142846).setOrigin(0).setDepth(-10)
+    this.add.rectangle(0, (MAP_HEIGHT * TILE_SIZE) / 3, MAP_WIDTH * TILE_SIZE, (MAP_HEIGHT * TILE_SIZE) / 3, 0x405884, 0.72).setOrigin(0).setDepth(-9.9)
+    this.add.rectangle(0, (MAP_HEIGHT * TILE_SIZE) / 2, MAP_WIDTH * TILE_SIZE, (MAP_HEIGHT * TILE_SIZE) / 2, 0x355d36, 0.34).setOrigin(0).setDepth(-9.8)
+    for (let index = 0; index < 5; index += 1) {
+      const cloudX = 170 + index * 360
+      const cloudY = 70 + (index % 3) * 46
+      this.add.ellipse(cloudX, cloudY, 90, 26, 0xffffff, 0.13).setDepth(-8)
+      this.add.ellipse(cloudX - 34, cloudY + 5, 54, 20, 0xffffff, 0.10).setDepth(-8)
+      this.add.ellipse(cloudX + 38, cloudY + 4, 62, 22, 0xf4f1ff, 0.09).setDepth(-8)
     }
     for (let index = 0; index < 12; index += 1) {
       const mote = this.add.circle(Phaser.Math.Between(48, MAP_WIDTH * TILE_SIZE - 48), Phaser.Math.Between(64, MAP_HEIGHT * TILE_SIZE - 64), Phaser.Math.Between(1, 2), 0x9ff3ff, 0.06).setDepth(-2)
@@ -909,19 +978,39 @@ export class OverworldScene extends Phaser.Scene {
   private drawNpc(tile: { x: number; y: number }, assetKey: string, label: string) {
     const x = this.tileCenter(tile.x)
     const y = this.tileCenter(tile.y)
-    void label
+    void assetKey
     this.add.ellipse(x, y + 18, 34, 13, 0x101014, 0.32).setDepth(3.5)
-    const npc = hasTexture(this, assetKey)
-      ? this.add.sprite(x, y, assetKey, 0).setScale(0.65).setDepth(4)
-      : this.add.rectangle(x, y, 34, 44, 0x888888).setStrokeStyle(2, 0xffffff, 0.45).setDepth(4)
-    if (npc instanceof Phaser.GameObjects.Sprite) {
-      npc.play(`idle-${assetKey}`)
-    }
+    const npc = this.createProceduralNpc(x, y, label)
     const actorKey = this.getNpcActorKey(label)
     if (actorKey) {
       this.npcActors[actorKey] = npc
     }
     this.applyNpcIdleBehavior(npc, label, tile)
+  }
+
+  private createProceduralNpc(x: number, y: number, label: string): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y).setDepth(4)
+    const isElder = label === 'Elder'
+    const isPeddler = label === 'Peddler'
+    const outfit = isElder ? 0xd8d5ca : isPeddler ? 0x6e4728 : 0x2e8f8a
+    const trim = isElder ? 0xf5f1df : isPeddler ? 0x9c6b3d : 0x75d7c8
+    const hair = isElder ? 0xd9d9d9 : isPeddler ? 0x3a2518 : 0x6b3b22
+    container.add(this.add.ellipse(0, -17, 15, 16, 0xd9a06f, 1).setStrokeStyle(1, 0x2a1a12, 0.35))
+    container.add(this.add.arc(0, -22, 8, 190, 350, false, hair, 1))
+    container.add(this.add.rectangle(0, 2, isElder ? 26 : 22, isElder ? 34 : 30, outfit, 0.98).setStrokeStyle(2, trim, 0.62))
+    container.add(this.add.rectangle(-7, 18, 5, 12, 0x2c221b, 0.9))
+    container.add(this.add.rectangle(7, 18, 5, 12, 0x2c221b, 0.9))
+    if (isElder) {
+      container.add(this.add.rectangle(16, 1, 3, 42, 0x7b5634, 0.95))
+      container.add(this.add.circle(16, -22, 4, 0x9ff3ff, 0.75))
+    } else if (isPeddler) {
+      container.add(this.add.rectangle(13, 1, 9, 22, 0x4a321d, 0.92).setStrokeStyle(1, 0xd2a05d, 0.5))
+      container.add(this.add.rectangle(-12, 0, 5, 18, 0x4a321d, 0.9))
+    } else {
+      container.add(this.add.rectangle(-11, 1, 5, 20, 0x1d5f5e, 0.9))
+      container.add(this.add.rectangle(11, 1, 5, 20, 0x1d5f5e, 0.9))
+    }
+    return container
   }
 
   private getNpcActorKey(label: string): 'guide' | 'elder' | 'peddler' | 'mira' | null {
