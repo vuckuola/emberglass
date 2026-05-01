@@ -3043,15 +3043,14 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private triggerHitstop(duration: number) {
-    this.physics.world.timeScale = 0.01
     this.tweens.pauseAll()
-    this.time.delayedCall(duration, () => { this.physics.world.timeScale = 1; this.tweens.resumeAll() })
+    this.time.timeScale = 0.01
+    this.time.delayedCall(duration, () => { this.time.timeScale = 1; this.tweens.resumeAll() })
   }
 
   private triggerSlowMo(duration: number, scale: number) {
     this.time.timeScale = scale
-    this.physics.world.timeScale = scale
-    this.time.delayedCall(duration, () => { this.time.timeScale = 1; this.physics.world.timeScale = 1 })
+    this.time.delayedCall(duration, () => { this.time.timeScale = 1 })
   }
 
   private useHealthPotion() {
