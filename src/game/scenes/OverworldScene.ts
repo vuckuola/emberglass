@@ -13,6 +13,14 @@ const MAP_HEIGHT = 30
 const PLAYER_SPEED = 160
 const REGULAR_ENEMY_TARGET_COUNT = 7
 const ENEMY_RESPAWN_DELAY = 15000
+const ENTITY_SCALE = {
+  hero: 0.72,
+  npc: 0.65,
+  companion: 0.62,
+  enemy: 0.55,
+  bossEnemy: 0.75,
+  object: 0.6,
+} as const
 type Direction = 'up' | 'down' | 'left' | 'right'
 const HERO_ANIM_ROWS: Record<Direction, number> = { down: 0, left: 1, right: 2, up: 3 }
 type TileVisual = 'grass' | 'path' | 'water' | 'wall' | 'shrine' | 'flowers' | 'ruins' | 'bridge' | 'lava' | 'gate'
@@ -252,6 +260,14 @@ export class OverworldScene extends Phaser.Scene {
   private playerMpText?: Phaser.GameObjects.Text
   private playerXpBar?: Phaser.GameObjects.Graphics
   private bossHud?: BossHud
+
+  private uiWidth(fraction: number, maxPx: number = 800): number {
+    return Math.min(this.scale.width * fraction, maxPx)
+  }
+
+  private uiHeight(fraction: number, maxPx: number = 600): number {
+    return Math.min(this.scale.height * fraction, maxPx)
+  }
   private playerInvulnerableUntil = 0
   private dashUntil = 0
   private nextDashAt = 0
@@ -604,7 +620,7 @@ export class OverworldScene extends Phaser.Scene {
     }
     if ((tileX * 19 + tileY * 7) % 5 === 0) {
       const sparkle = this.add.circle(x + 12 + ((tileX * 11) % 24), y + 14 + ((tileY * 13) % 22), 1.4, 0xffffff, 0.36).setDepth(0.2)
-      this.tweens.add({ targets: sparkle, alpha: 0.04, scale: 1.5, yoyo: true, repeat: -1, duration: 1200, ease: 'Sine.easeInOut' })
+      this.tweens.add({ targets: sparkle, alpha: 0.04, scale: ENTITY_SCALE.object * 2.5, yoyo: true, repeat: -1, duration: 1200, ease: 'Sine.easeInOut' })
     }
   }
 
@@ -772,7 +788,7 @@ export class OverworldScene extends Phaser.Scene {
     this.add.rectangle(x - 18, y - 1, 5, 32, color, 0.86).setDepth(2.5).setName(`landmark:${label}:post`)
     this.add.rectangle(x + 18, y - 1, 5, 32, color, 0.86).setDepth(2.5)
     this.add.rectangle(x, y - 16, 46, 6, color, 0.86).setDepth(2.55)
-    this.add.text(x, y + 24, label, { color: '#fff7d5', fontFamily: 'Arial, sans-serif', fontSize: '9px', backgroundColor: '#090b12bb', padding: { x: 3, y: 1 } }).setOrigin(0.5).setDepth(2.6).setName(`landmark:${label}`)
+    this.add.text(x, y + 24, label, { color: '#fff7d5', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#090b12bb', padding: { x: 3, y: 1 } }).setOrigin(0.5).setDepth(2.6).setName(`landmark:${label}`)
   }
 
   private drawAreaLabel(tileX: number, tileY: number, label: string) {
@@ -980,7 +996,7 @@ export class OverworldScene extends Phaser.Scene {
     const y = this.tileCenter(tile.y)
     this.add.ellipse(x, y + 18, 34, 13, 0x101014, 0.32).setDepth(3.5)
     const npc = hasTexture(this, assetKey)
-      ? this.add.sprite(x, y, assetKey, 0).setScale(0.55).setDepth(4)
+      ? this.add.sprite(x, y, assetKey, 0).setScale(ENTITY_SCALE.npc).setDepth(4)
       : this.createProceduralNpc(x, y, label)
     if (npc instanceof Phaser.GameObjects.Sprite) npc.play(`idle-${assetKey}`)
     const actorKey = this.getNpcActorKey(label)
@@ -994,6 +1010,7 @@ export class OverworldScene extends Phaser.Scene {
     const container = this.add.container(x, y).setDepth(4)
     const isElder = label === 'Elder'
     const isPeddler = label === 'Peddler'
+    const proceduralScale = ENTITY_SCALE.npc / 0.55
     const outfit = isElder ? 0xd8d5ca : isPeddler ? 0x6e4728 : 0x2e8f8a
     const trim = isElder ? 0xf5f1df : isPeddler ? 0x9c6b3d : 0x75d7c8
     const hair = isElder ? 0xd9d9d9 : isPeddler ? 0x3a2518 : 0x6b3b22
@@ -1012,7 +1029,7 @@ export class OverworldScene extends Phaser.Scene {
       container.add(this.add.rectangle(-11, 1, 5, 20, 0x1d5f5e, 0.9))
       container.add(this.add.rectangle(11, 1, 5, 20, 0x1d5f5e, 0.9))
     }
-    return container
+    return container.setScale(proceduralScale)
   }
 
   private getNpcActorKey(label: string): 'guide' | 'elder' | 'peddler' | 'mira' | null {
@@ -1070,14 +1087,14 @@ export class OverworldScene extends Phaser.Scene {
     void label
     this.add.ellipse(x, y + 16, 34, 12, 0x101014, 0.28).setDepth(2.5)
     const marker = hasTexture(this, assetKey)
-      ? this.add.image(x, y, assetKey).setScale(0.6).setDepth(3)
+      ? this.add.image(x, y, assetKey).setScale(ENTITY_SCALE.object).setDepth(3)
       : this.add.rectangle(x, y, 34, 34, 0x888888, 0.86).setStrokeStyle(2, 0xffffff, 0.35).setDepth(3)
-    this.tweens.add({ targets: marker, scale: hasTexture(this, assetKey) ? 0.63 : 1.04, yoyo: true, repeat: -1, duration: 1350, ease: 'Sine.easeInOut' })
+    this.tweens.add({ targets: marker, scale: hasTexture(this, assetKey) ? ENTITY_SCALE.object * 1.05 : ENTITY_SCALE.object * 1.73, yoyo: true, repeat: -1, duration: 1350, ease: 'Sine.easeInOut' })
   }
 
   private createPlayer(x: number, y: number): Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle {
     if (hasTexture(this, GENERATED_ASSETS.heroes.nara)) {
-      const player = this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setScale(0.72).setDepth(11)
+      const player = this.add.sprite(x, y, GENERATED_ASSETS.heroes.nara, 0).setScale(ENTITY_SCALE.hero).setDepth(11)
       player.play('nara-idle-down')
       return player
     }
@@ -1150,17 +1167,19 @@ export class OverworldScene extends Phaser.Scene {
     const x = this.player.x + offsetX
     const y = this.player.y + offsetY
     const container = this.add.container(x, y).setDepth(10.5).setName(`companion:${member.characterId}`)
-    const body = this.add.rectangle(0, 0, 32, 32, isKael ? 0x5c8a4d : 0x7fb3ff, 0.94)
+    const companionVisualScale = ENTITY_SCALE.companion / 0.58
+    const companionBodySize = 32 * companionVisualScale
+    const body = this.add.rectangle(0, 0, companionBodySize, companionBodySize, isKael ? 0x5c8a4d : 0x7fb3ff, 0.94)
       .setStrokeStyle(2, isKael ? 0xb8d8a8 : 0xe0f2fe, 0.78)
       .setVisible(false)
     const textureKey = member.characterId === 'kael' ? GENERATED_ASSETS.heroes.kael : member.characterId === 'io' ? GENERATED_ASSETS.heroes.io : null
-    const aura = this.add.circle(0, 14, 20, isKael ? 0x55d27a : 0x60a5fa, 0.16).setStrokeStyle(3, isKael ? 0x86efac : 0x93c5fd, 0.72)
-    const sprite = textureKey && hasTexture(this, textureKey) ? this.add.sprite(0, 0, textureKey, 0).setScale(0.58).setDepth(10.51) : undefined
+    const aura = this.add.circle(0, 14 * companionVisualScale, 20 * companionVisualScale, isKael ? 0x55d27a : 0x60a5fa, 0.16).setStrokeStyle(3, isKael ? 0x86efac : 0x93c5fd, 0.72)
+    const sprite = textureKey && hasTexture(this, textureKey) ? this.add.sprite(0, 0, textureKey, 0).setScale(ENTITY_SCALE.companion).setDepth(10.51) : undefined
     const fallbackVisuals: Phaser.GameObjects.GameObject[] = sprite ? [] : [
-      this.add.rectangle(0, 0, 32, 32, isKael ? 0x5c8a4d : 0x7fb3ff, 0.96).setStrokeStyle(2, isKael ? 0xd9f7c8 : 0xe0f2fe, 0.8),
-      this.add.rectangle(0, -5, 22, 10, isKael ? 0x79b35f : 0xbfe3ff, 0.62),
-      this.add.rectangle(isKael ? -8 : 8, 7, 6, 12, isKael ? 0x314d2b : 0x2563eb, 0.72),
-      this.add.circle(isKael ? 8 : -8, -8, 4, 0xfff1a8, 0.84),
+      this.add.rectangle(0, 0, companionBodySize, companionBodySize, isKael ? 0x5c8a4d : 0x7fb3ff, 0.96).setStrokeStyle(2, isKael ? 0xd9f7c8 : 0xe0f2fe, 0.8),
+      this.add.rectangle(0, -5 * companionVisualScale, 22 * companionVisualScale, 10 * companionVisualScale, isKael ? 0x79b35f : 0xbfe3ff, 0.62),
+      this.add.rectangle((isKael ? -8 : 8) * companionVisualScale, 7 * companionVisualScale, 6 * companionVisualScale, 12 * companionVisualScale, isKael ? 0x314d2b : 0x2563eb, 0.72),
+      this.add.circle((isKael ? 8 : -8) * companionVisualScale, -8 * companionVisualScale, 4 * companionVisualScale, 0xfff1a8, 0.84),
     ]
     const nameText = this.add.text(0, -25, character.name, { color: isKael ? '#d9f7c8' : '#dbeafe', fontFamily: 'Arial, sans-serif', fontSize: '10px', backgroundColor: '#070914aa', padding: { x: 3, y: 1 } }).setOrigin(0.5)
     const hpBarBg = this.add.graphics().setDepth(10.55)
@@ -1234,7 +1253,7 @@ export class OverworldScene extends Phaser.Scene {
           this.tweens.add({ targets: swing, alpha: 0, duration: 180, onComplete: () => swing.destroy() })
           this.spawnKaelSlash(companion, nearestEnemy)
           if (companion.sprite) companion.sprite.play(`${companion.characterId}-attack-${this.directionFromVector(nearestEnemy.x - companion.x, nearestEnemy.y - companion.y)}`, true)
-          this.tweens.add({ targets: companion.body, scale: 1.15, yoyo: true, duration: 75 })
+          this.tweens.add({ targets: companion.body, scale: ENTITY_SCALE.hero * 1.6, yoyo: true, duration: 75 })
           nearestEnemy.currentHp = Math.max(0, nearestEnemy.currentHp - damage)
           nearestEnemy.hitFlashTimer = 120
           nearestEnemy.body.setFillStyle(0xffffff)
@@ -1287,7 +1306,7 @@ export class OverworldScene extends Phaser.Scene {
               if (trailDrops >= 3 || !projectile.active) return
               trailDrops += 1
               const trail = this.add.circle(projectile.x, projectile.y, 4, 0x93c5fd, 0.42).setDepth(24)
-              this.tweens.add({ targets: trail, alpha: 0, scale: 0.35, duration: 220, onComplete: () => trail.destroy() })
+              this.tweens.add({ targets: trail, alpha: 0, scale: ENTITY_SCALE.enemy * 0.64, duration: 220, onComplete: () => trail.destroy() })
             },
             onComplete: () => {
               projectile.destroy()
@@ -1396,7 +1415,7 @@ export class OverworldScene extends Phaser.Scene {
     }
     this.dustCooldown = 300
     const dust = this.add.circle(this.player.x + Phaser.Math.Between(-7, 7), this.player.y + 22, 4, 0xd0c8b8, 0.3).setDepth(10.2).setName('ambient:walk-dust')
-    this.tweens.add({ targets: dust, scale: 1.5, alpha: 0, duration: 300, ease: 'Sine.easeOut', onComplete: () => dust.destroy() })
+    this.tweens.add({ targets: dust, scale: ENTITY_SCALE.object * 2.5, alpha: 0, duration: 300, ease: 'Sine.easeOut', onComplete: () => dust.destroy() })
   }
 
   private updateMiraNpcFacing() {
@@ -1504,7 +1523,7 @@ export class OverworldScene extends Phaser.Scene {
     this.hudPanel = { graphics: hudGraphics, nameText, hpText, mpText, goldText, companionTexts, swordTexts, portraits }
     this.add.circle(30, 30, 15, 0xff8a3d, 0.95).setStrokeStyle(2, 0xfff1a8, 0.7).setScrollFactor(0).setDepth(92)
     this.add.text(30, 30, 'N', { color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(93)
-    this.objectivePanel = this.add.rectangle(this.scale.width / 2, 18, 430, 32, 0x050713, 0.72).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90).setStrokeStyle(1, 0x9ff3ff, 0.32)
+    this.objectivePanel = this.add.rectangle(this.scale.width / 2, 18, this.uiWidth(0.45, 430), 32, 0x050713, 0.72).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90).setStrokeStyle(1, 0x9ff3ff, 0.32)
     this.objectiveText = this.add.text(this.scale.width / 2, 34, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '14px', wordWrap: { width: 400 } }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
     this.inventoryText = this.add.text(16, 156, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '11px', backgroundColor: '#05071388', padding: { x: 8, y: 4 } }).setScrollFactor(0).setDepth(91)
     this.levelText = this.add.text(0, 0, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '1px' }).setVisible(false)
@@ -1514,14 +1533,14 @@ export class OverworldScene extends Phaser.Scene {
     const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
     areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
-    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'WASD: Move | Space: Attack | 1-4: Skills | F: Block | Q: Potion | E: Interact', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px', backgroundColor: '#08091acc', padding: { x: 12, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 24, 'WASD: Move | Space: Attack | 1-4: Skills | F: Block | Q: Potion | E: Interact', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px', backgroundColor: '#08091acc', padding: { x: 12, y: 6 }, wordWrap: { width: this.uiWidth(0.86, 760) } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
     this.tweens.add({ targets: this.promptText, alpha: 0, delay: 10000, duration: 900 })
     this.createSkillBar()
     this.playerHpBarBg = this.add.graphics().setDepth(22)
     this.playerHpBar = this.add.graphics().setDepth(23)
     this.playerMpBar = this.add.graphics().setDepth(23)
-    this.playerHpText = this.add.text(0, 0, '', { color: '#f8fff9', fontFamily: 'Arial, sans-serif', fontSize: '9px', shadow: { offsetX: 1, offsetY: 1, color: '#000000', blur: 1, fill: true } }).setOrigin(0.5).setDepth(24)
-    this.playerMpText = this.add.text(0, 0, '', { color: '#eff6ff', fontFamily: 'Arial, sans-serif', fontSize: '9px', shadow: { offsetX: 1, offsetY: 1, color: '#000000', blur: 1, fill: true } }).setOrigin(0.5).setDepth(24)
+    this.playerHpText = this.add.text(0, 0, '', { color: '#f8fff9', fontFamily: 'Arial, sans-serif', fontSize: '10px', shadow: { offsetX: 1, offsetY: 1, color: '#000000', blur: 1, fill: true } }).setOrigin(0.5).setDepth(24)
+    this.playerMpText = this.add.text(0, 0, '', { color: '#eff6ff', fontFamily: 'Arial, sans-serif', fontSize: '10px', shadow: { offsetX: 1, offsetY: 1, color: '#000000', blur: 1, fill: true } }).setOrigin(0.5).setDepth(24)
     this.playerXpBar = this.add.graphics().setScrollFactor(0).setDepth(91)
   }
 
@@ -2181,13 +2200,15 @@ export class OverworldScene extends Phaser.Scene {
     this.toast?.destroy()
     const lower = message.toLowerCase()
     const color = lower.includes('failed') || lower.includes("can't") || lower.includes('not enough') ? '#ff8a8a' : lower.includes('no health') || lower.includes('already') || lower.includes('low') ? '#ffb86b' : lower.includes('purchased') || lower.includes('yields') || lower.includes('restored') || lower.includes('complete') ? '#86efac' : '#ffffff'
-    const panelW = Math.min(message.length * 9 + 48, 740)
-    const panelH = Math.max(Math.ceil(message.length / 70) * 22 + 32, 40)
+    const panelW = Math.min(message.length * 9 + 48, this.uiWidth(0.78, 740))
+    const wrapWidth = Math.max(160, panelW - 32)
+    const estimatedCharsPerLine = Math.max(22, Math.floor(wrapWidth / 8.2))
+    const panelH = Math.max(Math.ceil(message.length / estimatedCharsPerLine) * 22 + 52, 52)
     const container = this.add.container(width / 2, 82).setScrollFactor(0).setDepth(125).setAlpha(0)
     const glow = this.add.rectangle(0, 0, panelW + 14, panelH + 12, 0xffd36e, 0.1)
     const panel = this.add.rectangle(0, 0, panelW, panelH, 0x0a0e1e, 0.94).setStrokeStyle(1, 0xd4a84b, 0.72)
     const accent = this.add.rectangle(-panelW / 2 + 3, 0, 3, panelH - 8, 0xd4a84b, 0.8)
-    const text = this.add.text(0, 0, message, { color, fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: panelW - 32 } }).setOrigin(0.5)
+    const text = this.add.text(0, 0, message, { color, fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: wrapWidth } }).setOrigin(0.5)
     container.add([glow, panel, accent, text])
     this.toast = container
     this.tweens.add({ targets: container, y: 104, alpha: 1, duration: 180, ease: 'Sine.easeOut' })
@@ -2198,8 +2219,9 @@ export class OverworldScene extends Phaser.Scene {
     const { width } = this.scale
     this.toast?.destroy()
     const container = this.add.container(width / 2, 128).setScrollFactor(0).setDepth(125)
-    container.add(this.add.rectangle(0, 0, 760, 48, 0x231525, 0.94).setStrokeStyle(2, 0xffd36e, 0.72))
-    container.add(this.add.text(0, 0, message, { color: '#86efac', fontFamily: 'Arial, sans-serif', fontSize: '18px', wordWrap: { width: 700 } }).setOrigin(0.5))
+    const panelW = this.uiWidth(0.79, 760)
+    container.add(this.add.rectangle(0, 0, panelW, 48, 0x231525, 0.94).setStrokeStyle(2, 0xffd36e, 0.72))
+    container.add(this.add.text(0, 0, message, { color: '#86efac', fontFamily: 'Arial, sans-serif', fontSize: '18px', wordWrap: { width: panelW - 60 } }).setOrigin(0.5))
     this.toast = container
     this.tweens.add({ targets: container, y: '-=10', alpha: 0, delay: 3000, duration: 520, onComplete: () => { if (this.toast === container) { this.toast = undefined }; container.destroy() } })
   }
@@ -2208,11 +2230,13 @@ export class OverworldScene extends Phaser.Scene {
     this.dismissBanners()
     this.areaText?.setText(title)
     const { width } = this.scale
-    const glow = this.add.rectangle(width / 2, 84, 604, 104, 0x9ff3ff, 0.08).setScrollFactor(0).setDepth(119.8)
-    const panel = this.add.rectangle(width / 2, 84, 580, 84, 0x071023, 0.9).setScrollFactor(0).setDepth(120).setStrokeStyle(1, 0x9ff3ff, 0.62)
-    const rule = this.add.rectangle(width / 2, 110, 430, 2, 0xffd36e, 0.62).setScrollFactor(0).setDepth(121)
-    const heading = this.add.text(width / 2, 62, title, { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '26px' }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
-    const body = this.add.text(width / 2, 92, subtitle, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 520 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
+    const bannerW = this.uiWidth(0.6, 580)
+    const bannerH = this.uiHeight(0.13, 84)
+    const glow = this.add.rectangle(width / 2, 84, bannerW + 24, bannerH + 20, 0x9ff3ff, 0.08).setScrollFactor(0).setDepth(119.8)
+    const panel = this.add.rectangle(width / 2, 84, bannerW, bannerH, 0x071023, 0.9).setScrollFactor(0).setDepth(120).setStrokeStyle(1, 0x9ff3ff, 0.62)
+    const rule = this.add.rectangle(width / 2, 110, Math.min(bannerW - 80, 430), 2, 0xffd36e, 0.62).setScrollFactor(0).setDepth(121)
+    const heading = this.add.text(width / 2, 62, title, { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: `${Math.min(26, Math.max(18, Math.floor(width / 37)))}px`, wordWrap: { width: bannerW - 32 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
+    const body = this.add.text(width / 2, 92, subtitle, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: bannerW - 60 } }).setOrigin(0.5).setScrollFactor(0).setDepth(121)
     this.activeBanners.push(glow, panel, rule, heading, body)
     this.tweens.add({ targets: [glow, panel, rule, heading, body], alpha: 0, delay: 2300, duration: 600, onComplete: () => { glow.destroy(); panel.destroy(); rule.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
   }
@@ -2220,10 +2244,11 @@ export class OverworldScene extends Phaser.Scene {
   private showEventBanner(title: string, subtitle: string) {
     this.dismissBanners()
     const { width, height } = this.scale
-    const panel = this.add.rectangle(width / 2, height / 2 - 140, 660, 92, 0x1b1020, 0.92).setScrollFactor(0).setDepth(130).setStrokeStyle(2, 0xffd36e, 0.72)
+    const eventW = this.uiWidth(0.69, 660)
+    const panel = this.add.rectangle(width / 2, height / 2 - 140, eventW, this.uiHeight(0.14, 92), 0x1b1020, 0.92).setScrollFactor(0).setDepth(130).setStrokeStyle(2, 0xffd36e, 0.72)
     const accent = this.add.rectangle(width / 2, height / 2 - 186, 0, 2, 0xffd36e, 0.9).setScrollFactor(0).setDepth(131)
     const heading = this.add.text(width / 2, height / 2 - 162, title, { color: '#ffd36e', fontFamily: 'Georgia, serif', fontSize: '24px' }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
-    const body = this.add.text(width / 2, height / 2 - 130, subtitle, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: 600 } }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
+    const body = this.add.text(width / 2, height / 2 - 130, subtitle, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', wordWrap: { width: eventW - 60 } }).setOrigin(0.5).setScrollFactor(0).setDepth(131)
     this.activeBanners.push(panel, accent, heading, body)
     this.tweens.add({ targets: accent, width: 560, duration: 260, ease: 'Sine.easeOut' })
     this.tweens.add({ targets: [panel, accent, heading, body], y: '-=10', alpha: 0, delay: 2600, duration: 520, onComplete: () => { panel.destroy(); accent.destroy(); heading.destroy(); body.destroy(); this.activeBanners = this.activeBanners.filter(b => b.scene && b.active) } })
@@ -2265,18 +2290,18 @@ export class OverworldScene extends Phaser.Scene {
     const playTime = this.formatPlayTime(this.saveData.playTime)
     const partyLevels = this.saveData.party.map((member) => `${CHARACTERS[member.characterId]?.name ?? member.characterId} Lv.${member.level}`).join('  •  ')
     const glow = this.add.ellipse(width / 2, height / 2 + 20, 820, 270, 0xffa43a, 0.14).setScrollFactor(0).setDepth(179)
-    const panel = this.add.rectangle(width / 2, height / 2 + 20, 780, 250, 0x190d16, 0.96).setScrollFactor(0).setDepth(180).setStrokeStyle(2, 0xffd36e, 0.82)
+    const panel = this.add.rectangle(width / 2, height / 2 + 20, this.uiWidth(0.81, 780), this.uiHeight(0.39, 250), 0x190d16, 0.96).setScrollFactor(0).setDepth(180).setStrokeStyle(2, 0xffd36e, 0.82)
     const heading = this.add.text(width / 2, height / 2 - 82, 'Luma Quay Endures', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '30px' }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
     const body = this.add.text(width / 2, height / 2 - 24, `Play time: ${playTime}\n✓ Shrine purified   ✓ Thornheart felled   ✓ Skywell restored\n${partyLevels}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px', align: 'center', lineSpacing: 8, wordWrap: { width: 710 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
     const footer = this.add.text(width / 2, height / 2 + 83, 'Save at the Skywell to keep this clear file, or return to the title and press R to reset for another showcase run.', { color: '#ffdca8', fontFamily: 'Arial, sans-serif', fontSize: '15px', align: 'center', wordWrap: { width: 660 } }).setOrigin(0.5).setScrollFactor(0).setDepth(181)
-    this.tweens.add({ targets: glow, alpha: 0.25, scale: 1.04, yoyo: true, repeat: -1, duration: 1150, ease: 'Sine.easeInOut' })
+    this.tweens.add({ targets: glow, alpha: 0.25, scale: ENTITY_SCALE.object * 1.73, yoyo: true, repeat: -1, duration: 1150, ease: 'Sine.easeInOut' })
     this.tweens.add({ targets: [glow, panel, heading, body, footer], alpha: 0, delay: 7600, duration: 900, onComplete: () => { glow.destroy(); panel.destroy(); heading.destroy(); body.destroy(); footer.destroy(); this.showCreditsScroll() } })
   }
 
   private showCreditsScroll() {
     const { width, height } = this.scale
     const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0).setScrollFactor(0).setDepth(240)
-    const credits = this.add.text(width / 2, height + 80, 'Emberglass: Covenant of the Skywell\nA handcrafted JRPG experience\n\nGame Design & Development\nZai & Hermes\n\nArt\nProgrammatic Pixel Art (Pillow)\n\nMusic & SFX\nWeb Audio API\n\nThank you for playing.', { align: 'center', color: '#ffffff', fontFamily: 'Georgia, serif', fontSize: '25px', lineSpacing: 14 }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(241)
+    const credits = this.add.text(width / 2, height + 80, 'Emberglass: Covenant of the Skywell\nA handcrafted JRPG experience\n\nGame Design & Development\nZai & Hermes\n\nArt\nProgrammatic Pixel Art (Pillow)\n\nMusic & SFX\nWeb Audio API\n\nThank you for playing.', { align: 'center', color: '#ffffff', fontFamily: 'Georgia, serif', fontSize: `${Math.min(25, Math.max(18, Math.floor(width / 38)))}px`, lineSpacing: 14, wordWrap: { width: this.uiWidth(0.84, 800) } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(241)
     this.tweens.add({ targets: overlay, alpha: 0.86, duration: 900, ease: 'Sine.easeInOut' })
     this.tweens.add({ targets: credits, y: -360, duration: 8000, ease: 'Linear', onComplete: () => {
       this.tweens.add({ targets: [overlay, credits], alpha: 0, duration: 800, onComplete: () => this.scene.start('TitleScene') })
@@ -2310,7 +2335,9 @@ export class OverworldScene extends Phaser.Scene {
     ].filter((entry) => ITEMS_BY_ID[entry.itemId]?.type !== 'charm' || !this.hasInventoryItem(entry.itemId))
 
     container.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.6))
-    container.add(this.add.rectangle(width / 2, height / 2, 500, 380, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.75))
+    const shopW = this.uiWidth(0.52, 500)
+    const shopH = this.uiHeight(0.6, 380)
+    container.add(this.add.rectangle(width / 2, height / 2, shopW, shopH, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.75))
     container.add(this.add.text(width / 2, height / 2 - 160, 'Quay Merchant', { color: '#f0c040', fontFamily: 'Georgia, serif', fontSize: '30px' }).setOrigin(0.5))
     const goldText = this.add.text(width / 2 - 210, height / 2 - 122, `Your Gold: ${this.saveData.gold}`, { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '18px' })
     container.add(goldText)
@@ -2384,21 +2411,23 @@ export class OverworldScene extends Phaser.Scene {
     container.add(this.add.rectangle(width / 2, height - 18, width, 36, 0x000000, 0.34))
     container.add(this.add.rectangle(18, height / 2, 36, height, 0x000000, 0.34))
     container.add(this.add.rectangle(width - 18, height / 2, 36, height, 0x000000, 0.34))
-    const panel = this.add.rectangle(width / 2, height / 2, 700, 500, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.6)
+    const menuW = this.uiWidth(0.73, 700)
+    const menuH = this.uiHeight(0.78, 500)
+    const panel = this.add.rectangle(width / 2, height / 2, menuW, menuH, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.6)
     container.add(panel)
-    container.add(this.add.rectangle(width / 2, height / 2 - 136, 640, 1, 0xd4a84b, 0.3))
-    container.add(this.add.rectangle(width / 2, height / 2 - 52, 640, 1, 0xd4a84b, 0.3))
-    container.add(this.add.rectangle(width / 2, height / 2 + 160, 640, 1, 0xd4a84b, 0.3))
+    container.add(this.add.rectangle(width / 2, height / 2 - 136, menuW - 60, 1, 0xd4a84b, 0.3))
+    container.add(this.add.rectangle(width / 2, height / 2 - 52, menuW - 60, 1, 0xd4a84b, 0.3))
+    container.add(this.add.rectangle(width / 2, height / 2 + 160, menuW - 60, 1, 0xd4a84b, 0.3))
     container.add(this.add.text(width / 2 - 310, height / 2 - 220, '◈', { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '22px' }))
     container.add(this.add.text(width / 2 - 290, height / 2 - 220, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }))
     container.add(this.add.text(width / 2 + 112, height / 2 - 216, `${this.saveData.gold}g  •  ${playTime}`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '21px' }))
-    container.add(this.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: 610 } }))
+    container.add(this.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: menuW - 90 } }))
     this.saveData.party.forEach((member, index) => this.addMenuPartyRow(container, width / 2 - 300 + index * 198, height / 2 - 74, member))
     container.add(this.add.text(width / 2 + 64, height / 2 - 86, `Inventory\n${inventoryLines.join('\n')}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 7 }))
     const status = this.add.text(width / 2 - 74, height / 2 + 146, 'Status', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     status.on('pointerdown', () => this.openStatusScreen())
     container.add(status)
-    container.add(this.add.text(width / 2 - 310, height / 2 + 184, 'Controls: Move WASD/Arrows or touch pad • Interact Enter/Space/ACT • Menu M/Esc • Shop trades shards first, then sells potions.', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: 620 } }))
+    container.add(this.add.text(width / 2 - 310, height / 2 + 184, 'Controls: Move WASD/Arrows or touch pad • Interact Enter/Space/ACT • Menu M/Esc • Shop trades shards first, then sells potions.', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: menuW - 80 } }))
     this.menuOverlay = { container }
   }
 
@@ -2425,7 +2454,7 @@ export class OverworldScene extends Phaser.Scene {
     const { width, height } = this.scale
     const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(215)
     this.menuOverlay.container.add(overlay)
-    overlay.add(this.add.rectangle(width / 2, height / 2, 760, 500, 0x090d20, 0.94).setStrokeStyle(2, 0x8ab4f8, 0.72))
+    overlay.add(this.add.rectangle(width / 2, height / 2, this.uiWidth(0.79, 760), this.uiHeight(0.78, 500), 0x090d20, 0.94).setStrokeStyle(2, 0x8ab4f8, 0.72))
     overlay.add(this.add.text(width / 2 - 340, height / 2 - 226, 'Party Status', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '27px' }))
     this.saveData.party.forEach((member, index) => {
       const character = CHARACTERS[member.characterId]
@@ -2741,7 +2770,8 @@ export class OverworldScene extends Phaser.Scene {
     const size = isBoss ? 92 : 44
     const aura = isBoss ? this.add.circle(x, y, size * 0.72, color, 0.18).setDepth(17).setStrokeStyle(4, 0xfff1a8, 0.26) : undefined
     const { container: sprite, body } = this.createEnemyVisual(enemyId, x, y, color, isBoss)
-    sprite.setAlpha(0).setScale(0.5)
+    const targetScale = isBoss ? ENTITY_SCALE.bossEnemy : ENTITY_SCALE.enemy
+    sprite.setAlpha(0).setScale(targetScale * 0.9)
     const hpBarBg = this.add.graphics().setDepth(19)
     const hpBar = this.add.graphics().setDepth(20)
     const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
@@ -2750,9 +2780,9 @@ export class OverworldScene extends Phaser.Scene {
     const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, body, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId }
     this.mapEnemies.push(enemy)
     this.updateEnemyBars(enemy)
-    this.tweens.add({ targets: sprite, alpha: 0.95, scale: 1, duration: 400, ease: 'Back.easeOut' })
-    this.tweens.add({ targets: sprite, scale: 1.02, yoyo: true, repeat: -1, duration: 750, ease: 'Sine.easeInOut' })
-    if (aura) this.tweens.add({ targets: aura, scale: 1.12, alpha: 0.08, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' })
+    this.tweens.add({ targets: sprite, alpha: 0.95, scale: targetScale, duration: 400, ease: 'Back.easeOut' })
+    this.tweens.add({ targets: sprite, scale: targetScale * 1.02, yoyo: true, repeat: -1, duration: 750, ease: 'Sine.easeInOut' })
+    if (aura) this.tweens.add({ targets: aura, scale: ENTITY_SCALE.object * 1.87, alpha: 0.08, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' })
     this.tweens.add({ targets: nameText, alpha: 1, duration: 320 })
     if (isBoss) this.createBossHud(enemy)
   }
@@ -2858,7 +2888,7 @@ export class OverworldScene extends Phaser.Scene {
     const swingX = this.player.x + Math.cos(angle) * 34
     const swingY = this.player.y + Math.sin(angle) * 34
     const swing = this.add.arc(swingX, swingY, 38, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0x9ff3ff, 0.32).setDepth(25).setStrokeStyle(7, 0xf8fdff, 0.9)
-    this.tweens.add({ targets: swing, alpha: 0, scale: 1.18, duration: 150, ease: 'Sine.easeOut', onComplete: () => swing.destroy() })
+    this.tweens.add({ targets: swing, alpha: 0, scale: ENTITY_SCALE.object * 1.97, duration: 150, ease: 'Sine.easeOut', onComplete: () => swing.destroy() })
     audioManager.playSfx('field_interact')
     let hit = false
     this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
@@ -2900,7 +2930,7 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.player) return
     const angle = this.facingToAngle()
     const arc = this.add.arc(this.player.x + Math.cos(angle) * 42, this.player.y + Math.sin(angle) * 42, 52, Phaser.Math.RadToDeg(angle - Math.PI / 3), Phaser.Math.RadToDeg(angle + Math.PI / 3), false, 0xff7a3d, 0.5).setDepth(26).setStrokeStyle(8, 0xfff1a8, 0.85)
-    this.tweens.add({ targets: arc, alpha: 0, scale: 1.25, duration: 240, onComplete: () => arc.destroy() })
+    this.tweens.add({ targets: arc, alpha: 0, scale: ENTITY_SCALE.object * 2.08, duration: 240, onComplete: () => arc.destroy() })
     this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
       const distance = Phaser.Math.Distance.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
       const enemyAngle = Phaser.Math.Angle.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
@@ -2922,7 +2952,7 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.player) return
     this.stoneGuardUntil = this.time.now + 4000
     const ring = this.add.circle(this.player.x, this.player.y, 30, 0x9ca3af, 0.2).setDepth(24).setStrokeStyle(3, 0xe5e7eb, 0.9)
-    this.tweens.add({ targets: ring, scale: 1.7, alpha: 0, duration: 520, onComplete: () => ring.destroy() })
+    this.tweens.add({ targets: ring, scale: ENTITY_SCALE.object * 2.83, alpha: 0, duration: 520, onComplete: () => ring.destroy() })
   }
 
   private performWindStep() {
@@ -3097,8 +3127,8 @@ export class OverworldScene extends Phaser.Scene {
     const color = this.getComboColor(this.comboCount)
     if (this.comboCount > 1) {
       const label = this.add.text(x, y - 48, `${this.comboCount}x COMBO`, { color, fontFamily: 'Arial, sans-serif', fontSize: this.comboCount >= 3 ? '18px' : '14px', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82)
-      label.setScale(this.comboCount >= 3 ? 1.35 : 1)
-      this.tweens.add({ targets: label, y: y - 82, alpha: 0, scale: 1, duration: 780, ease: 'Sine.easeOut', onComplete: () => label.destroy() })
+      label.setScale(this.comboCount >= 3 ? ENTITY_SCALE.hero * 1.88 : ENTITY_SCALE.object / ENTITY_SCALE.object)
+      this.tweens.add({ targets: label, y: y - 82, alpha: 0, scale: ENTITY_SCALE.object / ENTITY_SCALE.object, duration: 780, ease: 'Sine.easeOut', onComplete: () => label.destroy() })
     }
     if (this.comboCount === 5 || this.comboCount === 10 || this.comboCount === 15) {
       const milestone = this.comboCount === 5 ? 'UNSTOPPABLE!' : this.comboCount === 10 ? 'LEGENDARY!' : 'MYTHIC!'
@@ -3139,7 +3169,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private spawnPickupDing(x: number, y: number) {
     const ring = this.add.circle(x, y, 8, 0xffffff, 0).setDepth(28).setStrokeStyle(2, 0xfff1a8, 0.82)
-    this.tweens.add({ targets: ring, scale: 2.8, alpha: 0, duration: 360, ease: 'Sine.easeOut', onComplete: () => ring.destroy() })
+    this.tweens.add({ targets: ring, scale: ENTITY_SCALE.object * 4.67, alpha: 0, duration: 360, ease: 'Sine.easeOut', onComplete: () => ring.destroy() })
   }
 
   private spawnDeathExplosion(x: number, y: number, color = 0xffd166) {
@@ -3148,7 +3178,7 @@ export class OverworldScene extends Phaser.Scene {
       const angle = (Math.PI * 2 * index) / count + Phaser.Math.FloatBetween(-0.22, 0.22)
       const distance = Phaser.Math.Between(22, 52)
       const particle = this.add.circle(x, y, Phaser.Math.Between(2, 5), color, 0.9).setDepth(30)
-      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * distance, y: y + Math.sin(angle) * distance, alpha: 0, scale: 0.15, duration: Phaser.Math.Between(380, 680), ease: 'Sine.easeOut', onComplete: () => particle.destroy() })
+      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * distance, y: y + Math.sin(angle) * distance, alpha: 0, scale: ENTITY_SCALE.object * 0.25, duration: Phaser.Math.Between(380, 680), ease: 'Sine.easeOut', onComplete: () => particle.destroy() })
     }
   }
 
@@ -3157,7 +3187,7 @@ export class OverworldScene extends Phaser.Scene {
     for (let index = 0; index < 18; index += 1) {
       const angle = (Math.PI * 2 * index) / 18
       const particle = this.add.circle(x, y, 5, index % 2 === 0 ? 0xff6b6b : 0xffd166, 0.95).setDepth(25)
-      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * Phaser.Math.Between(42, 92), y: y + Math.sin(angle) * Phaser.Math.Between(42, 92), scale: 0.2, alpha: 0, duration: 720, onComplete: () => particle.destroy() })
+      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * Phaser.Math.Between(42, 92), y: y + Math.sin(angle) * Phaser.Math.Between(42, 92), scale: ENTITY_SCALE.object * 0.33, alpha: 0, duration: 720, onComplete: () => particle.destroy() })
     }
   }
 
@@ -3175,25 +3205,25 @@ export class OverworldScene extends Phaser.Scene {
     })
     this.tweens.add({ targets: flash, alpha: 0, duration: 500, onComplete: () => flash.destroy() })
     this.tweens.add({ targets: [title, stats], y: '-=36', alpha: 0, duration: 900, ease: 'Sine.easeOut', onComplete: () => { title.destroy(); stats.destroy() } })
-    this.tweens.add({ targets: glow, scale: 2, alpha: 0, duration: 850, onComplete: () => glow.destroy() })
+    this.tweens.add({ targets: glow, scale: ENTITY_SCALE.object * 3.33, alpha: 0, duration: 850, onComplete: () => glow.destroy() })
   }
 
   private spawnHealPulse(x: number, y: number) {
     const pulse = this.add.circle(x, y, 20, 0x86efac, 0.18).setDepth(25).setStrokeStyle(3, 0xbbf7d0, 0.85)
-    this.tweens.add({ targets: pulse, scale: 1.8, alpha: 0, duration: 520, ease: 'Sine.easeOut', onComplete: () => pulse.destroy() })
+    this.tweens.add({ targets: pulse, scale: ENTITY_SCALE.object * 3, alpha: 0, duration: 520, ease: 'Sine.easeOut', onComplete: () => pulse.destroy() })
   }
 
   private spawnKaelSlash(companion: PartyCompanion, enemy: MapEnemy) {
     const angle = Phaser.Math.Angle.Between(companion.x, companion.y, enemy.x, enemy.y)
     const slash = this.add.arc(companion.x + Math.cos(angle) * 24, companion.y + Math.sin(angle) * 24, 34, Phaser.Math.RadToDeg(angle - Math.PI / 2.8), Phaser.Math.RadToDeg(angle + Math.PI / 2.8), false, 0xff4d2e, 0.34).setDepth(26).setStrokeStyle(6, 0xffb347, 0.86)
-    this.tweens.add({ targets: slash, scale: 1.22, alpha: 0, duration: 180, ease: 'Sine.easeOut', onComplete: () => slash.destroy() })
+    this.tweens.add({ targets: slash, scale: ENTITY_SCALE.object * 2.03, alpha: 0, duration: 180, ease: 'Sine.easeOut', onComplete: () => slash.destroy() })
   }
 
   private spawnHealSparkles(x: number, y: number) {
     for (let index = 0; index < 4; index += 1) {
       const angle = (Math.PI * 2 * index) / 4
       const sparkle = this.add.circle(x + Phaser.Math.Between(-8, 8), y + Phaser.Math.Between(-8, 8), 3, 0x86efac, 0.85).setDepth(26)
-      this.tweens.add({ targets: sparkle, x: x + Math.cos(angle) * Phaser.Math.Between(14, 28), y: y + Math.sin(angle) * Phaser.Math.Between(14, 28), alpha: 0, scale: 0.25, duration: 420, onComplete: () => sparkle.destroy() })
+      this.tweens.add({ targets: sparkle, x: x + Math.cos(angle) * Phaser.Math.Between(14, 28), y: y + Math.sin(angle) * Phaser.Math.Between(14, 28), alpha: 0, scale: ENTITY_SCALE.object * 0.335, duration: 420, onComplete: () => sparkle.destroy() })
     }
   }
 
@@ -3256,14 +3286,14 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: after, alpha: 0, duration: 260, ease: 'Sine.easeOut', onComplete: () => after.destroy() })
     for (let index = 0; index < 3; index += 1) {
       const particle = this.add.circle(this.player.x + Phaser.Math.Between(-10, 10), this.player.y + Phaser.Math.Between(-10, 10), Phaser.Math.Between(2, 4), index % 2 === 0 ? 0x9ff3ff : 0xffffff, 0.72).setDepth(12)
-      this.tweens.add({ targets: particle, x: particle.x + Phaser.Math.Between(-18, 18), y: particle.y + Phaser.Math.Between(-18, 18), alpha: 0, scale: 0.2, duration: 260, onComplete: () => particle.destroy() })
+      this.tweens.add({ targets: particle, x: particle.x + Phaser.Math.Between(-18, 18), y: particle.y + Phaser.Math.Between(-18, 18), alpha: 0, scale: ENTITY_SCALE.object * 0.33, duration: 260, onComplete: () => particle.destroy() })
     }
   }
 
   private showDashReady() {
     if (!this.dashReadyText || this.time.now < this.nextDashAt) return
-    this.dashReadyText.setAlpha(0.9).setScale(1.15)
-    this.tweens.add({ targets: this.dashReadyText, alpha: 0, scale: 1, duration: 620, ease: 'Sine.easeOut' })
+    this.dashReadyText.setAlpha(0.9).setScale(ENTITY_SCALE.hero * 1.6)
+    this.tweens.add({ targets: this.dashReadyText, alpha: 0, scale: ENTITY_SCALE.object / ENTITY_SCALE.object, duration: 620, ease: 'Sine.easeOut' })
   }
 
   private triggerHitstop(duration: number) {
@@ -3600,9 +3630,9 @@ export class OverworldScene extends Phaser.Scene {
 
   private flashObjectiveBanner() {
     if (!this.objectivePanel || !this.objectiveText) return
-    this.objectivePanel.setAlpha(1).setScale(1.03)
-    this.objectiveText.setAlpha(1).setScale(1.03)
-    this.tweens.add({ targets: [this.objectivePanel, this.objectiveText], scale: 1, duration: 220, ease: 'Back.easeOut' })
+    this.objectivePanel.setAlpha(1).setScale(ENTITY_SCALE.object * 1.72)
+    this.objectiveText.setAlpha(1).setScale(ENTITY_SCALE.object * 1.72)
+    this.tweens.add({ targets: [this.objectivePanel, this.objectiveText], scale: ENTITY_SCALE.object / ENTITY_SCALE.object, duration: 220, ease: 'Back.easeOut' })
     this.tweens.add({ targets: this.objectivePanel, alpha: 0.72, delay: 260, duration: 360 })
   }
 
