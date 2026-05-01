@@ -1,145 +1,258 @@
 {
-  "generatedBy": "scripts/generate_assets.py",
-  "palette": {
-    "ink": "#17131f",
-    "deep": "#23243a",
-    "shadow": "#342537",
-    "water0": "#1f5f7a",
-    "water1": "#2e8baa",
-    "water2": "#7bd6d1",
-    "grass0": "#2d6641",
-    "grass1": "#3f8a4c",
-    "grass2": "#7bbd65",
-    "path0": "#8a6b45",
-    "path1": "#b18a58",
-    "stone0": "#5b5360",
-    "stone1": "#8b8490",
-    "ember": "#d9823b",
-    "gold": "#e9c46a",
-    "cream": "#f2d6a2",
-    "skin": "#d89b6d",
-    "skin_hi": "#efc08b",
-    "red": "#a7483f",
-    "blue": "#426aa8",
-    "teal": "#58b7a4",
-    "violet": "#6b547d"
+  "hero_nara_sheet.png": {
+    "size": [
+      384,
+      576
+    ],
+    "uniqueColors": 28,
+    "bytes": 5429
   },
-  "assets": [
-    {
-      "path": "/assets/generated/hero_nara_sheet.png",
-      "purpose": "4-direction 4-frame overworld character spritesheet"
-    },
-    {
-      "path": "/assets/generated/hero_kael_sheet.png",
-      "purpose": "4-direction 4-frame overworld character spritesheet"
-    },
-    {
-      "path": "/assets/generated/hero_io_sheet.png",
-      "purpose": "4-direction 4-frame overworld character spritesheet"
-    },
-    {
-      "path": "/assets/generated/npc_luma_elder_sheet.png",
-      "purpose": "4-direction 4-frame overworld character spritesheet"
-    },
-    {
-      "path": "/assets/generated/npc_guide_rin.png",
-      "purpose": "2-frame idle NPC spritesheet"
-    },
-    {
-      "path": "/assets/generated/npc_elder_maelin.png",
-      "purpose": "2-frame idle NPC spritesheet"
-    },
-    {
-      "path": "/assets/generated/npc_peddler.png",
-      "purpose": "2-frame idle NPC spritesheet"
-    },
-    {
-      "path": "/assets/generated/enemy_vinecrawler.png",
-      "purpose": "battle enemy pixel sprite"
-    },
-    {
-      "path": "/assets/generated/enemy_moss_knight.png",
-      "purpose": "battle enemy pixel sprite"
-    },
-    {
-      "path": "/assets/generated/enemy_sporefiend.png",
-      "purpose": "battle enemy pixel sprite"
-    },
-    {
-      "path": "/assets/generated/enemy_archive_guardian.png",
-      "purpose": "battle enemy pixel sprite"
-    },
-    {
-      "path": "/assets/generated/icon_potion.png",
-      "purpose": "item icon"
-    },
-    {
-      "path": "/assets/generated/icon_ether.png",
-      "purpose": "item icon"
-    },
-    {
-      "path": "/assets/generated/icon_ember_shard.png",
-      "purpose": "item icon"
-    },
-    {
-      "path": "/assets/generated/object_signpost.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_tide_bell.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_mural.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_watch_lantern.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_shrine_gate.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_pilgrim_font.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_inner_seal.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_ruin_marker.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_guardian_field.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/object_chest.png",
-      "purpose": "overworld object pixel sprite"
-    },
-    {
-      "path": "/assets/generated/tileset_ember_quay.png",
-      "purpose": "512px overworld stage tileset"
-    },
-    {
-      "path": "/assets/generated/tileset_ember_quay_16.png",
-      "purpose": "16px source overworld terrain tiles"
-    },
-    {
-      "path": "/assets/generated/bg_overworld_luma_quay.png",
-      "purpose": "overworld parallax backdrop"
-    },
-    {
-      "path": "/assets/generated/bg_battle_skywell.png",
-      "purpose": "battle arena backdrop"
-    },
-    {
-      "path": "/assets/generated/ui_panel_frame.png",
-      "purpose": "JRPG UI panel frame"
-    }
-  ]
+  "hero_kael_sheet.png": {
+    "size": [
+      384,
+      576
+    ],
+    "uniqueColors": 29,
+    "bytes": 5456
+  },
+  "hero_io_sheet.png": {
+    "size": [
+      384,
+      576
+    ],
+    "uniqueColors": 28,
+    "bytes": 5528
+  },
+  "hero_nara_frame.png": {
+    "size": [
+      96,
+      144
+    ],
+    "uniqueColors": 28,
+    "bytes": 981
+  },
+  "hero_kael_frame.png": {
+    "size": [
+      96,
+      144
+    ],
+    "uniqueColors": 29,
+    "bytes": 993
+  },
+  "hero_io_frame.png": {
+    "size": [
+      96,
+      144
+    ],
+    "uniqueColors": 28,
+    "bytes": 978
+  },
+  "npc_guide_rin.png": {
+    "size": [
+      192,
+      144
+    ],
+    "uniqueColors": 30,
+    "bytes": 1537
+  },
+  "npc_elder_maelin.png": {
+    "size": [
+      192,
+      144
+    ],
+    "uniqueColors": 28,
+    "bytes": 1453
+  },
+  "npc_peddler.png": {
+    "size": [
+      192,
+      144
+    ],
+    "uniqueColors": 28,
+    "bytes": 1408
+  },
+  "npc_luma_elder_sheet.png": {
+    "size": [
+      384,
+      576
+    ],
+    "uniqueColors": 28,
+    "bytes": 5458
+  },
+  "enemy_vinecrawler.png": {
+    "size": [
+      192,
+      192
+    ],
+    "uniqueColors": 25,
+    "bytes": 2939
+  },
+  "enemy_moss_knight.png": {
+    "size": [
+      192,
+      192
+    ],
+    "uniqueColors": 28,
+    "bytes": 1433
+  },
+  "enemy_sporefiend.png": {
+    "size": [
+      192,
+      192
+    ],
+    "uniqueColors": 26,
+    "bytes": 1955
+  },
+  "enemy_archive_guardian.png": {
+    "size": [
+      192,
+      192
+    ],
+    "uniqueColors": 25,
+    "bytes": 1674
+  },
+  "icon_potion.png": {
+    "size": [
+      64,
+      64
+    ],
+    "uniqueColors": 23,
+    "bytes": 524
+  },
+  "icon_ether.png": {
+    "size": [
+      64,
+      64
+    ],
+    "uniqueColors": 24,
+    "bytes": 590
+  },
+  "icon_ember_shard.png": {
+    "size": [
+      64,
+      64
+    ],
+    "uniqueColors": 23,
+    "bytes": 737
+  },
+  "object_signpost.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 22,
+    "bytes": 642
+  },
+  "object_tide_bell.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 22,
+    "bytes": 684
+  },
+  "object_mural.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 23,
+    "bytes": 834
+  },
+  "object_watch_lantern.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 24,
+    "bytes": 541
+  },
+  "object_shrine_gate.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 21,
+    "bytes": 701
+  },
+  "object_pilgrim_font.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 23,
+    "bytes": 668
+  },
+  "object_inner_seal.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 22,
+    "bytes": 910
+  },
+  "object_ruin_marker.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 23,
+    "bytes": 675
+  },
+  "object_guardian_field.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 23,
+    "bytes": 928
+  },
+  "object_chest.png": {
+    "size": [
+      96,
+      96
+    ],
+    "uniqueColors": 22,
+    "bytes": 520
+  },
+  "bg_overworld_luma_quay.png": {
+    "size": [
+      960,
+      640
+    ],
+    "uniqueColors": 146,
+    "bytes": 6912
+  },
+  "bg_battle_skywell.png": {
+    "size": [
+      960,
+      640
+    ],
+    "uniqueColors": 88,
+    "bytes": 6491
+  },
+  "ui_panel_frame.png": {
+    "size": [
+      640,
+      192
+    ],
+    "uniqueColors": 22,
+    "bytes": 1356
+  },
+  "tileset_ember_quay_16.png": {
+    "size": [
+      64,
+      16
+    ],
+    "uniqueColors": 27,
+    "bytes": 361
+  },
+  "tileset_ember_quay.png": {
+    "size": [
+      512,
+      512
+    ],
+    "uniqueColors": 28,
+    "bytes": 3454
+  }
 }

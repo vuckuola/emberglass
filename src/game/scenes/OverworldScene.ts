@@ -978,9 +978,11 @@ export class OverworldScene extends Phaser.Scene {
   private drawNpc(tile: { x: number; y: number }, assetKey: string, label: string) {
     const x = this.tileCenter(tile.x)
     const y = this.tileCenter(tile.y)
-    void assetKey
     this.add.ellipse(x, y + 18, 34, 13, 0x101014, 0.32).setDepth(3.5)
-    const npc = this.createProceduralNpc(x, y, label)
+    const npc = hasTexture(this, assetKey)
+      ? this.add.sprite(x, y, assetKey, 0).setScale(0.55).setDepth(4)
+      : this.createProceduralNpc(x, y, label)
+    if (npc instanceof Phaser.GameObjects.Sprite) npc.play(`idle-${assetKey}`)
     const actorKey = this.getNpcActorKey(label)
     if (actorKey) {
       this.npcActors[actorKey] = npc
