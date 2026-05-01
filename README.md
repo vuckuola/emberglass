@@ -39,11 +39,8 @@ Deploy the generated `dist/` folder to any static host. See `DEPLOY_DEMO.md` for
 
 ## Demo Controls
 
-- Move: `WASD`, arrow keys, or the on-screen touch pad.
-- Interact/confirm: `Enter`, `Space`, tap objects, or `ACT`.
-- Menu: `M`, `Esc`, or `MENU`.
+- `WASD/Arrows: Move | Shift: Dash | Space/Click: Attack | F: Block | 1-4: Skills | Q: Potion | E: Interact | M: Map | Tab: Minimap | H: Help | Esc: Menu`
 - Title reset: press `R` on the title screen to clear the demo save.
-- Battle commands: number keys `1`-`5`, mouse, or tap.
 
 ## Presenter Route
 
@@ -70,6 +67,6 @@ npm run ship:strict
 ## Known Limitations
 
 - This is a public-demo vertical slice, not a complete chapter.
-- Settings and credits are informational title prompts rather than full menus.
-- Save support uses autosave slot `0` only.
+- Credits are informational title prompts rather than full menus.
+- Save support uses autosave slot `0` plus manual slots `1`-`3`.
 - Browser audio may require an initial user gesture before playback.

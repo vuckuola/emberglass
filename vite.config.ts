@@ -6,6 +6,7 @@ export default defineConfig({
   base: '/emberglass/',
   plugins: [react()],
   build: {
+    chunkSizeWarningLimit: 1200,
     rolldownOptions: {
       output: {
         codeSplitting: {

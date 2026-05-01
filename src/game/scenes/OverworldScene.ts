@@ -4,6 +4,7 @@ import { GENERATED_ASSETS, hasTexture } from '../assets/generatedAssets'
 import { CHARACTERS, type CharacterStats } from '../data/characters'
 import { ENEMIES_BY_ID, type EnemySkill } from '../data/enemies'
 import { ITEMS_BY_ID } from '../data/items'
+import { CONTROLS, CONTROLS_DISPLAY } from '../controls'
 import { SaveSystem, type SaveData } from '../systems/SaveSystem'
 import { CombatSystem } from '../systems/CombatSystem'
 
@@ -13,6 +14,7 @@ const MAP_HEIGHT = 30
 const PLAYER_SPEED = 160
 const REGULAR_ENEMY_TARGET_COUNT = 7
 const ENEMY_RESPAWN_DELAY = 15000
+const DEV_MODE = false
 const ENTITY_SCALE = {
   hero: 0.72,
   npc: 0.65,
@@ -88,7 +90,7 @@ const WATCH_LANTERN_TILE = { x: 7, y: 16 }
 const SHRINE_GATE_TILE = { x: 25, y: 4 }
 const SHRINE_FONT_TILE = { x: 27, y: 5 }
 const SHRINE_SEAL_TILE = { x: 27, y: 6 }
-const FIELD_BATTLE_TILE = { x: -100, y: -100 }
+const FIELD_BATTLE_TILE = MARKER_TILE
 const HOME_TILE = { x: 4, y: 12 }
 const ALLY_TILE = { x: 9, y: 21 }
 const PET_TILE = { x: 12, y: 20 }
@@ -129,6 +131,7 @@ const OBJECTIVES = {
 type OverworldInitData = {
   newGame?: boolean
   continueGame?: boolean
+  saveSlot?: number
   battleResult?: {
     battleId?: string
     victory?: boolean
@@ -373,7 +376,7 @@ export class OverworldScene extends Phaser.Scene {
     this.miniMap = undefined
     this.helpOverlay = undefined
 
-    const continuedSave = this.initData.continueGame ? SaveSystem.load(0) : null
+    const continuedSave = this.initData.continueGame ? SaveSystem.load(this.initData.saveSlot ?? SaveSystem.getAutoSaveSlot()) : null
     this.saveData = continuedSave ?? this.createDefaultSaveData()
 
     this.applyBattleResult()
@@ -743,7 +746,6 @@ export class OverworldScene extends Phaser.Scene {
     this.drawRouteLandmark({ x: 10, y: 12 }, 'ARCHIVE STEPS', 0x78d66b)
     this.drawRouteLandmark({ x: 17, y: 11 }, 'SKYWELL STAIRS', 0xbda7ff)
     this.drawGateBlocker(SHRINE_GATE_TILE, this.flag('shrine_gate_seen'), 'Shrine Gate', 0x8bd6ff)
-    this.drawGateBlocker(FIELD_BATTLE_TILE, this.flag('field_battle_won'), 'Guardian Ward', 0xff5f5f)
     this.drawGateBlocker(ARCHIVE_TILE, this.saveData.home.workshop > 0, 'Overgrowth', 0x78d66b)
     this.drawGateBlocker(MID_BOSS_TILE, this.flag('thornheart_won'), 'Root Wall', 0x5bc779)
     this.drawGateBlocker(FINAL_BOSS_TILE, this.flag('skywell_opened'), 'Skywell Barrier', 0xbda7ff)
@@ -970,7 +972,6 @@ export class OverworldScene extends Phaser.Scene {
       this.drawMarker(SHRINE_FONT_TILE, GENERATED_ASSETS.objects.pilgrimFont, 'Pilgrim Font')
       this.drawMarker(SHRINE_SEAL_TILE, GENERATED_ASSETS.objects.innerSeal, this.flag('shrine_guardian_won') ? 'Awakened Seal' : 'Inner Seal')
     }
-    this.drawMarker(FIELD_BATTLE_TILE, GENERATED_ASSETS.objects.guardianField, this.flag('field_battle_won') ? 'Cleared Field' : 'Guardian Field')
   }
 
   private drawChest() {
@@ -1533,7 +1534,7 @@ export class OverworldScene extends Phaser.Scene {
     const areaPanel = this.add.rectangle(this.scale.width / 2, 14, 190, 38, 0x0b0e1a, 0.9).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90)
     areaPanel.setStrokeStyle(1, 0x9ff3ff, 0.58)
     this.areaText = this.add.text(this.scale.width / 2, 31, 'Luma Quay', { color: '#9ff3ff', fontFamily: 'Georgia, serif', fontSize: '16px' }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
-    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 24, 'WASD: Move | Space: Attack | 1-4: Skills | F: Block | Q: Potion | E: Interact', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px', backgroundColor: '#08091acc', padding: { x: 12, y: 6 }, wordWrap: { width: this.uiWidth(0.86, 760) } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
+    this.promptText = this.add.text(this.scale.width / 2, this.scale.height - 24, CONTROLS_DISPLAY, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px', backgroundColor: '#08091acc', padding: { x: 12, y: 6 }, wordWrap: { width: this.uiWidth(0.86, 760) } }).setOrigin(0.5).setScrollFactor(0).setDepth(95)
     this.tweens.add({ targets: this.promptText, alpha: 0, delay: 10000, duration: 900 })
     this.createSkillBar()
     this.playerHpBarBg = this.add.graphics().setDepth(22)
@@ -2417,18 +2418,45 @@ export class OverworldScene extends Phaser.Scene {
     container.add(panel)
     container.add(this.add.rectangle(width / 2, height / 2 - 136, menuW - 60, 1, 0xd4a84b, 0.3))
     container.add(this.add.rectangle(width / 2, height / 2 - 52, menuW - 60, 1, 0xd4a84b, 0.3))
-    container.add(this.add.rectangle(width / 2, height / 2 + 160, menuW - 60, 1, 0xd4a84b, 0.3))
+    container.add(this.add.rectangle(width / 2, height / 2 + 132, menuW - 60, 1, 0xd4a84b, 0.3))
     container.add(this.add.text(width / 2 - 310, height / 2 - 220, '◈', { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '22px' }))
     container.add(this.add.text(width / 2 - 290, height / 2 - 220, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }))
     container.add(this.add.text(width / 2 + 112, height / 2 - 216, `${this.saveData.gold}g  •  ${playTime}`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '21px' }))
     container.add(this.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: menuW - 90 } }))
     this.saveData.party.forEach((member, index) => this.addMenuPartyRow(container, width / 2 - 300 + index * 198, height / 2 - 74, member))
     container.add(this.add.text(width / 2 + 64, height / 2 - 86, `Inventory\n${inventoryLines.join('\n')}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 7 }))
-    const status = this.add.text(width / 2 - 74, height / 2 + 146, 'Status', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    this.addSaveLoadMenu(container, width / 2 - 310, height / 2 + 118)
+    const status = this.add.text(width / 2 + 232, height / 2 + 146, 'Status', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     status.on('pointerdown', () => this.openStatusScreen())
     container.add(status)
-    container.add(this.add.text(width / 2 - 310, height / 2 + 184, 'Controls: Move WASD/Arrows or touch pad • Interact Enter/Space/ACT • Menu M/Esc • Shop trades shards first, then sells potions.', { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: menuW - 80 } }))
+    container.add(this.add.text(width / 2 - 310, height / 2 + 184, CONTROLS_DISPLAY, { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: menuW - 80 } }))
     this.menuOverlay = { container }
+  }
+
+  private addSaveLoadMenu(container: Phaser.GameObjects.Container, x: number, y: number) {
+    container.add(this.add.text(x, y, 'Save', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '18px' }))
+    container.add(this.add.text(x, y + 26, `Auto-save: Slot ${SaveSystem.getAutoSaveSlot()} (always active)`, { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '13px' }))
+    SaveSystem.getManualSlots().forEach((slot, index) => {
+      const slotInfo = SaveSystem.getSlotInfo(slot)
+      const summary = slotInfo?.exists ? this.formatSlotSummary(slotInfo) : 'Empty'
+      const rowY = y + 52 + index * 26
+      const save = this.add.text(x, rowY, `Manual Save → Slot ${slot}`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '13px' }).setInteractive({ useHandCursor: true })
+      save.on('pointerover', () => { save.setColor('#fff1a8'); audioManager.playSfx('ui_blip') })
+      save.on('pointerout', () => save.setColor('#f0c040'))
+      save.on('pointerdown', () => this.confirmManualSave(slot, Boolean(slotInfo?.exists)))
+      container.add(save)
+
+      const loadColor = slotInfo?.exists ? '#86efac' : '#5f6684'
+      const load = this.add.text(x + 160, rowY, `Load → Slot ${slot}`, { color: loadColor, fontFamily: 'Arial, sans-serif', fontSize: '13px' })
+      if (slotInfo?.exists) {
+        load.setInteractive({ useHandCursor: true })
+        load.on('pointerover', () => { load.setColor('#fff1a8'); audioManager.playSfx('ui_blip') })
+        load.on('pointerout', () => load.setColor(loadColor))
+        load.on('pointerdown', () => this.loadManualSlot(slot))
+      }
+      container.add(load)
+      container.add(this.add.text(x + 286, rowY, summary, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '12px' }))
+    })
   }
 
   private closeMenu() {
@@ -2447,6 +2475,47 @@ export class OverworldScene extends Phaser.Scene {
     container.add(this.add.rectangle(x + 56, y + 28, 116, 8, 0x281018, 0.95).setOrigin(0.5))
     container.add(this.add.rectangle(x - 2, y + 28, 112 * hpRatio, 6, 0x45e67a, 0.95).setOrigin(0, 0.5))
     container.add(this.add.text(x, y + 40, `HP ${member.currentHp}/${stats.hp}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '12px' }))
+  }
+
+  private formatSlotSummary(slotInfo: NonNullable<ReturnType<typeof SaveSystem.getSlotInfo>>) {
+    return `${this.formatPlayTime(slotInfo.playTime ?? 0)} • Lv.${slotInfo.level ?? 1} • ${this.formatStageName(slotInfo.stage)}`
+  }
+
+  private formatStageName(stage?: SaveData['stage']) {
+    const names: Record<SaveData['stage'], string> = {
+      quay: 'Luma Quay',
+      field: 'Eastern Field',
+      shrine: 'Moonwake Shrine',
+      archive: 'Verdant Archive',
+      skywell: 'Skywell',
+      homecoming: 'Homecoming',
+    }
+    return stage ? names[stage] : 'Luma Quay'
+  }
+
+  private confirmManualSave(slot: number, overwrite: boolean) {
+    if (overwrite && !window.confirm(`Overwrite manual save slot ${slot}?`)) {
+      audioManager.playSfx('ui_cancel')
+      return
+    }
+
+    this.saveCurrentPosition()
+    const saved = SaveSystem.save(slot, this.saveData)
+    audioManager.playSfx(saved ? 'save_point' : 'ui_cancel')
+    this.closeMenu()
+    this.showToast(saved ? `Saved to slot ${slot}.` : `Save slot ${slot} failed.`)
+  }
+
+  private loadManualSlot(slot: number) {
+    const data = SaveSystem.load(slot)
+    if (!data) {
+      audioManager.playSfx('ui_cancel')
+      this.showToast(`Slot ${slot} is empty.`)
+      return
+    }
+
+    audioManager.playSfx('scene_whoosh')
+    this.scene.start('OverworldScene', { continueGame: true, saveSlot: slot })
   }
 
   private openStatusScreen() {
@@ -2486,7 +2555,7 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private handleCameraZoom(deltaY: number) {
-    if (!this.player) return
+    if (!DEV_MODE || !this.player) return
     const zoomStep = deltaY < 0 ? 0.15 : -0.15
     this.cameraZoom = Phaser.Math.Clamp(this.cameraZoom + zoomStep, 0.4, 2)
     this.tweens.killTweensOf(this.cameras.main)
@@ -2597,7 +2666,7 @@ export class OverworldScene extends Phaser.Scene {
     const { width, height } = this.scale
     const overlay = this.add.container(width / 2, height - 58).setScrollFactor(0).setDepth(230)
     overlay.add(this.add.rectangle(0, 0, 640, 34, 0x050713, 0.9).setStrokeStyle(1, 0x8ab4f8, 0.35))
-    overlay.add(this.add.text(0, 0, 'WASD: Move | Space: Attack | 1-4: Skills | F: Block | Q: Potion | E: Interact', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px' }).setOrigin(0.5))
+    overlay.add(this.add.text(0, 0, CONTROLS_DISPLAY, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '12px' }).setOrigin(0.5))
     this.helpOverlay = overlay
   }
 
@@ -2648,7 +2717,7 @@ export class OverworldScene extends Phaser.Scene {
                             ? 'Challenge inner seal'
                         : isAt(FIELD_BATTLE_TILE)
                           ? 'Enter guardian field'
-                          : 'Move WASD/Arrows • Enter: Interact • M/Esc: Menu'
+                          : `${CONTROLS.move.keys}: ${CONTROLS.move.description} • ${CONTROLS.interact.key}: ${CONTROLS.interact.description} • ${CONTROLS.menu.key}: ${CONTROLS.menu.description}`
     this.promptText?.setText(prompt.startsWith('Move') ? prompt : `${prompt}  [Enter]`)
   }
 

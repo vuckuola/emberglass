@@ -176,7 +176,7 @@ export class SaveSystem {
 
   static getSlotInfo(
     slot: number,
-  ): { exists: boolean; timestamp?: number; playTime?: number; mapName?: string } | null {
+  ): { exists: boolean; timestamp?: number; playTime?: number; mapName?: string; level?: number; stage?: SaveData['stage'] } | null {
     const data = this.load(slot)
     if (!data) {
       return null
@@ -187,7 +187,32 @@ export class SaveSystem {
       timestamp: data.timestamp,
       playTime: data.playTime,
       mapName: data.position.mapId,
+      level: Math.max(...data.party.map((member) => member.level), 1),
+      stage: data.stage,
     }
+  }
+
+  static getAutoSaveSlot(): number {
+    return 0
+  }
+
+  static getManualSlots(): number[] {
+    return [1, 2, 3]
+  }
+
+  static getLatestSaveSlot(): number | null {
+    let latestSlot: number | null = null
+    let latestTimestamp = -1
+
+    for (let slot = 0; slot <= this.MAX_SLOTS; slot += 1) {
+      const data = this.load(slot)
+      if (data && data.timestamp > latestTimestamp) {
+        latestTimestamp = data.timestamp
+        latestSlot = slot
+      }
+    }
+
+    return latestSlot
   }
 
   static autoSave(data: SaveData): boolean {

@@ -4,6 +4,25 @@ import { SaveSystem } from '../systems/SaveSystem'
 
 const MENU_ITEMS = ['New Game', 'Continue', 'Settings', 'Credits'] as const
 type MenuItem = (typeof MENU_ITEMS)[number]
+type TextSpeed = 'Slow' | 'Normal' | 'Fast'
+type TitleSettings = {
+  masterVolume: number
+  musicVolume: number
+  sfxVolume: number
+  screenShake: number
+  textSpeed: TextSpeed
+  damageNumbers: boolean
+}
+
+const SETTINGS_KEY = 'emberglass_settings'
+const DEFAULT_SETTINGS: TitleSettings = {
+  masterVolume: 70,
+  musicVolume: 60,
+  sfxVolume: 80,
+  screenShake: 70,
+  textSpeed: 'Normal',
+  damageNumbers: true,
+}
 
 export class TitleScene extends Phaser.Scene {
   private buttons: Phaser.GameObjects.Text[] = []
@@ -12,6 +31,7 @@ export class TitleScene extends Phaser.Scene {
   private transitionLocked = false
   private notice?: Phaser.GameObjects.Text
   private saveSummary?: Phaser.GameObjects.Text
+  private settingsOverlay?: Phaser.GameObjects.Container
 
   constructor() {
     super('TitleScene')
@@ -132,7 +152,7 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-R', () => this.resetDemoSave())
 
     this.add
-      .text(width / 2, height - 42, 'WASD/Arrows: Select  •  Enter/Tap: Confirm  •  R: Reset demo save', {
+      .text(width / 2, height - 42, 'Arrows/WASD: Select  •  Enter: Confirm  •  R: Reset save', {
         color: '#5f6684',
         fontFamily: 'Arial, sans-serif',
         fontSize: '14px',
@@ -487,11 +507,12 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private selectMenuItem(label: MenuItem) {
-    if (this.transitionLocked) {
+    if (this.transitionLocked || this.settingsOverlay) {
       return
     }
 
-    const slotInfo = SaveSystem.getSlotInfo(0)
+    const latestSlot = SaveSystem.getLatestSaveSlot()
+    const slotInfo = latestSlot === null ? null : SaveSystem.getSlotInfo(latestSlot)
     audioManager.playSfx(label === 'Continue' && !slotInfo?.exists ? 'ui_cancel' : 'ui_confirm')
     if (label === 'New Game') {
       this.beginGameTransition({ newGame: true })
@@ -500,7 +521,7 @@ export class TitleScene extends Phaser.Scene {
 
     if (label === 'Continue') {
       if (slotInfo?.exists) {
-        this.beginGameTransition({ continueGame: true })
+        this.beginGameTransition({ continueGame: true, saveSlot: latestSlot ?? SaveSystem.getAutoSaveSlot() })
         return
       }
 
@@ -522,7 +543,7 @@ export class TitleScene extends Phaser.Scene {
     }
 
     if (label === 'Settings') {
-      this.showTitleNotice('Settings are not implemented in this slice. Audio starts after first browser interaction.')
+      this.openSettingsPanel()
       return
     }
 
@@ -541,9 +562,10 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private createSaveSummary(width: number, startY: number) {
-    const slotInfo = SaveSystem.getSlotInfo(0)
+    const latestSlot = SaveSystem.getLatestSaveSlot()
+    const slotInfo = latestSlot === null ? null : SaveSystem.getSlotInfo(latestSlot)
     const summary = slotInfo?.exists
-      ? `Continue: ${slotInfo.mapName ?? 'Luma Quay'} • ${this.formatTimestamp(slotInfo.timestamp)} • ${this.formatPlayTime(slotInfo.playTime)}`
+      ? `Continue: Slot ${latestSlot} • ${slotInfo.mapName ?? 'Luma Quay'} • ${this.formatTimestamp(slotInfo.timestamp)} • ${this.formatPlayTime(slotInfo.playTime)}`
       : 'No save yet • New Game starts at Luma Quay'
 
     this.saveSummary = this.add
@@ -568,12 +590,98 @@ export class TitleScene extends Phaser.Scene {
     return minutes > 0 ? `${minutes}m played` : 'fresh save'
   }
 
+  private openSettingsPanel() {
+    const { width, height } = this.scale
+    const settings = this.loadSettings()
+    const overlay = this.add.container(0, 0).setDepth(90)
+    this.settingsOverlay = overlay
+    overlay.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.64).setInteractive())
+
+    const panelW = Math.min(width * 0.6, 600)
+    const panelH = Math.min(height * 0.75, 420)
+    overlay.add(this.add.rectangle(width / 2, height / 2, panelW, panelH, 0x0b1028, 0.98).setStrokeStyle(2, 0xd4a84b, 0.8))
+    overlay.add(this.add.text(width / 2, height / 2 - panelH / 2 + 38, 'Settings', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }).setOrigin(0.5))
+
+    const rows: Array<{ label: string; get: () => string; change: (direction: number) => void }> = [
+      { label: 'Master Volume', get: () => `🔊 ${settings.masterVolume}%`, change: (direction) => { settings.masterVolume = Phaser.Math.Clamp(settings.masterVolume + direction * 10, 0, 100) } },
+      { label: 'Music Volume', get: () => `🔊 ${settings.musicVolume}%`, change: (direction) => { settings.musicVolume = Phaser.Math.Clamp(settings.musicVolume + direction * 10, 0, 100) } },
+      { label: 'SFX Volume', get: () => `🔊 ${settings.sfxVolume}%`, change: (direction) => { settings.sfxVolume = Phaser.Math.Clamp(settings.sfxVolume + direction * 10, 0, 100) } },
+      { label: 'Screen Shake', get: () => `${settings.screenShake}%`, change: (direction) => { settings.screenShake = Phaser.Math.Clamp(settings.screenShake + direction * 10, 0, 100) } },
+      { label: 'Text Speed', get: () => settings.textSpeed, change: (direction) => { const speeds: TextSpeed[] = ['Slow', 'Normal', 'Fast']; settings.textSpeed = speeds[(speeds.indexOf(settings.textSpeed) + direction + speeds.length) % speeds.length] } },
+      { label: 'Damage Numbers', get: () => settings.damageNumbers ? 'On' : 'Off', change: () => { settings.damageNumbers = !settings.damageNumbers } },
+    ]
+
+    const valueTexts: Phaser.GameObjects.Text[] = []
+    const saveAndRefresh = () => {
+      valueTexts.forEach((text, index) => text.setText(rows[index].get()))
+      this.saveSettings(settings)
+    }
+
+    rows.forEach((row, index) => {
+      const y = height / 2 - 128 + index * 42
+      overlay.add(this.add.text(width / 2 - panelW / 2 + 54, y, row.label, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px' }).setOrigin(0, 0.5))
+      const value = this.add.text(width / 2 + panelW / 2 - 118, y, row.get(), { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '17px' }).setOrigin(0.5)
+      valueTexts.push(value)
+      overlay.add(value)
+      ;[-1, 1].forEach((direction) => {
+        const button = this.add.text(value.x + direction * 76, y, direction < 0 ? '‹' : '›', { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '27px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+        button.on('pointerover', () => { button.setColor('#fff1a8'); audioManager.playSfx('ui_blip') })
+        button.on('pointerout', () => button.setColor('#f0c040'))
+        button.on('pointerdown', () => { row.change(direction); audioManager.playSfx('ui_confirm'); saveAndRefresh() })
+        overlay.add(button)
+      })
+    })
+
+    const back = this.add.text(width / 2, height / 2 + panelH / 2 - 42, 'Back', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    back.on('pointerover', () => { back.setScale(1.08); audioManager.playSfx('ui_blip') })
+    back.on('pointerout', () => back.setScale(1))
+    back.on('pointerdown', () => { audioManager.playSfx('ui_cancel'); overlay.destroy(); this.settingsOverlay = undefined })
+    overlay.add(back)
+  }
+
+  private loadSettings(): TitleSettings {
+    const audioSettings = (audioManager as unknown as { settings?: Partial<{ masterVolume: number; musicVolume: number; sfxVolume: number }> }).settings
+    const normalizedAudioSettings: Partial<TitleSettings> = {}
+    const masterVolume = this.normalizeVolumeSetting(audioSettings?.masterVolume)
+    const musicVolume = this.normalizeVolumeSetting(audioSettings?.musicVolume)
+    const sfxVolume = this.normalizeVolumeSetting(audioSettings?.sfxVolume)
+    if (masterVolume !== undefined) normalizedAudioSettings.masterVolume = masterVolume
+    if (musicVolume !== undefined) normalizedAudioSettings.musicVolume = musicVolume
+    if (sfxVolume !== undefined) normalizedAudioSettings.sfxVolume = sfxVolume
+    try {
+      return { ...DEFAULT_SETTINGS, ...normalizedAudioSettings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') }
+    } catch {
+      return { ...DEFAULT_SETTINGS, ...normalizedAudioSettings }
+    }
+  }
+
+  private normalizeVolumeSetting(value?: number) {
+    if (typeof value !== 'number') {
+      return undefined
+    }
+
+    return Math.round(Phaser.Math.Clamp(value <= 1 ? value * 100 : value, 0, 100))
+  }
+
+  private saveSettings(settings: TitleSettings) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    localStorage.setItem('emberglass_audio_settings', JSON.stringify({
+      masterVolume: settings.masterVolume / 100,
+      musicVolume: settings.musicVolume / 100,
+      sfxVolume: settings.sfxVolume / 100,
+    }))
+    const audio = audioManager as unknown as { setMasterVolume?: (value: number) => void; setMusicVolume?: (value: number) => void; setSfxVolume?: (value: number) => void }
+    audio.setMasterVolume?.(settings.masterVolume / 100)
+    audio.setMusicVolume?.(settings.musicVolume / 100)
+    audio.setSfxVolume?.(settings.sfxVolume / 100)
+  }
+
   private lockForTransition() {
     this.transitionLocked = true
     this.buttons.forEach((button) => button.disableInteractive().setAlpha(0.55))
   }
 
-  private beginGameTransition(data: { newGame?: boolean; continueGame?: boolean }) {
+  private beginGameTransition(data: { newGame?: boolean; continueGame?: boolean; saveSlot?: number }) {
     const { width, height } = this.scale
     this.lockForTransition()
     audioManager.playSfx('scene_whoosh')
