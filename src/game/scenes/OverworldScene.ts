@@ -8,6 +8,7 @@ import { EnemyManager } from '../systems/EnemyManager'
 import { CompanionManager } from '../systems/CompanionManager'
 import { UIManager } from '../systems/UIManager'
 import { NPCManager } from '../systems/NPCManager'
+import type { TouchControls } from '../input/TouchControls'
 
 export const TILE_SIZE = 48
 export const MAP_WIDTH = 40
@@ -283,6 +284,9 @@ export class OverworldScene extends Phaser.Scene {
   toast?: Phaser.GameObjects.Container
   touchMove: { x: number; y: number } | null = null
   touchButtons: Phaser.GameObjects.GameObject[] = []
+  touchControls?: TouchControls
+  isMobileDevice = false
+  touchBlockActive = false
   activeBanners: Phaser.GameObjects.GameObject[] = []
   routeClarityStates: Record<string, 'open' | 'closed'> = {}
   emberParticles: Phaser.GameObjects.Arc[] = []
@@ -402,6 +406,10 @@ export class OverworldScene extends Phaser.Scene {
     this.toast = undefined
     this.touchMove = null
     this.touchButtons = []
+    this.touchControls?.destroy()
+    this.touchControls = undefined
+    this.isMobileDevice = false
+    this.touchBlockActive = false
     this.activeBanners = []
     this.routeClarityStates = {}
     this.emberParticles = []
@@ -526,7 +534,11 @@ export class OverworldScene extends Phaser.Scene {
     }) as Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'f' | 'one' | 'two' | 'three' | 'four' | 'escape', Phaser.Input.Keyboard.Key>
 
     this.spawnEnemiesForStage()
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => { if (!pointer.event.defaultPrevented && !this.menuOverlay) this.performPlayerAttack(pointer.worldX, pointer.worldY, 'pointer') })
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.event.defaultPrevented && !this.touchControls?.containsScreenPoint(pointer.x, pointer.y) && !this.menuOverlay) {
+        this.performPlayerAttack(pointer.worldX, pointer.worldY, 'pointer')
+      }
+    })
     this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: Phaser.GameObjects.GameObject[], _deltaX: number, deltaY: number) => this.handleCameraZoom(deltaY))
     this.createHud()
     this.createMiniMap()
@@ -564,6 +576,7 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     if (this.menuOverlay) {
+      this.touchControls?.update()
       if (Phaser.Input.Keyboard.JustDown(this.keys.escape) || Phaser.Input.Keyboard.JustDown(this.keys.m)) {
         this.closeMenu()
       }
@@ -571,10 +584,12 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     if (this.pauseOverlay) {
+      this.touchControls?.update()
       return
     }
 
     if (this.busy) {
+      this.touchControls?.update()
       return
     }
 
@@ -582,21 +597,34 @@ export class OverworldScene extends Phaser.Scene {
     let velocityX = 0
     let velocityY = 0
 
-    if (this.cursors.left.isDown || this.keys.a.isDown || (this.touchMove?.x ?? 0) < 0) {
+    this.touchControls?.update()
+    const touchX = this.touchMove?.x ?? 0
+    const touchY = this.touchMove?.y ?? 0
+
+    if (this.cursors.left.isDown || this.keys.a.isDown) {
       velocityX -= PLAYER_SPEED
       this.facing = 'left'
     }
-    if (this.cursors.right.isDown || this.keys.d.isDown || (this.touchMove?.x ?? 0) > 0) {
+    if (this.cursors.right.isDown || this.keys.d.isDown) {
       velocityX += PLAYER_SPEED
       this.facing = 'right'
     }
-    if (this.cursors.up.isDown || this.keys.w.isDown || (this.touchMove?.y ?? 0) < 0) {
+    if (this.cursors.up.isDown || this.keys.w.isDown) {
       velocityY -= PLAYER_SPEED
       this.facing = 'up'
     }
-    if (this.cursors.down.isDown || this.keys.s.isDown || (this.touchMove?.y ?? 0) > 0) {
+    if (this.cursors.down.isDown || this.keys.s.isDown) {
       velocityY += PLAYER_SPEED
       this.facing = 'down'
+    }
+    if (Math.abs(touchX) > 0.08 || Math.abs(touchY) > 0.08) {
+      velocityX += PLAYER_SPEED * touchX
+      velocityY += PLAYER_SPEED * touchY
+      if (Math.abs(touchX) > Math.abs(touchY)) {
+        this.facing = touchX < 0 ? 'left' : 'right'
+      } else {
+        this.facing = touchY < 0 ? 'up' : 'down'
+      }
     }
 
     if (velocityX !== 0 && velocityY !== 0) {
@@ -605,7 +633,7 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     const wasBlocking = this.isBlocking
-    this.isBlocking = this.keys.f.isDown && (velocityX !== 0 || velocityY !== 0 || !this.menuOverlay)
+    this.isBlocking = (this.keys.f.isDown || this.touchBlockActive) && (velocityX !== 0 || velocityY !== 0 || !this.menuOverlay)
     if (this.isBlocking && !wasBlocking) this.blockStartTime = this.time.now
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.shift)) {

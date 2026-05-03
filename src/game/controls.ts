@@ -10,6 +10,11 @@ export const CONTROLS = {
   minimap: { key: 'Tab', description: 'Minimap Toggle' },
   help: { key: 'H', description: 'Help Overlay' },
   menu: { key: 'Esc', description: 'Pause / Menu' },
+  touchMove: { key: 'Virtual Joystick', description: 'Move' },
+  touchAttack: { key: 'Attack Button', description: 'Attack' },
+  touchDash: { key: 'Dash Button', description: 'Dash' },
+  touchBlock: { key: 'Shield Button', description: 'Block / Parry' },
+  touchInteract: { key: 'Interact Button', description: 'Interact' },
 } as const
 
 export const CONTROLS_DISPLAY = `WASD/Arrows: Move | Shift: Dash | Space/Click: Attack | F: Block | 1-4: Skills | Q: Potion | E: Interact | M: Map | Tab: Minimap | H: Help | Esc: Menu`

@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { audioManager } from '../audio/AudioManager'
+import { isTouchDevice } from '../input/TouchControls'
 import { SaveSystem } from '../systems/SaveSystem'
 
 type MenuItem = 'New Game' | 'New Game+' | 'Continue' | 'Settings' | 'Credits'
@@ -82,25 +83,32 @@ export class TitleScene extends Phaser.Scene {
     const startY = 340
 
     this.menuItems = this.getMenuItems()
+    const mobile = isTouchDevice()
     this.menuItems.forEach((label, index) => {
+      const hitArea = this.add
+        .rectangle(width / 2, startY + index * (mobile ? 54 : 48), mobile ? 260 : 220, mobile ? 50 : 46, 0x050713, mobile ? 0.42 : 0.12)
+        .setStrokeStyle(1, 0xffffff, mobile ? 0.16 : 0)
+        .setInteractive({ useHandCursor: true })
       const button = this.add
-        .text(width / 2, startY + index * 48, label, {
+        .text(width / 2, startY + index * (mobile ? 54 : 48), label, {
           color: label === 'New Game+' ? '#ff8a32' : '#c0c4d8',
           fontFamily: 'Arial, sans-serif',
-          fontSize: '25px',
+          fontSize: mobile ? '27px' : '25px',
         })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
 
-      button.on('pointerover', () => {
+      const select = () => {
         this.selectedIndex = index
-        this.tweens.add({
-          targets: button,
-          scale: 1.05,
-          duration: 140,
-          ease: 'Sine.easeOut',
-        })
         this.updateSelection()
+      }
+      const press = () => this.selectMenuItem(label)
+
+      hitArea.on('pointerover', select)
+      hitArea.on('pointerdown', press)
+      button.on('pointerover', () => {
+        select()
+        this.tweens.add({ targets: button, scale: 1.05, duration: 140, ease: 'Sine.easeOut' })
       })
 
       button.on('pointerout', () => {
@@ -113,7 +121,7 @@ export class TitleScene extends Phaser.Scene {
         this.updateSelection()
       })
 
-      button.on('pointerdown', () => this.selectMenuItem(label))
+      button.on('pointerdown', press)
       this.buttons.push(button)
     })
 

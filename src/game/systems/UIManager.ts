@@ -6,6 +6,7 @@ import { CHARACTERS, type CharacterStats } from '../data/characters'
 import { ENEMIES_BY_ID, type EnemySkill } from '../data/enemies'
 import { ITEMS_BY_ID } from '../data/items'
 import { CONTROLS, CONTROLS_DISPLAY, CONTROLS_SHORT } from '../controls'
+import { TouchControls, isTouchDevice } from '../input/TouchControls'
 import { SaveSystem, type SaveData } from './SaveSystem'
 import { CombatSystem } from './CombatSystem'
 
@@ -237,7 +238,7 @@ export type GroundLoot = {
   expireTween?: Phaser.Tweens.Tween
 }
 export type RealtimeSkill = { name: string; mpCost: number; cooldown: number; color: number; effect: 'emberSlash' | 'tidalHeal' | 'stoneGuard' | 'windStep' }
-void [audioManager, GENERATED_ASSETS, hasTexture, CHARACTERS, ENEMIES_BY_ID, ITEMS_BY_ID, CONTROLS, CONTROLS_DISPLAY, CONTROLS_SHORT, SaveSystem, CombatSystem]
+void [audioManager, GENERATED_ASSETS, hasTexture, CHARACTERS, ENEMIES_BY_ID, ITEMS_BY_ID, CONTROLS, CONTROLS_DISPLAY, CONTROLS_SHORT, TouchControls, isTouchDevice, SaveSystem, CombatSystem]
 
 const UIMANAGER_METHODS = [
   "updateAreaPop",
@@ -362,11 +363,12 @@ export class UIManager {
   }
 
   createHud() {
+    const mobile = isTouchDevice()
     const hudGraphics = this.scene.add.graphics().setScrollFactor(0).setDepth(90)
-    const nameText = this.scene.add.text(54, 22, 'Nara Lv.3', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '15px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(92)
-    const hpText = this.scene.add.text(180, 42, '', { color: '#f8fff9', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(92)
-    const mpText = this.scene.add.text(180, 58, '', { color: '#eff6ff', fontFamily: 'Arial, sans-serif', fontSize: '11px' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(92)
-    const goldText = this.scene.add.text(198, 22, '', { color: '#ffd166', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(92)
+    const nameText = this.scene.add.text(54, 22, 'Nara Lv.3', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: mobile ? '17px' : '15px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(92)
+    const hpText = this.scene.add.text(mobile ? 216 : 180, 42, '', { color: '#f8fff9', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '13px' : '11px' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(92)
+    const mpText = this.scene.add.text(mobile ? 216 : 180, 58, '', { color: '#eff6ff', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '13px' : '11px' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(92)
+    const goldText = this.scene.add.text(mobile ? 238 : 198, 22, '', { color: '#ffd166', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '15px' : '13px', fontStyle: 'bold' }).setScrollFactor(0).setDepth(92)
     const companionTexts = [this.scene.add.text(50, 100, 'Kael', { color: '#d7fbe8', fontFamily: 'Arial, sans-serif', fontSize: '11px' }), this.scene.add.text(50, 128, 'Io', { color: '#dbeafe', fontFamily: 'Arial, sans-serif', fontSize: '11px' })]
     const swordTexts = [this.scene.add.text(28, 100, '⚔', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '10px' }), this.scene.add.text(28, 128, '⚔', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '10px' })]
     const portraits = [this.scene.add.circle(25, 105, 10, 0x55d27a, 0.94), this.scene.add.circle(25, 133, 10, 0x60a5fa, 0.94)]
@@ -374,8 +376,8 @@ export class UIManager {
     this.scene.hudPanel = { graphics: hudGraphics, nameText, hpText, mpText, goldText, companionTexts, swordTexts, portraits }
     this.scene.add.circle(30, 30, 15, 0xff8a3d, 0.95).setStrokeStyle(2, 0xfff1a8, 0.7).setScrollFactor(0).setDepth(92)
     this.scene.add.text(30, 30, 'N', { color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: '13px', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(93)
-    this.scene.objectivePanel = this.scene.add.rectangle(this.scene.scale.width / 2, 18, this.scene.uiWidth(0.45, 430), 32, 0x050713, 0.72).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90).setStrokeStyle(1, 0x9ff3ff, 0.32)
-    this.scene.objectiveText = this.scene.add.text(this.scene.scale.width / 2, 34, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '14px', wordWrap: { width: 400 } }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
+    this.scene.objectivePanel = this.scene.add.rectangle(this.scene.scale.width / 2, 18, this.scene.uiWidth(mobile ? 0.38 : 0.45, mobile ? 360 : 430), mobile ? 28 : 32, 0x050713, 0.72).setOrigin(0.5, 0).setScrollFactor(0).setDepth(90).setStrokeStyle(1, 0x9ff3ff, 0.32)
+    this.scene.objectiveText = this.scene.add.text(this.scene.scale.width / 2, mobile ? 32 : 34, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '12px' : '14px', wordWrap: { width: mobile ? 330 : 400 } }).setOrigin(0.5).setScrollFactor(0).setDepth(91)
     this.scene.inventoryText = this.scene.add.text(16, 156, '', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '11px', backgroundColor: '#05071388', padding: { x: 8, y: 4 } }).setScrollFactor(0).setDepth(91)
     this.scene.levelText = this.scene.add.text(0, 0, '', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '1px' }).setVisible(false)
     this.scene.killCounterText = this.scene.add.text(this.scene.scale.width - 24, 24, 'Kills: 0', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '14px' }).setOrigin(1, 0).setScrollFactor(0).setDepth(91)
@@ -396,32 +398,9 @@ export class UIManager {
   }
 
   createTouchControls() {
-    const { width, height } = this.scene.scale
-    const padX = 92
-    const padY = height - 72
-    const controls = [
-      { label: '◀', x: padX - 40, y: padY, move: { x: -1, y: 0 } },
-      { label: '▶', x: padX + 40, y: padY, move: { x: 1, y: 0 } },
-      { label: '▲', x: padX, y: padY - 40, move: { x: 0, y: -1 } },
-      { label: '▼', x: padX, y: padY + 40, move: { x: 0, y: 1 } },
-    ]
-
-    controls.forEach((control) => {
-      const button = this.scene.add.circle(control.x, control.y, 28, 0x08091a, 0.46).setScrollFactor(0).setDepth(96).setStrokeStyle(2, 0xffffff, 0.34).setInteractive({ useHandCursor: true })
-      const label = this.scene.add.text(control.x, control.y, control.label, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setScrollFactor(0).setDepth(97)
-      button.on('pointerdown', () => { this.scene.touchMove = control.move; this.scene.touchFeedback(button, 0x1b3762) })
-      button.on('pointerup', () => { this.scene.touchMove = null; button.setFillStyle(0x08091a, 0.46).setScale(1) })
-      button.on('pointerout', () => { if (this.scene.touchMove === control.move) { this.scene.touchMove = null }; button.setFillStyle(0x08091a, 0.46) })
-      this.scene.touchButtons.push(button, label)
-    })
-
-    const attack = this.scene.add.text(width - 154, height - 94, 'ATK', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', backgroundColor: '#2e0a0a88', padding: { x: 17, y: 17 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
-    const interact = this.scene.add.text(width - 92, height - 94, 'E', { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px', backgroundColor: '#0a0a2e88', padding: { x: 21, y: 16 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
-    const menu = this.scene.add.text(width - 88, height - 36, 'MENU', { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '13px', backgroundColor: '#08091a88', padding: { x: 18, y: 13 } }).setOrigin(0.5).setScrollFactor(0).setDepth(96).setInteractive({ useHandCursor: true })
-    attack.on('pointerdown', () => { this.scene.touchTextFeedback(attack); this.scene.performPlayerAttack() })
-    interact.on('pointerdown', () => { this.scene.touchTextFeedback(interact); this.scene.interact() })
-    menu.on('pointerdown', () => { this.scene.touchTextFeedback(menu); this.scene.openMenu() })
-    this.scene.touchButtons.push(attack, interact, menu)
+    this.scene.touchControls?.destroy()
+    this.scene.touchControls = new TouchControls(this.scene)
+    this.scene.isMobileDevice = this.scene.touchControls.isMobileDevice
   }
 
   touchFeedback(button: Phaser.GameObjects.Arc, color: number) {
@@ -531,7 +510,8 @@ export class UIManager {
   }
 
   showToast(message: string) {
-    const { width } = this.scene.scale
+    const { width, height } = this.scene.scale
+    const mobile = isTouchDevice()
     this.scene.toast?.destroy()
     const lower = message.toLowerCase()
     const color = lower.includes('failed') || lower.includes("can't") || lower.includes('not enough') ? '#ff8a8a' : lower.includes('no health') || lower.includes('already') || lower.includes('low') ? '#ffb86b' : lower.includes('purchased') || lower.includes('yields') || lower.includes('restored') || lower.includes('complete') ? '#86efac' : '#ffffff'
@@ -543,11 +523,12 @@ export class UIManager {
     const glow = this.scene.add.rectangle(0, 0, panelW + 14, panelH + 12, 0xffd36e, 0.1)
     const panel = this.scene.add.rectangle(0, 0, panelW, panelH, 0x0a0e1e, 0.94).setStrokeStyle(1, 0xd4a84b, 0.72)
     const accent = this.scene.add.rectangle(-panelW / 2 + 3, 0, 3, panelH - 8, 0xd4a84b, 0.8)
-    const text = this.scene.add.text(0, 0, message, { color, fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: wrapWidth } }).setOrigin(0.5)
+    const text = this.scene.add.text(0, 0, message, { color, fontFamily: 'Arial, sans-serif', fontSize: mobile ? '18px' : '15px', wordWrap: { width: wrapWidth } }).setOrigin(0.5)
     container.add([glow, panel, accent, text])
+    if (mobile) container.setPosition(width / 2, height - 92)
     this.scene.toast = container
-    this.scene.tweens.add({ targets: container, y: 104, alpha: 1, duration: 180, ease: 'Sine.easeOut' })
-    this.scene.tweens.add({ targets: container, y: 88, alpha: 0, delay: 3000, duration: 520, onComplete: () => { if (this.scene.toast === container) { this.scene.toast = undefined }; container.destroy() } })
+    this.scene.tweens.add({ targets: container, y: mobile ? height - 104 : 104, alpha: 1, duration: 180, ease: 'Sine.easeOut' })
+    this.scene.tweens.add({ targets: container, y: mobile ? height - 92 : 88, alpha: 0, delay: 3000, duration: 520, onComplete: () => { if (this.scene.toast === container) { this.scene.toast = undefined }; container.destroy() } })
   }
 
   showRewardToast(message: string) {
@@ -734,6 +715,7 @@ export class UIManager {
     this.scene.busy = true
     audioManager.playSfx('ui_menu_open')
     const { width, height } = this.scene.scale
+    const mobile = isTouchDevice()
     const container = this.scene.add.container(0, 0).setScrollFactor(0).setDepth(200)
     const counts = this.scene.getInventoryCounts()
     const playTime = this.scene.formatPlayTime(this.scene.saveData.playTime)
@@ -752,24 +734,26 @@ export class UIManager {
     container.add(this.scene.add.rectangle(width / 2, height - 18, width, 36, 0x000000, 0.34))
     container.add(this.scene.add.rectangle(18, height / 2, 36, height, 0x000000, 0.34))
     container.add(this.scene.add.rectangle(width - 18, height / 2, 36, height, 0x000000, 0.34))
-    const menuW = this.scene.uiWidth(0.73, 700)
-    const menuH = this.scene.uiHeight(0.78, 500)
+    const menuW = mobile ? width - 28 : this.scene.uiWidth(0.73, 700)
+    const menuH = mobile ? height - 28 : this.scene.uiHeight(0.78, 500)
     const panel = this.scene.add.rectangle(width / 2, height / 2, menuW, menuH, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.6)
     container.add(panel)
-    container.add(this.scene.add.rectangle(width / 2, height / 2 - 136, menuW - 60, 1, 0xd4a84b, 0.3))
-    container.add(this.scene.add.rectangle(width / 2, height / 2 - 52, menuW - 60, 1, 0xd4a84b, 0.3))
-    container.add(this.scene.add.rectangle(width / 2, height / 2 + 132, menuW - 60, 1, 0xd4a84b, 0.3))
-    container.add(this.scene.add.text(width / 2 - 310, height / 2 - 220, '◈', { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '22px' }))
-    container.add(this.scene.add.text(width / 2 - 290, height / 2 - 220, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '28px' }))
-    container.add(this.scene.add.text(width / 2 + 112, height / 2 - 216, `${this.scene.saveData.gold}g  •  ${playTime}`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: '21px' }))
-    container.add(this.scene.add.text(width / 2 - 310, height / 2 - 168, `Objective\n${this.scene.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: '17px', wordWrap: { width: menuW - 90 } }))
-    this.scene.saveData.party.forEach((member, index) => this.scene.addMenuPartyRow(container, width / 2 - 300 + index * 198, height / 2 - 74, member))
-    container.add(this.scene.add.text(width / 2 + 64, height / 2 - 86, `Inventory\n${inventoryLines.join('\n')}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '16px', lineSpacing: 7 }))
-    this.scene.addSaveLoadMenu(container, width / 2 - 310, height / 2 + 118)
-    const status = this.scene.add.text(width / 2 + 232, height / 2 + 146, 'Status', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    const left = width / 2 - menuW / 2 + 30
+    const top = height / 2 - menuH / 2 + 24
+    container.add(this.scene.add.rectangle(width / 2, top + 76, menuW - 60, 1, 0xd4a84b, 0.3))
+    container.add(this.scene.add.rectangle(width / 2, top + 156, menuW - 60, 1, 0xd4a84b, 0.3))
+    container.add(this.scene.add.rectangle(width / 2, height - 92, menuW - 60, 1, 0xd4a84b, 0.3))
+    container.add(this.scene.add.text(left, top, '◈', { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '20px' : '22px' }))
+    container.add(this.scene.add.text(left + 22, top, 'Emberglass Menu', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: mobile ? '24px' : '28px' }))
+    container.add(this.scene.add.text(width - 214, top + 4, `${this.scene.saveData.gold}g  •  ${playTime}`, { color: '#f0c040', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '17px' : '21px' }))
+    container.add(this.scene.add.text(left, top + 52, `Objective\n${this.scene.saveData.currentObjective}`, { color: '#d7d9e8', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '15px' : '17px', wordWrap: { width: menuW - 80 } }))
+    this.scene.saveData.party.forEach((member, index) => this.scene.addMenuPartyRow(container, left + index * (mobile ? 170 : 198), top + 146, member))
+    container.add(this.scene.add.text(width / 2 + (mobile ? 72 : 64), top + 132, `Inventory\n${inventoryLines.join('\n')}`, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '14px' : '16px', lineSpacing: 7 }))
+    this.scene.addSaveLoadMenu(container, left, height - 86)
+    const status = this.scene.add.text(width - 112, height - 58, 'Status', { color: '#fff1a8', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '18px' : '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
     status.on('pointerdown', () => this.scene.openStatusScreen())
     container.add(status)
-    container.add(this.scene.add.text(width / 2 - 310, height / 2 + 184, CONTROLS_DISPLAY, { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px', wordWrap: { width: menuW - 80 } }))
+    container.add(this.scene.add.text(left, height - 34, mobile ? 'Touch: move, attack, dash, skills, interact' : CONTROLS_DISPLAY, { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: mobile ? '13px' : '15px', wordWrap: { width: menuW - 80 } }))
     this.scene.menuOverlay = { container }
   }
 
@@ -942,7 +926,9 @@ export class UIManager {
   }
 
   createMiniMap() {
-    const container = this.scene.add.container(this.scene.scale.width - 176, 18).setScrollFactor(0).setDepth(120).setVisible(true)
+    const mobile = isTouchDevice()
+    const mapWidth = mobile ? 120 : 160
+    const container = this.scene.add.container(this.scene.scale.width - mapWidth - 16, 18).setScrollFactor(0).setDepth(120).setVisible(true)
     const graphics = this.scene.add.graphics()
     container.add(graphics)
     this.scene.miniMap = { container, graphics, visible: true }
@@ -959,8 +945,9 @@ export class UIManager {
   updateMiniMap() {
     if (!this.scene.miniMap || !this.scene.miniMap.visible || !this.scene.player) return
     const graphics = this.scene.miniMap.graphics
-    const width = 160
-    const height = 120
+    const mobile = isTouchDevice()
+    const width = mobile ? 120 : 160
+    const height = mobile ? 90 : 120
     const padding = 8
     const mapWidth = width - padding * 2
     const mapHeight = height - padding * 2
@@ -1335,6 +1322,7 @@ export class UIManager {
 
   updateTopLeftHud() {
     if (!this.scene.hudPanel) return
+    const mobile = isTouchDevice()
     const hudPanel = this.scene.hudPanel
     const hero = this.scene.saveData.party[0]
     const stats = this.scene.getPlayerCombatStats()
@@ -1342,10 +1330,12 @@ export class UIManager {
     const mpPct = Phaser.Math.Clamp(hero.currentMp / stats.mp, 0, 1)
     const graphics = hudPanel.graphics
     graphics.clear()
-    graphics.fillStyle(0x050713, 0.84).fillRoundedRect(12, 12, 242, 72, 10)
-    graphics.lineStyle(1, 0xffffff, 0.16).strokeRoundedRect(12, 12, 242, 72, 10)
-    graphics.fillStyle(0x111827, 0.95).fillRoundedRect(54, 39, 126, 8, 3).fillStyle(0x22c55e, 0.96).fillRoundedRect(54, 39, 126 * hpPct, 8, 3)
-    graphics.fillStyle(0x111827, 0.95).fillRoundedRect(54, 55, 126, 7, 3).fillStyle(0x3b82f6, 0.96).fillRoundedRect(54, 55, 126 * mpPct, 7, 3)
+    const panelW = mobile ? 278 : 242
+    const barW = mobile ? 162 : 126
+    graphics.fillStyle(0x050713, 0.84).fillRoundedRect(12, 12, panelW, 72, 10)
+    graphics.lineStyle(1, 0xffffff, 0.16).strokeRoundedRect(12, 12, panelW, 72, 10)
+    graphics.fillStyle(0x111827, 0.95).fillRoundedRect(54, 39, barW, 9, 3).fillStyle(0x22c55e, 0.96).fillRoundedRect(54, 39, barW * hpPct, 9, 3)
+    graphics.fillStyle(0x111827, 0.95).fillRoundedRect(54, 56, barW, 8, 3).fillStyle(0x3b82f6, 0.96).fillRoundedRect(54, 56, barW * mpPct, 8, 3)
     graphics.fillStyle(0x050713, 0.76).fillRoundedRect(12, 91, 168, 56, 9)
     graphics.lineStyle(1, 0xffffff, 0.13).strokeRoundedRect(12, 91, 168, 56, 9)
     hudPanel.nameText.setText(`Nara Lv.${hero.level}`)

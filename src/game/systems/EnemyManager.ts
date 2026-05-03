@@ -668,7 +668,8 @@ export class EnemyManager {
     this.scene.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
       const distance = Phaser.Math.Distance.Between(this.scene.player!.x, this.scene.player!.y, enemy.x, enemy.y)
       const enemyAngle = Phaser.Math.Angle.Between(this.scene.player!.x, this.scene.player!.y, enemy.x, enemy.y)
-      if (distance <= 60 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 4) { hit = true; this.scene.damageEnemy(enemy, 1, attackInput) }
+      const halfAngle = this.scene.isMobileDevice ? Math.PI / 3 : Math.PI / 4
+      if (distance <= 60 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= halfAngle) { hit = true; this.scene.damageEnemy(enemy, 1, attackInput) }
     })
     if (hit) this.scene.cameras.main.shake(80, 0.008)
     else this.scene.spawnWhooshDust(swingX, swingY, angle)
