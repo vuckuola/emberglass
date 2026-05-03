@@ -2,8 +2,7 @@ import Phaser from 'phaser'
 import { audioManager } from '../audio/AudioManager'
 import { SaveSystem } from '../systems/SaveSystem'
 
-const MENU_ITEMS = ['New Game', 'Continue', 'Settings', 'Credits'] as const
-type MenuItem = (typeof MENU_ITEMS)[number]
+type MenuItem = 'New Game' | 'New Game+' | 'Continue' | 'Settings' | 'Credits'
 type TextSpeed = 'Slow' | 'Normal' | 'Fast'
 type TitleSettings = {
   masterVolume: number
@@ -32,6 +31,7 @@ export class TitleScene extends Phaser.Scene {
   private notice?: Phaser.GameObjects.Text
   private saveSummary?: Phaser.GameObjects.Text
   private settingsOverlay?: Phaser.GameObjects.Container
+  private menuItems: MenuItem[] = []
 
   constructor() {
     super('TitleScene')
@@ -81,10 +81,11 @@ export class TitleScene extends Phaser.Scene {
 
     const startY = 340
 
-    MENU_ITEMS.forEach((label, index) => {
+    this.menuItems = this.getMenuItems()
+    this.menuItems.forEach((label, index) => {
       const button = this.add
         .text(width / 2, startY + index * 48, label, {
-          color: '#c0c4d8',
+          color: label === 'New Game+' ? '#ff8a32' : '#c0c4d8',
           fontFamily: 'Arial, sans-serif',
           fontSize: '25px',
         })
@@ -147,7 +148,7 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-DOWN', () => this.moveSelection(1))
     this.input.keyboard?.on('keydown-S', () => this.moveSelection(1))
     this.input.keyboard?.on('keydown-ENTER', () => {
-      this.selectMenuItem(MENU_ITEMS[this.selectedIndex])
+      this.selectMenuItem(this.menuItems[this.selectedIndex])
     })
     this.input.keyboard?.on('keydown-R', () => this.resetDemoSave())
 
@@ -483,15 +484,16 @@ export class TitleScene extends Phaser.Scene {
     }
 
     this.selectedIndex =
-      (this.selectedIndex + direction + MENU_ITEMS.length) % MENU_ITEMS.length
+      (this.selectedIndex + direction + this.menuItems.length) % this.menuItems.length
     audioManager.playSfx('ui_blip')
     this.updateSelection()
   }
 
   private updateSelection() {
     this.buttons.forEach((button, index) => {
+      const isNgPlus = this.menuItems[index] === 'New Game+'
       button.setScale(index === this.selectedIndex ? 1.08 : 1)
-      button.setColor(index === this.selectedIndex ? '#fff1a8' : '#c0c4d8')
+      button.setColor(index === this.selectedIndex ? '#fff1a8' : isNgPlus ? '#ff8a32' : '#c0c4d8')
       button.setShadow(
         0,
         0,
@@ -518,6 +520,17 @@ export class TitleScene extends Phaser.Scene {
     audioManager.playSfx(label === 'Continue' && !slotInfo?.exists ? 'ui_cancel' : 'ui_confirm')
     if (label === 'New Game') {
       this.beginGameTransition({ newGame: true })
+      return
+    }
+
+    if (label === 'New Game+') {
+      const completedSlot = SaveSystem.getLatestCompletedSaveSlot()
+      if (completedSlot !== null) {
+        this.beginGameTransition({ newGame: true, newGamePlus: true, sourceSaveSlot: completedSlot })
+        return
+      }
+
+      this.showTitleNotice('Complete the Skywell route once to unlock New Game+.')
       return
     }
 
@@ -566,8 +579,10 @@ export class TitleScene extends Phaser.Scene {
   private createSaveSummary(width: number, startY: number) {
     const latestSlot = SaveSystem.getLatestSaveSlot()
     const slotInfo = latestSlot === null ? null : SaveSystem.getSlotInfo(latestSlot)
+    const completedSlot = SaveSystem.getLatestCompletedSaveSlot()
+    const completedSave = completedSlot === null ? null : SaveSystem.load(completedSlot)
     const summary = slotInfo?.exists
-      ? `Continue: Slot ${latestSlot} • ${slotInfo.mapName ?? 'Luma Quay'} • ${this.formatTimestamp(slotInfo.timestamp)} • ${this.formatPlayTime(slotInfo.playTime)}`
+      ? `Continue: Slot ${latestSlot} • ${slotInfo.mapName ?? 'Luma Quay'} • ${this.formatTimestamp(slotInfo.timestamp)} • ${this.formatPlayTime(slotInfo.playTime)}${completedSave ? ` • NG+ ${completedSave.ngPlusLevel + 1} ready` : ''}`
       : 'No save yet • New Game starts at Luma Quay'
 
     this.saveSummary = this.add
@@ -590,6 +605,15 @@ export class TitleScene extends Phaser.Scene {
   private formatPlayTime(playTime?: number) {
     const minutes = Math.max(0, Math.floor((playTime ?? 0) / 60))
     return minutes > 0 ? `${minutes}m played` : 'fresh save'
+  }
+
+  private getMenuItems(): MenuItem[] {
+    const items: MenuItem[] = ['New Game']
+    if (SaveSystem.getLatestCompletedSaveSlot() !== null) {
+      items.push('New Game+')
+    }
+    items.push('Continue', 'Settings', 'Credits')
+    return items
   }
 
   private openSettingsPanel() {
@@ -683,14 +707,14 @@ export class TitleScene extends Phaser.Scene {
     this.buttons.forEach((button) => button.disableInteractive().setAlpha(0.55))
   }
 
-  private beginGameTransition(data: { newGame?: boolean; continueGame?: boolean; saveSlot?: number }) {
+  private beginGameTransition(data: { newGame?: boolean; newGamePlus?: boolean; continueGame?: boolean; saveSlot?: number; sourceSaveSlot?: number }) {
     const { width, height } = this.scale
     this.lockForTransition()
     audioManager.playSfx('scene_whoosh')
 
     const veil = this.add.rectangle(width / 2, height / 2, width, height, 0x050612, 0).setDepth(80)
     const line = this.add.rectangle(width / 2, height / 2, 0, 2, 0xffd36e, 0.88).setDepth(81)
-    const caption = this.add.text(width / 2, height / 2 + 34, data.newGame ? 'The Skywell calls...' : 'Returning to the covenant...', {
+    const caption = this.add.text(width / 2, height / 2 + 34, data.newGamePlus ? 'The Skywell calls again...' : data.newGame ? 'The Skywell calls...' : 'Returning to the covenant...', {
       color: '#fff1a8',
       fontFamily: 'Georgia, serif',
       fontSize: '20px',

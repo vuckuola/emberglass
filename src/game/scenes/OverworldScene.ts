@@ -136,8 +136,10 @@ const OBJECTIVES = {
 
 type OverworldInitData = {
   newGame?: boolean
+  newGamePlus?: boolean
   continueGame?: boolean
   saveSlot?: number
+  sourceSaveSlot?: number
   battleResult?: {
     battleId?: string
     victory?: boolean
@@ -185,7 +187,10 @@ type MapEnemy = {
   battleId?: string
   bossPhase?: number
   recoveringUntil?: number
+  tutorialRole?: 'step1' | 'step2' | 'step3'
+  noRewards?: boolean
 }
+type TutorialState = 'none' | 'step1-kill' | 'step2-dash' | 'step3-block' | 'complete'
 
 type PartyCompanion = {
   characterId: string
@@ -348,6 +353,11 @@ export class OverworldScene extends Phaser.Scene {
   private fpsText?: Phaser.GameObjects.Text
   private lastHeartbeatAt = 0
   private damageNumberPool: Phaser.GameObjects.Text[] = []
+  private tutorialState: TutorialState = 'none'
+  private tutorialOverlay?: Phaser.GameObjects.Container
+  private tutorialTimer?: Phaser.Time.TimerEvent
+  private tutorialStepStartedAt = 0
+  private currentAttackInput: 'space' | 'pointer' | 'buffer' | 'skill' = 'space'
 
   constructor() {
     super('OverworldScene')
@@ -445,11 +455,18 @@ export class OverworldScene extends Phaser.Scene {
     this.learnedInteract = false
     this.firstDamageTaken = false
     this.fpsText = undefined
+    this.tutorialState = 'none'
+    this.tutorialOverlay?.destroy()
+    this.tutorialOverlay = undefined
+    this.tutorialTimer?.destroy()
+    this.tutorialTimer = undefined
+    this.tutorialStepStartedAt = 0
+    this.currentAttackInput = 'space'
     this.damageNumberPool.forEach((text) => text.destroy())
     this.damageNumberPool = []
 
     const continuedSave = this.initData.continueGame ? SaveSystem.load(this.initData.saveSlot ?? SaveSystem.getAutoSaveSlot()) : null
-    this.saveData = continuedSave ?? this.createDefaultSaveData()
+    this.saveData = continuedSave ?? (this.initData.newGamePlus ? this.createNewGamePlusSaveData() : this.createDefaultSaveData())
 
     this.applyBattleResult()
     this.createBackdrop()
@@ -488,7 +505,7 @@ export class OverworldScene extends Phaser.Scene {
     }) as Record<'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'shift' | 'q' | 'm' | 't' | 'h' | 'f' | 'one' | 'two' | 'three' | 'four' | 'escape', Phaser.Input.Keyboard.Key>
 
     this.spawnEnemiesForStage()
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => { if (!pointer.event.defaultPrevented && !this.menuOverlay) this.performPlayerAttack(pointer.worldX, pointer.worldY) })
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => { if (!pointer.event.defaultPrevented && !this.menuOverlay) this.performPlayerAttack(pointer.worldX, pointer.worldY, 'pointer') })
     this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: Phaser.GameObjects.GameObject[], _deltaX: number, deltaY: number) => this.handleCameraZoom(deltaY))
     this.createHud()
     this.createMiniMap()
@@ -502,7 +519,13 @@ export class OverworldScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => document.removeEventListener('visibilitychange', this.handleVisibilityChange))
     this.time.addEvent({ delay: 60000, loop: true, callback: () => { if (!this.busy) this.persist() } })
     if (!continuedSave && !this.initData.continueGame) {
-      this.time.delayedCall(850, () => this.showFirstSessionGuide())
+      if (this.initData.newGamePlus) {
+        this.time.delayedCall(850, () => this.showNewGamePlusBanner())
+      } else if (!this.saveData.flags.tutorialCompleted) {
+        this.time.delayedCall(650, () => this.startFirstCombatTutorial())
+      } else {
+        this.time.delayedCall(850, () => this.showFirstSessionGuide())
+      }
     }
     this.notifyWorkshopBuff()
     this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE)
@@ -601,6 +624,7 @@ export class OverworldScene extends Phaser.Scene {
     this.updateInteractionPrompt()
     this.updateOnboardingHints()
     this.updateLowHpHeartbeat()
+    this.updateTutorialProgress()
     if (DEV_MODE && this.fpsText) this.fpsText.setText(`FPS: ${this.game.loop.actualFps.toFixed(0)}`)
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
@@ -632,7 +656,7 @@ export class OverworldScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.keys.four)) { this.queueHint('skills', '1-4 for skills'); this.useRealtimeSkill(3) }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.space) && !this.isBlocking) {
-      if (!this.performPlayerAttack()) this.bufferInput('attack')
+      if (!this.performPlayerAttack(undefined, undefined, 'space')) this.bufferInput('attack')
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.e)) {
@@ -2086,6 +2110,8 @@ export class OverworldScene extends Phaser.Scene {
     if (result.battleId === FINAL_BOSS_BATTLE_ID) {
       this.setFlag('final_boss_won')
       this.setFlag('demo_complete')
+      this.saveData.gameCompleted = true
+      this.saveData.completionTimestamp = Date.now()
       this.saveData.stage = 'homecoming'
       this.setObjective(OBJECTIVES.complete)
       this.saveData.pet.forageReady = this.saveData.pet.unlocked
@@ -2106,6 +2132,7 @@ export class OverworldScene extends Phaser.Scene {
       this.showLevelUpCeremony(levelUps)
       this.refreshHud()
       if (result.battleId === FINAL_BOSS_BATTLE_ID) {
+        if (this.saveData.ngPlusLevel > 0) this.showToast('NG+ Complete!')
         this.time.delayedCall(3050, () => this.showDemoCompletionCard())
       }
     })
@@ -2435,6 +2462,131 @@ export class OverworldScene extends Phaser.Scene {
     this.time.delayedCall(450, () => {
       this.showToast('Start here: move north to Elder Maelin. Guide Rin, signposts, and the gold objective will keep you on the authored path.')
     })
+  }
+
+  private startFirstCombatTutorial() {
+    if (!this.player || !this.shouldRunFirstCombatTutorial()) return
+    this.tutorialState = 'step1-kill'
+    this.tutorialStepStartedAt = this.time.now
+    this.showTutorialOverlay('Press SPACE to attack')
+    this.spawnTutorialEnemy('step1')
+  }
+
+  private isTutorialActive() {
+    return this.tutorialState !== 'none' && this.tutorialState !== 'complete'
+  }
+
+  private showTutorialOverlay(message: string) {
+    const { width, height } = this.scale
+    this.tutorialOverlay?.destroy()
+    const container = this.add.container(width / 2, height - 112).setScrollFactor(0).setDepth(126)
+    const text = this.add.text(0, 0, message, {
+      color: '#ffd166',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '28px',
+      fontStyle: 'bold',
+      shadow: { offsetX: 0, offsetY: 2, color: '#000000', blur: 8, fill: true },
+      wordWrap: { width: this.uiWidth(0.82, 760) },
+    }).setOrigin(0.5)
+    container.add(text)
+    this.tutorialOverlay = container
+    this.tweens.add({ targets: text, alpha: 0.28, scale: 0.94, yoyo: true, repeat: -1, duration: 1000, ease: 'Sine.easeInOut' })
+    this.tutorialTimer?.destroy()
+    this.tutorialTimer = this.time.addEvent({ delay: 2000, loop: true, callback: () => {
+      if (!this.isTutorialActive()) return
+      text.setText(message)
+      text.setAlpha(1)
+    } })
+  }
+
+  private spawnTutorialEnemy(role: MapEnemy['tutorialRole']) {
+    if (!this.player || !role) return
+    const angle = this.facingToAngle()
+    const tile = this.worldToTile(
+      this.player.x + Math.cos(angle) * (role === 'step1' ? 120 : 150),
+      this.player.y + Math.sin(angle) * (role === 'step1' ? 120 : 150),
+    )
+    const fallback = this.worldToTile(this.player.x + 120, this.player.y)
+    const spawnTile = this.isWallAtWorld(this.tileCenter(tile.x), this.tileCenter(tile.y)) ? fallback : tile
+    const enemyId = role === 'step3' ? 'ash_slime' : 'ash_slime'
+    this.spawnMapEnemy(enemyId, spawnTile.x, spawnTile.y, false, `tutorial-${role}-${this.time.now}`, undefined, {
+      tutorialRole: role,
+      hpMultiplier: role === 'step1' ? 0.5 : 1,
+      noRewards: true,
+    })
+  }
+
+  private handleTutorialEnemyKilled(enemy: MapEnemy) {
+    if (!enemy.tutorialRole) return
+    if (enemy.tutorialRole === 'step1' && this.tutorialState === 'step1-kill') {
+      this.showToast('Well done! Hold SHIFT to dash.')
+      this.time.delayedCall(650, () => {
+        this.tutorialState = 'step2-dash'
+        this.tutorialStepStartedAt = this.time.now
+        this.showTutorialOverlay('Hold SHIFT + move to dash')
+        this.spawnTutorialEnemy('step2')
+      })
+      return
+    }
+    if (enemy.tutorialRole === 'step2' && this.tutorialState === 'step2-dash') {
+      this.showToast('Hold F to block attacks.')
+      this.time.delayedCall(650, () => {
+        this.tutorialState = 'step3-block'
+        this.tutorialStepStartedAt = this.time.now
+        this.showTutorialOverlay('Hold F to block - time it right for a parry!')
+        this.spawnTutorialEnemy('step3')
+      })
+      return
+    }
+    if (enemy.tutorialRole === 'step3' && this.tutorialState === 'step3-block') {
+      this.completeFirstCombatTutorial()
+    }
+  }
+
+  private updateTutorialProgress() {
+    if (!this.player || !this.isTutorialActive()) return
+    if (this.tutorialState === 'step2-dash' && this.time.now < this.dashUntil) {
+      const target = this.mapEnemies.find((enemy) => enemy.tutorialRole === 'step2' && !enemy.dead)
+      if (target && Phaser.Math.Distance.Between(this.player.x, this.player.y, target.x, target.y) < 34) {
+        this.damageEnemy(target, 1.35)
+      }
+    }
+    if (this.tutorialState === 'step3-block' && this.time.now - this.tutorialStepStartedAt >= 10000) {
+      this.completeFirstCombatTutorial()
+    }
+  }
+
+  private completeFirstCombatTutorial() {
+    if (this.tutorialState === 'complete') return
+    this.tutorialState = 'complete'
+    this.tutorialOverlay?.destroy()
+    this.tutorialOverlay = undefined
+    this.tutorialTimer?.destroy()
+    this.tutorialTimer = undefined
+    this.saveData.flags.tutorialCompleted = true
+    this.mapEnemies
+      .filter((enemy) => enemy.tutorialRole && !enemy.dead)
+      .forEach((enemy) => {
+        enemy.dead = true
+        this.tweens.add({ targets: [enemy.sprite, enemy.aura, enemy.nameText], alpha: 0, duration: 260, onComplete: () => this.destroyEnemy(enemy) })
+      })
+    this.showToast("You're ready. Explore freely!")
+    this.spawnRegularEnemiesForStage()
+    this.time.delayedCall(1200, () => this.showFirstSessionGuide())
+    this.persist()
+  }
+
+  private spawnTrainingSparkle(x: number, y: number) {
+    for (let index = 0; index < 8; index += 1) {
+      const sparkle = this.add.circle(x + Phaser.Math.Between(-10, 10), y + Phaser.Math.Between(-10, 10), 3, 0x60a5fa, 0.9).setDepth(30)
+      this.tweens.add({ targets: sparkle, y: sparkle.y - Phaser.Math.Between(18, 38), alpha: 0, scale: ENTITY_SCALE.object * 0.4, duration: 520, ease: 'Sine.easeOut', onComplete: () => sparkle.destroy() })
+    }
+  }
+
+  private showNewGamePlusBanner() {
+    const level = this.saveData.ngPlusLevel
+    this.showEventBanner(`New Game+ ${level}`, `Enemies hit harder, endure longer, and the route has shifted.`)
+    this.time.delayedCall(500, () => this.showToast(`New Game+ ${level} begins. Party levels, skills, and equipment carried forward.`))
   }
 
   private showSignpostGuide() {
@@ -2954,13 +3106,51 @@ export class OverworldScene extends Phaser.Scene {
       pet: { unlocked: false, id: null, name: null, forageReady: false, bonus: null },
       home: { warmth: 0, garden: 0, workshop: 0 },
       playTime: 0,
+      ngPlusLevel: 0,
+      gameCompleted: false,
+      completionTimestamp: null,
     }
+  }
+
+  private createNewGamePlusSaveData(): SaveData {
+    const source = SaveSystem.load(this.initData.sourceSaveSlot ?? SaveSystem.getAutoSaveSlot())
+    const fresh = this.createDefaultSaveData()
+    if (!source?.gameCompleted) {
+      return fresh
+    }
+
+    return {
+      ...fresh,
+      party: structuredClone(source.party),
+      inventory: structuredClone(source.inventory),
+      gold: source.gold,
+      battleRewards: structuredClone(source.battleRewards),
+      ngPlusLevel: source.ngPlusLevel + 1,
+      flags: { tutorialCompleted: true, ngPlusStarted: true },
+    }
+  }
+
+  private getNgPlusHpMultiplier() {
+    return 1 + this.saveData.ngPlusLevel * 0.5
+  }
+
+  private getNgPlusDamageMultiplier() {
+    return 1 + this.saveData.ngPlusLevel * 0.3
+  }
+
+  private getNgPlusGoldMultiplier() {
+    return 1 + this.saveData.ngPlusLevel * 0.5
+  }
+
+  private shouldRunFirstCombatTutorial() {
+    return Boolean(this.initData.newGame && !this.initData.newGamePlus && !this.saveData.flags.tutorialCompleted)
   }
 
   private spawnEnemiesForStage() {
     this.mapEnemies.forEach((enemy) => this.destroyEnemy(enemy))
     this.mapEnemies = []
     if (this.saveData.stage === 'homecoming') return
+    if (this.shouldRunFirstCombatTutorial()) return
     this.spawnRegularEnemiesForStage()
     if (!this.flag('field_battle_won') && (this.saveData.currentObjective === OBJECTIVES.winBattle || this.flag('field_marker_seen'))) {
       this.spawnStoryBoss('clay_sentinel', MARKER_TILE, FIELD_BATTLE_ID)
@@ -2989,11 +3179,26 @@ export class OverworldScene extends Phaser.Scene {
       ],
       homecoming: [],
     }
-    regularByStage[this.saveData.stage].forEach((spawn, index) => this.spawnMapEnemy(spawn.ids[Phaser.Math.Between(0, spawn.ids.length - 1)], spawn.x, spawn.y, false, `${this.saveData.stage}-${index}`))
+    const stageSpawns = this.saveData.ngPlusLevel > 0 ? this.getNgPlusStageSpawns(regularByStage[this.saveData.stage]) : regularByStage[this.saveData.stage]
+    stageSpawns.forEach((spawn, index) => this.spawnMapEnemy(spawn.ids[Phaser.Math.Between(0, spawn.ids.length - 1)], spawn.x, spawn.y, false, `${this.saveData.stage}-${index}`))
     for (let attempt = 0; attempt < REGULAR_ENEMY_TARGET_COUNT && this.mapEnemies.filter((enemy) => !enemy.isBoss && !enemy.dead).length < REGULAR_ENEMY_TARGET_COUNT; attempt += 1) {
       this.spawnRandomRegularEnemyForStage()
     }
     this.spawnMinibossForStage()
+  }
+
+  private getNgPlusStageSpawns(spawns: Array<{ ids: string[]; x: number; y: number }>) {
+    const seed = this.saveData.ngPlusLevel * 97 + this.saveData.stage.length * 31
+    return spawns.map((spawn, index) => {
+      const target = spawns[(index + seed) % spawns.length] ?? spawn
+      const offsetX = ((seed + index * 5) % 5) - 2
+      const offsetY = ((seed + index * 7) % 5) - 2
+      return {
+        ...spawn,
+        x: Phaser.Math.Clamp(target.x + offsetX, 2, MAP_WIDTH - 3),
+        y: Phaser.Math.Clamp(target.y + offsetY, 2, MAP_HEIGHT - 3),
+      }
+    })
   }
 
   private spawnRandomRegularEnemyForStage() {
@@ -3040,14 +3245,14 @@ export class OverworldScene extends Phaser.Scene {
     this.spawnMapEnemy(enemyId, tile.x, tile.y, true, battleId, battleId)
   }
 
-  private spawnMapEnemy(enemyId: string, tileX: number, tileY: number, isBoss: boolean, uniqueId: string, battleId?: string) {
+  private spawnMapEnemy(enemyId: string, tileX: number, tileY: number, isBoss: boolean, uniqueId: string, battleId?: string, options: { tutorialRole?: MapEnemy['tutorialRole']; hpMultiplier?: number; noRewards?: boolean } = {}) {
     const data = ENEMIES_BY_ID[enemyId]
     if (!data) return
     const x = this.tileCenter(tileX)
     const y = this.tileCenter(tileY)
     const color = isBoss ? 0xb91c1c : enemyId === 'moonwake_guardian' ? 0x4da6ff : enemyId === 'thornheart' ? 0x3aa657 : enemyId === 'cartographers_lie' ? 0x8f63ff : data.region === 'moonwake' ? 0x8bd6ff : data.region === 'skywell' ? 0xbda7ff : 0x75c46b
     const size = isBoss ? 92 : 44
-    const aura = isBoss ? this.add.circle(x, y, size * 0.72, color, 0.18).setDepth(17).setStrokeStyle(4, 0xfff1a8, 0.26) : undefined
+    const aura = isBoss || options.tutorialRole ? this.add.circle(x, y, size * 0.72, options.tutorialRole ? 0x60a5fa : color, options.tutorialRole ? 0.22 : 0.18).setDepth(17).setStrokeStyle(4, options.tutorialRole ? 0x9ff3ff : 0xfff1a8, options.tutorialRole ? 0.62 : 0.26) : undefined
     const { container: sprite, body } = this.createEnemyVisual(enemyId, x, y, color, isBoss)
     const targetScale = isBoss ? ENTITY_SCALE.bossEnemy : ENTITY_SCALE.enemy
     sprite.setAlpha(0).setScale(targetScale * 0.9)
@@ -3056,8 +3261,11 @@ export class OverworldScene extends Phaser.Scene {
     const nameText = this.add.text(x, y - size, data.name, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '10px' }).setOrigin(0.5).setDepth(21)
     nameText.setAlpha(0)
     const isFirstEnemy = uniqueId === 'quay-0'
-    const stats = { ...data.stats, hp: isBoss ? data.stats.hp * 5 : isFirstEnemy ? Math.max(1, Math.floor(data.stats.hp * 0.5)) : data.stats.hp, atk: Math.max(1, Math.round((isBoss ? data.stats.atk * 2 : data.stats.atk) * 0.92)) }
-    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, body, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, visualHp: stats.hp, visualHpTarget: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : isFirstEnemy ? 36 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: isBoss ? 1450 : 1600, lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: isBoss ? data.goldReward * 3 : data.goldReward, battleId, bossPhase: isBoss ? 1 : undefined }
+    const baseHp = isBoss ? data.stats.hp * 5 : isFirstEnemy ? Math.max(1, Math.floor(data.stats.hp * 0.5)) : data.stats.hp
+    const bossAttackSpeedMultiplier = isBoss && this.saveData.ngPlusLevel > 0 ? 0.8 : 1
+    const hpMultiplier = (options.hpMultiplier ?? 1) * (options.tutorialRole ? 1 : this.getNgPlusHpMultiplier())
+    const stats = { ...data.stats, hp: Math.max(1, Math.round(baseHp * hpMultiplier)), atk: Math.max(1, Math.round((isBoss ? data.stats.atk * 2 : data.stats.atk) * 0.92 * (options.tutorialRole ? 1 : this.getNgPlusDamageMultiplier()))) }
+    const enemy: MapEnemy = { id: uniqueId, enemyId, sprite, body, aura, hpBar, hpBarBg, nameText, currentHp: stats.hp, maxHp: stats.hp, visualHp: stats.hp, visualHpTarget: stats.hp, currentMp: data.stats.mp, maxMp: data.stats.mp, stats, x, y, speed: isBoss ? 42 : isFirstEnemy || options.tutorialRole === 'step1' ? 36 : 55 + data.stats.spd, element: data.skills[0]?.element ?? 'neutral', weaknesses: data.weaknesses, resists: data.resists, skills: data.skills, state: 'idle', aggroRange: options.tutorialRole === 'step1' ? 90 : isBoss ? 340 : 240, attackRange: isBoss ? 78 : 50, attackCooldown: Math.round((isBoss ? 1450 : 1600) * bossAttackSpeedMultiplier), lastAttackTime: 0, wanderTimer: 0, wanderTarget: null, hitFlashTimer: 0, isBoss, dead: false, expReward: options.noRewards ? 0 : isBoss ? data.expReward * 5 : Math.ceil(data.expReward * 1.25), goldReward: options.noRewards ? 0 : Math.ceil((isBoss ? data.goldReward * 3 : data.goldReward) * this.getNgPlusGoldMultiplier()), battleId, bossPhase: isBoss ? 1 : undefined, tutorialRole: options.tutorialRole, noRewards: options.noRewards }
     this.mapEnemies.push(enemy)
     this.updateEnemyBars(enemy)
     this.tweens.add({ targets: sprite, alpha: 0.95, scale: targetScale, duration: 400, ease: 'Back.easeOut' })
@@ -3178,8 +3386,9 @@ export class OverworldScene extends Phaser.Scene {
     if (!this.isWallAtWorld(enemy.x, nextY)) enemy.y = Phaser.Math.Clamp(nextY, 8, MAP_HEIGHT * TILE_SIZE - 8)
   }
 
-  private performPlayerAttack(pointerX?: number, pointerY?: number): boolean {
+  private performPlayerAttack(pointerX?: number, pointerY?: number, input: 'space' | 'pointer' | 'buffer' = 'space'): boolean {
     if (!this.player || this.isBlocking || !this.canStartPlayerAttack()) return false
+    this.currentAttackInput = input
     this.nextPlayerAttackAt = this.time.now + this.ATTACK_TOTAL_MS
     this.attackState = 'anticipation'
     this.attackStartTime = this.time.now
@@ -3217,6 +3426,7 @@ export class OverworldScene extends Phaser.Scene {
   private resolvePlayerAttackContact() {
     if (!this.player || this.attackState === 'idle' || this.attackHitResolved) return
     this.attackHitResolved = true
+    const attackInput = this.currentAttackInput
     const angle = this.facingToAngle()
     const swingX = this.player.x + Math.cos(angle) * 34
     const swingY = this.player.y + Math.sin(angle) * 34
@@ -3228,7 +3438,7 @@ export class OverworldScene extends Phaser.Scene {
     this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
       const distance = Phaser.Math.Distance.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
       const enemyAngle = Phaser.Math.Angle.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
-      if (distance <= 60 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 4) { hit = true; this.damageEnemy(enemy) }
+      if (distance <= 60 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 4) { hit = true; this.damageEnemy(enemy, 1, attackInput) }
     })
     if (hit) this.cameras.main.shake(80, 0.008)
     else this.spawnWhooshDust(swingX, swingY, angle)
@@ -3242,8 +3452,12 @@ export class OverworldScene extends Phaser.Scene {
     else if (elapsed >= this.ATTACK_HITBOX_DELAY_MS) this.attackState = 'contact'
   }
 
-  private damageEnemy(enemy: MapEnemy, multiplier = 1) {
+  private damageEnemy(enemy: MapEnemy, multiplier = 1, input: 'space' | 'pointer' | 'buffer' | 'skill' = 'space') {
     if ((enemy.staggeredUntil ?? 0) > this.time.now) return
+    if (enemy.tutorialRole === 'step1' && input !== 'space') {
+      this.showFloatingText(enemy.x, enemy.y - 28, 'SPACE', '#93c5fd')
+      return
+    }
     const heroStats = this.getPlayerCombatStats()
     const damage = Math.max(1, Math.round(CombatSystem.calculateRealtimePlayerDamage(heroStats.atk, enemy.stats.def) * multiplier * this.getComboDamageMultiplier()))
     const critical = damage > heroStats.atk * 1.5
@@ -3297,7 +3511,7 @@ export class OverworldScene extends Phaser.Scene {
     this.mapEnemies.filter((enemy) => !enemy.dead).forEach((enemy) => {
       const distance = Phaser.Math.Distance.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
       const enemyAngle = Phaser.Math.Angle.Between(this.player!.x, this.player!.y, enemy.x, enemy.y)
-      if (distance <= 82 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 3) this.damageEnemy(enemy, 2)
+      if (distance <= 82 && Math.abs(Phaser.Math.Angle.Wrap(enemyAngle - angle)) <= Math.PI / 3) this.damageEnemy(enemy, 2, 'skill')
     })
   }
 
@@ -3330,8 +3544,8 @@ export class OverworldScene extends Phaser.Scene {
   private tryEnemyAttack(enemy: MapEnemy) {
     if (!this.player || this.time.now - enemy.lastAttackTime < enemy.attackCooldown) return
     enemy.lastAttackTime = this.time.now
-    const attackKind = enemy.isBoss ? Phaser.Math.Between(0, 2) : 0
-    const tell = enemy.isBoss ? attackKind === 2 ? 1000 : attackKind === 1 ? 700 : 360 : 300
+    const attackKind = enemy.isBoss ? Phaser.Math.Between(0, this.saveData.ngPlusLevel > 0 ? 3 : 2) : 0
+    const tell = enemy.isBoss ? attackKind === 3 ? 520 : attackKind === 2 ? 1000 : attackKind === 1 ? 700 : 360 : 300
     this.showEnemyTelegraph(enemy, attackKind, tell)
     this.time.delayedCall(tell + (enemy.isBoss ? 80 : 0), () => {
       if (enemy.dead || !this.player || this.time.now < this.playerInvulnerableUntil || Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) > enemy.attackRange + 12) return
@@ -3342,7 +3556,8 @@ export class OverworldScene extends Phaser.Scene {
       }
       const guarded = this.time.now < this.stoneGuardUntil
       const multiplier = (blocking ? 0.4 : 1) * (guarded ? 0.5 : 1)
-      const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, this.getPlayerCombatStats().def, multiplier)
+      const rageMultiplier = enemy.isBoss && this.saveData.ngPlusLevel >= 3 && enemy.currentHp / enemy.maxHp <= 0.5 ? 1.2 : 1
+      const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, this.getPlayerCombatStats().def, multiplier * rageMultiplier)
       const hero = this.saveData.party[0]
       hero.currentHp = Math.max(0, hero.currentHp - damage)
       this.playerInvulnerableUntil = this.time.now + 800
@@ -3358,7 +3573,7 @@ export class OverworldScene extends Phaser.Scene {
       if (blocking) this.dismissHint('block')
       if (hero.currentHp <= 0) this.handlePlayerDefeat()
     })
-    if (enemy.isBoss && attackKind > 0) enemy.recoveringUntil = this.time.now + tell + 80 + Phaser.Math.Between(800, 1400)
+    if (enemy.isBoss && attackKind > 0) enemy.recoveringUntil = this.time.now + tell + 80 + Phaser.Math.Between(attackKind === 3 ? 360 : 800, attackKind === 3 ? 760 : 1400)
   }
 
   private showEnemyTelegraph(enemy: MapEnemy, kind: number, duration: number) {
@@ -3372,16 +3587,20 @@ export class OverworldScene extends Phaser.Scene {
       this.tweens.add({ targets: enemy.sprite, scale: ENTITY_SCALE.bossEnemy * 1.1, y: enemy.sprite.y - 8, yoyo: true, duration: duration * 0.5 })
       const crack = this.add.rectangle(enemy.x + Math.cos(angle) * 42, enemy.y + Math.sin(angle) * 42, 92, 5, 0xff8a3d, 0.72).setRotation(angle).setDepth(16)
       this.tweens.add({ targets: crack, alpha: 0, duration, onComplete: () => crack.destroy() })
-    } else {
+    } else if (kind === 2) {
       const ring = this.add.circle(enemy.x, enemy.y, 18, 0xff4d1f, 0.12).setStrokeStyle(4, 0xff8a3d, 0.82).setDepth(16)
       this.tweens.add({ targets: ring, scale: 4.8, alpha: 0.4, duration, ease: 'Sine.easeInOut', onComplete: () => ring.destroy() })
       this.tweens.add({ targets: ring, lineWidth: 8, yoyo: true, repeat: 1, duration: duration / 4 })
+    } else {
+      const fan = this.add.arc(enemy.x, enemy.y, 70, Phaser.Math.RadToDeg(angle - Math.PI / 5), Phaser.Math.RadToDeg(angle + Math.PI / 5), false, 0xffd166, 0.18).setStrokeStyle(8, 0xff8a3d, 0.78).setDepth(16)
+      this.tweens.add({ targets: fan, scale: ENTITY_SCALE.object * 1.7, alpha: 0, duration, ease: 'Sine.easeOut', onComplete: () => fan.destroy() })
     }
   }
 
   private updateBossPhase(enemy: MapEnemy) {
     const pct = enemy.currentHp / enemy.maxHp
-    const next = [...BOSS_PHASE_THRESHOLDS].reverse().find((phase) => pct <= phase.hpPercent)
+    const thresholds = this.saveData.ngPlusLevel >= 3 ? BOSS_PHASE_THRESHOLDS.map((phase) => phase.phase === 4 ? { ...phase, hpPercent: 0.5, label: 'Rage mode' } : phase) : BOSS_PHASE_THRESHOLDS
+    const next = [...thresholds].reverse().find((phase) => pct <= phase.hpPercent)
     if (!next || next.phase <= (enemy.bossPhase ?? 1)) return
     enemy.bossPhase = next.phase
     enemy.recoveringUntil = this.time.now + 1300
@@ -3451,13 +3670,18 @@ export class OverworldScene extends Phaser.Scene {
       this.cameras.main.zoomTo(0.82, 2400, 'Sine.easeInOut', true)
     }
     this.registerComboKill(enemy.x, enemy.y)
-    this.showFloatingText(enemy.x, enemy.y - 34, `+${enemy.goldReward}g`, '#ffd166')
-    this.spawnGroundLoot(enemy.x, enemy.y, 'gold', 'gold', enemy.goldReward)
-    this.spawnGroundLoot(enemy.x + 12, enemy.y, 'exp', 'exp', enemy.expReward)
-    if (Math.random() < 0.35) this.spawnGroundLoot(enemy.x - 12, enemy.y, 'item', 'health_potion', 1)
+    if (enemy.noRewards) {
+      this.spawnTrainingSparkle(enemy.x, enemy.y)
+    } else {
+      this.showFloatingText(enemy.x, enemy.y - 34, `+${enemy.goldReward}g`, '#ffd166')
+      this.spawnGroundLoot(enemy.x, enemy.y, 'gold', 'gold', enemy.goldReward)
+      this.spawnGroundLoot(enemy.x + 12, enemy.y, 'exp', 'exp', enemy.expReward)
+      if (Math.random() < 0.35) this.spawnGroundLoot(enemy.x - 12, enemy.y, 'item', 'health_potion', 1)
+    }
     this.tweens.add({ targets: [enemy.sprite, enemy.aura, enemy.nameText], alpha: 0, scale: 1.3, delay: 100, duration: enemy.isBoss ? 600 : 460, onComplete: () => this.destroyEnemy(enemy) })
     if (enemy.battleId) this.time.delayedCall(enemy.isBoss ? 2300 : 0, () => this.completeOverworldBattle(enemy.battleId!))
-    if (!enemy.isBoss) this.queueHint('potion_interact', 'Q for potion / E to interact', 8000)
+    this.handleTutorialEnemyKilled(enemy)
+    if (!enemy.isBoss && !this.isTutorialActive()) this.queueHint('potion_interact', 'Q for potion / E to interact', 8000)
     if (enemy.isBoss) {
       this.time.delayedCall(1600, () => this.showBossVictoryScreen(enemy))
     }

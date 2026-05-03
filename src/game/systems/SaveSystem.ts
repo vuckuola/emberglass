@@ -23,6 +23,9 @@ export interface SaveData {
   pet: { unlocked: boolean; id: string | null; name: string | null; forageReady: boolean; bonus: string | null }
   home: { warmth: number; garden: number; workshop: number }
   playTime: number
+  ngPlusLevel: number
+  gameCompleted: boolean
+  completionTimestamp: number | null
 }
 
 type MutableSaveData = SaveData & Record<string, unknown>
@@ -142,6 +145,9 @@ export class SaveSystem {
     save.pet = this.isValidPet(save.pet) ? save.pet : { unlocked: false, id: null, name: null, forageReady: false, bonus: null }
     save.home = this.isValidHome(save.home) ? save.home : { warmth: 0, garden: 0, workshop: 0 }
     save.playTime = this.isNonNegativeFiniteNumber(save.playTime) ? save.playTime : 0
+    save.ngPlusLevel = this.isNonNegativeInteger(save.ngPlusLevel) ? save.ngPlusLevel : 0
+    save.gameCompleted = typeof save.gameCompleted === 'boolean' ? save.gameCompleted : Boolean(save.flags.demo_complete || save.flags.final_boss_won)
+    save.completionTimestamp = this.isNullableNonNegativeNumber(save.completionTimestamp) ? save.completionTimestamp : save.gameCompleted ? save.timestamp : null
 
     return true
   }
@@ -207,6 +213,21 @@ export class SaveSystem {
     for (let slot = 0; slot <= this.MAX_SLOTS; slot += 1) {
       const data = this.load(slot)
       if (data && data.timestamp > latestTimestamp) {
+        latestTimestamp = data.timestamp
+        latestSlot = slot
+      }
+    }
+
+    return latestSlot
+  }
+
+  static getLatestCompletedSaveSlot(): number | null {
+    let latestSlot: number | null = null
+    let latestTimestamp = -1
+
+    for (let slot = 0; slot <= this.MAX_SLOTS; slot += 1) {
+      const data = this.load(slot)
+      if (data?.gameCompleted && data.timestamp > latestTimestamp) {
         latestTimestamp = data.timestamp
         latestSlot = slot
       }
@@ -451,6 +472,14 @@ export class SaveSystem {
 
   private static isNonNegativeFiniteNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value >= 0
+  }
+
+  private static isNonNegativeInteger(value: unknown): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && Number.isFinite(value) && value >= 0
+  }
+
+  private static isNullableNonNegativeNumber(value: unknown): value is number | null {
+    return value === null || this.isNonNegativeFiniteNumber(value)
   }
 
   private static isNullableString(value: unknown): value is string | null {
