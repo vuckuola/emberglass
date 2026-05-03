@@ -13,7 +13,12 @@ createRoot(document.getElementById('root')!).render(
 )
 
 requestAnimationFrame(() => {
-  void import('./game/startGame').then(({ startGame }) => startGame('game-container'))
+  void import('./game/startGame').then(({ startGame }) => {
+    startGame('game-container')
+    // Dismiss the pre-Phaser HTML loading screen once the game is bootstrapped
+    const dismiss = (window as any).__emberglassDismissPreloader
+    if (typeof dismiss === 'function') dismiss()
+  })
 })
 
 if ('serviceWorker' in navigator) {

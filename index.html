@@ -2,25 +2,209 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="manifest" href="/emberglass/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary Meta Tags -->
+    <title>Emberglass — Covenant of the Skywell</title>
+    <meta name="title" content="Emberglass — Covenant of the Skywell" />
+    <meta name="description" content="A free browser action RPG. Three heroes, one skywell, and the ember that binds them. Real-time combat, companions, bosses — no download, no install, just play." />
+    <meta name="keywords" content="emberglass, browser RPG, action RPG, indie game, free game, Phaser, play in browser, no download" />
+    <meta name="author" content="Zai" />
     <meta name="theme-color" content="#ff7a3d" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="A browser action RPG — three heroes, one skywell, and the ember that binds them." />
-    <title>emberglass</title>
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vuckuola.github.io/emberglass/" />
+    <meta property="og:title" content="Emberglass — Covenant of the Skywell" />
+    <meta property="og:description" content="A free browser action RPG. Real-time combat, companions, bosses — no download, just play." />
+    <meta property="og:image" content="https://vuckuola.github.io/emberglass/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://vuckuola.github.io/emberglass/" />
+    <meta name="twitter:title" content="Emberglass — Covenant of the Skywell" />
+    <meta name="twitter:description" content="A free browser action RPG. Real-time combat, companions, bosses — no download, just play." />
+    <meta name="twitter:image" content="https://vuckuola.github.io/emberglass/og-image.png" />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://vuckuola.github.io/emberglass/" />
+
+    <!-- PWA & Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/emberglass/manifest.json" />
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "VideoGame",
+      "name": "Emberglass: Covenant of the Skywell",
+      "description": "A free browser action RPG. Three heroes, one skywell, and the ember that binds them.",
+      "genre": ["Action RPG", "Indie", "Browser Game"],
+      "gamePlatform": ["Web Browser", "HTML5"],
+      "applicationCategory": "Game",
+      "operatingSystem": "Any (HTML5 Browser)",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock"
+      },
+      "url": "https://vuckuola.github.io/emberglass/",
+      "image": "https://vuckuola.github.io/emberglass/og-image.png",
+      "playMode": ["SinglePlayer"],
+      "numberOfPlayers": {
+        "@type": "QuantitativeValue",
+        "value": 1
+      }
+    }
+    </script>
+
+    <!-- Privacy-friendly analytics (Plausible) -->
+    <script defer data-domain="vuckuola.github.io/emberglass" src="https://plausible.io/js/script.js"></script>
+
     <style>
       html, body, canvas, #root {
         touch-action: none;
         -webkit-touch-callout: none;
         user-select: none;
       }
+
+      /* Pre-Phaser loading screen — visible while JS chunks download */
+      #emberglass-preloader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: #08090f;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Georgia', 'Times New Roman', serif;
+        transition: opacity 0.5s ease-out;
+      }
+      #emberglass-preloader.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #emberglass-preloader .title {
+        color: #f2d16b;
+        font-size: clamp(1.5rem, 5vw, 2.5rem);
+        margin-bottom: 0.3rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+      #emberglass-preloader .subtitle {
+        color: #ff7a3d;
+        font-size: clamp(0.7rem, 2vw, 0.9rem);
+        margin-bottom: 2rem;
+        opacity: 0.8;
+      }
+      #emberglass-preloader .bar-track {
+        width: min(360px, 80vw);
+        height: 6px;
+        background: #151824;
+        border-radius: 3px;
+        overflow: hidden;
+        position: relative;
+      }
+      #emberglass-preloader .bar-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #ff7a3d, #f2d16b);
+        border-radius: 3px;
+        transition: width 0.3s ease;
+      }
+      #emberglass-preloader .bar-text {
+        color: #666;
+        font-size: 0.75rem;
+        margin-top: 0.8rem;
+        font-family: monospace;
+      }
+      #emberglass-preloader .tip {
+        color: #444;
+        font-size: 0.7rem;
+        margin-top: 1.5rem;
+        max-width: 300px;
+        text-align: center;
+        line-height: 1.5;
+        font-family: 'Georgia', serif;
+        font-style: italic;
+      }
     </style>
   </head>
   <body>
+    <!-- Pre-Phaser Loading Screen -->
+    <div id="emberglass-preloader">
+      <div class="title">Emberglass</div>
+      <div class="subtitle">Covenant of the Skywell</div>
+      <div class="bar-track">
+        <div class="bar-fill" id="emberglass-load-bar"></div>
+      </div>
+      <div class="bar-text" id="emberglass-load-text">Loading...</div>
+      <div class="tip" id="emberglass-load-tip">Tip: Press H in-game for controls help</div>
+    </div>
+
     <div id="root"></div>
+
+    <script>
+      // Pre-Phaser loading progress tracker
+      // Simulates progress based on resource timing while JS chunks download
+      (function() {
+        var tips = [
+          "Tip: Press H in-game for controls help",
+          "Tip: Hold Shift to block incoming attacks",
+          "Tip: Press M to open the full area map",
+          "Tip: Use Space or click to attack enemies",
+          "Tip: Companions fight alongside you automatically",
+          "Tip: Press Esc to pause the game",
+          "Tip: Find save crystals to record your journey",
+          "Tip: Each stage holds a guardian boss to defeat"
+        ];
+        var tipEl = document.getElementById('emberglass-load-tip');
+        var barEl = document.getElementById('emberglass-load-bar');
+        var textEl = document.getElementById('emberglass-load-text');
+        var preloader = document.getElementById('emberglass-preloader');
+        var progress = 0;
+        var tipIndex = 0;
+
+        // Rotate tips every 3s
+        setInterval(function() {
+          if (preloader && !preloader.classList.contains('fade-out')) {
+            tipIndex = (tipIndex + 1) % tips.length;
+            tipEl.textContent = tips[tipIndex];
+          }
+        }, 3000);
+
+        // Animate loading bar with simulated progress
+        var interval = setInterval(function() {
+          if (progress < 85) {
+            progress += Math.random() * 8 + 2;
+            if (progress > 85) progress = 85;
+            barEl.style.width = progress + '%';
+            textEl.textContent = 'Loading assets... ' + Math.floor(progress) + '%';
+          }
+        }, 400);
+
+        // Expose dismiss function for the game to call once ready
+        window.__emberglassDismissPreloader = function() {
+          clearInterval(interval);
+          barEl.style.width = '100%';
+          textEl.textContent = 'Ready!';
+          setTimeout(function() {
+            preloader.classList.add('fade-out');
+            setTimeout(function() {
+              preloader.remove();
+            }, 500);
+          }, 200);
+        };
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-<!-- rebuild x2 -->

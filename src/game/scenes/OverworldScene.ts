@@ -265,6 +265,7 @@ export class OverworldScene extends Phaser.Scene {
   private promptText?: Phaser.GameObjects.Text
   private areaText?: Phaser.GameObjects.Text
   private menuOverlay?: MenuOverlay
+  private pauseOverlay?: Phaser.GameObjects.Container
   private miniMap?: MiniMapOverlay
   private helpOverlay?: Phaser.GameObjects.Container
   private toast?: Phaser.GameObjects.Container
@@ -299,6 +300,7 @@ export class OverworldScene extends Phaser.Scene {
     return Math.min(this.scale.height * fraction, maxPx)
   }
   private playerInvulnerableUntil = 0
+  private playerBlinkEvent?: Phaser.Time.TimerEvent
   private dashUntil = 0
   private nextDashAt = 0
   private dashSlideMultiplier = 1
@@ -352,7 +354,7 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private readonly handleVisibilityChange = () => {
-    if (document.hidden) this.openMenu()
+    if (document.hidden) { if (!this.pauseOverlay && !this.menuOverlay) this.openPauseOverlay() }
     else void audioManager.resume()
   }
 
@@ -394,6 +396,7 @@ export class OverworldScene extends Phaser.Scene {
     this.respawnTimer?.destroy()
     this.respawnTimer = undefined
     this.playerInvulnerableUntil = 0
+    this.playerBlinkEvent = undefined
     this.dashUntil = 0
     this.nextDashAt = 0
     this.dashSlideMultiplier = 1
@@ -431,6 +434,7 @@ export class OverworldScene extends Phaser.Scene {
     this.promptText = undefined
     this.areaText = undefined
     this.menuOverlay = undefined
+    this.pauseOverlay = undefined
     this.miniMap = undefined
     this.helpOverlay = undefined
     this.shownHints = new Set()
@@ -496,6 +500,7 @@ export class OverworldScene extends Phaser.Scene {
     this.queueHint('move', 'WASD to move', 5000)
     document.addEventListener('visibilitychange', this.handleVisibilityChange)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => document.removeEventListener('visibilitychange', this.handleVisibilityChange))
+    this.time.addEvent({ delay: 60000, loop: true, callback: () => { if (!this.busy) this.persist() } })
     if (!continuedSave && !this.initData.continueGame) {
       this.time.delayedCall(850, () => this.showFirstSessionGuide())
     }
@@ -518,6 +523,10 @@ export class OverworldScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.keys.escape) || Phaser.Input.Keyboard.JustDown(this.keys.m)) {
         this.closeMenu()
       }
+      return
+    }
+
+    if (this.pauseOverlay) {
       return
     }
 
@@ -595,7 +604,11 @@ export class OverworldScene extends Phaser.Scene {
     if (DEV_MODE && this.fpsText) this.fpsText.setText(`FPS: ${this.game.loop.actualFps.toFixed(0)}`)
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.escape)) {
-      this.openMenu()
+      if (this.pauseOverlay) {
+        this.closePauseOverlay()
+      } else {
+        this.openPauseOverlay()
+      }
       return
     }
 
@@ -2626,6 +2639,42 @@ export class OverworldScene extends Phaser.Scene {
     audioManager.playSfx('ui_cancel')
   }
 
+  private openPauseOverlay() {
+    if (this.pauseOverlay || this.menuOverlay) return
+    this.pauseOverlay = this.add.container(0, 0).setScrollFactor(0).setDepth(260).setAlpha(0)
+    const { width, height } = this.scale
+    this.pauseOverlay.add(this.add.rectangle(width / 2, height / 2, width, height, 0x02030a, 0.65))
+    const panelW = this.uiWidth(0.38, 280)
+    const panelH = this.uiHeight(0.42, 260)
+    const panel = this.add.rectangle(width / 2, height / 2, panelW, panelH, 0x0b1028, 0.97).setStrokeStyle(2, 0xd4a84b, 0.65)
+    this.pauseOverlay.add(panel)
+    this.pauseOverlay.add(this.add.text(width / 2, height / 2 - panelH / 2 + 28, '◈ PAUSED', { color: '#fff1a8', fontFamily: 'Georgia, serif', fontSize: '26px', fontStyle: 'bold' }).setOrigin(0.5))
+    audioManager.setPaused(true)
+    audioManager.playSfx('ui_menu_open')
+    const buttons = [
+      { label: 'Resume', action: () => this.closePauseOverlay(), color: '#86efac' },
+      { label: 'Save Game', action: () => { SaveSystem.autoSave(this.saveData); this.showToast('Game Saved'); audioManager.playSfx('save_point') }, color: '#f0c040' },
+      { label: 'Open Menu', action: () => { this.closePauseOverlay(); this.openMenu() }, color: '#d7d9e8' },
+      { label: 'Quit to Title', action: () => { this.pauseOverlay = undefined; this.scene.start('TitleScene') }, color: '#ff8a8a' },
+    ]
+    buttons.forEach((btn, index) => {
+      const btnY = height / 2 - 30 + index * 42
+      const text = this.add.text(width / 2, btnY, btn.label, { color: btn.color, fontFamily: 'Arial, sans-serif', fontSize: '18px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+      text.on('pointerover', () => { text.setColor('#fff1a8'); audioManager.playSfx('ui_blip') })
+      text.on('pointerout', () => text.setColor(btn.color))
+      text.on('pointerdown', () => btn.action())
+      this.pauseOverlay?.add(text)
+    })
+    this.tweens.add({ targets: this.pauseOverlay, alpha: 1, duration: 180, ease: 'Sine.easeOut' })
+  }
+
+  private closePauseOverlay() {
+    if (!this.pauseOverlay) return
+    audioManager.setPaused(false)
+    audioManager.playSfx('ui_cancel')
+    this.tweens.add({ targets: this.pauseOverlay, alpha: 0, duration: 120, onComplete: () => { this.pauseOverlay?.destroy(); this.pauseOverlay = undefined } })
+  }
+
   private addMenuPartyRow(container: Phaser.GameObjects.Container, x: number, y: number, member: SaveData['party'][number]) {
     const character = CHARACTERS[member.characterId]
     if (!character) return
@@ -3194,12 +3243,14 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private damageEnemy(enemy: MapEnemy, multiplier = 1) {
+    if ((enemy.staggeredUntil ?? 0) > this.time.now) return
     const heroStats = this.getPlayerCombatStats()
     const damage = Math.max(1, Math.round(CombatSystem.calculateRealtimePlayerDamage(heroStats.atk, enemy.stats.def) * multiplier * this.getComboDamageMultiplier()))
     const critical = damage > heroStats.atk * 1.5
     enemy.currentHp = Math.max(0, enemy.currentHp - damage)
     enemy.visualHpTarget = enemy.currentHp
     enemy.hitFlashTimer = 50
+    enemy.staggeredUntil = this.time.now + 400
     enemy.body.setFillStyle(0xffffff)
     this.tweens.add({ targets: enemy.sprite, scaleX: critical ? 1.25 : 1.15, scaleY: critical ? 0.75 : 0.85, yoyo: true, duration: 50, ease: 'Sine.easeOut' })
     this.showDamageNumber(enemy.x, enemy.y - 22, damage, 'player', critical, enemy.weaknesses.includes('neutral'), enemy.resists.includes('neutral'))
@@ -3294,11 +3345,13 @@ export class OverworldScene extends Phaser.Scene {
       const damage = CombatSystem.calculateRealtimeEnemyDamage(enemy.stats.atk, this.getPlayerCombatStats().def, multiplier)
       const hero = this.saveData.party[0]
       hero.currentHp = Math.max(0, hero.currentHp - damage)
+      this.playerInvulnerableUntil = this.time.now + 800
       this.cameras.main.flash(100, 180, 20, 20, false)
       this.cameras.main.shake(150, 0.003)
       if (blocking) this.showBlockFlash()
       this.showDamageDirection(enemy.x, enemy.y)
       this.showDamageNumber(this.player.x, this.player.y - 26, damage, 'enemy')
+      this.startPlayerBlink()
       this.refreshHud()
       this.updatePlayerBars()
       if (!this.firstDamageTaken) { this.firstDamageTaken = true; this.queueHint('block', 'F to block') }
@@ -3357,7 +3410,24 @@ export class OverworldScene extends Phaser.Scene {
       if (member.currentHp <= 0) {
         companion.state = 'dead'
         companion.container.setAlpha(0.3)
+        companion.body.setScale(1, 0.7)
+        companion.body.setFillStyle(0x6b7280, 0.6)
         this.showToast(`${companion.name} falls!`)
+        this.time.delayedCall(8000, () => {
+          if (!this.saveData?.party[companion.partyIndex]) return
+          const reviveTarget = this.saveData.party[companion.partyIndex]
+          const maxHp = this.scaleCharacterStats(CHARACTERS[companion.characterId as keyof typeof CHARACTERS], reviveTarget.level).hp
+          reviveTarget.currentHp = Math.max(1, Math.floor(maxHp * 0.5))
+          companion.state = 'follow'
+          companion.container.setAlpha(1)
+          companion.body.setScale(1, 1)
+          companion.body.setFillStyle(companion.characterId === 'kael' ? 0x5c8a4d : 0x7fb3ff, 0.94)
+          this.showFloatingText(companion.x, companion.y - 30, 'Revived!', '#86efac')
+          this.tweens.add({ targets: companion.container, alpha: 0.3, yoyo: true, repeat: 3, duration: 100 })
+          this.updateCompanionBars(companion)
+          this.refreshHud()
+          this.persist()
+        })
       }
       this.updateCompanionBars(companion)
       this.refreshHud()
@@ -3388,6 +3458,9 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: [enemy.sprite, enemy.aura, enemy.nameText], alpha: 0, scale: 1.3, delay: 100, duration: enemy.isBoss ? 600 : 460, onComplete: () => this.destroyEnemy(enemy) })
     if (enemy.battleId) this.time.delayedCall(enemy.isBoss ? 2300 : 0, () => this.completeOverworldBattle(enemy.battleId!))
     if (!enemy.isBoss) this.queueHint('potion_interact', 'Q for potion / E to interact', 8000)
+    if (enemy.isBoss) {
+      this.time.delayedCall(1600, () => this.showBossVictoryScreen(enemy))
+    }
     this.checkRespawnTimer()
     this.refreshHud()
     this.persist()
@@ -3719,6 +3792,24 @@ export class OverworldScene extends Phaser.Scene {
     this.time.delayedCall(duration, () => { this.time.timeScale = 1; this.tweens.resumeAll() })
   }
 
+  private startPlayerBlink() {
+    if (this.playerBlinkEvent) this.playerBlinkEvent.destroy()
+    if (!this.player) return
+    this.playerBlinkEvent = this.time.addEvent({
+      delay: 80,
+      repeat: 9,
+      callback: () => {
+        if (!this.player) return
+        this.player.setAlpha(this.player.alpha > 0.5 ? 0.25 : 0.9)
+        if (this.time.now >= this.playerInvulnerableUntil) {
+          this.player.setAlpha(1)
+          this.playerBlinkEvent?.destroy()
+          this.playerBlinkEvent = undefined
+        }
+      },
+    })
+  }
+
   private triggerSlowMo(duration: number, scale: number) {
     this.time.timeScale = scale
     this.time.delayedCall(duration, () => { this.time.timeScale = 1 })
@@ -3736,6 +3827,28 @@ export class OverworldScene extends Phaser.Scene {
     this.tweens.add({ targets: this.player, alpha: 0.55, yoyo: true, repeat: 2, duration: 80 })
     audioManager.playSfx('item_use')
     this.refreshHud(); this.updatePlayerBars(); this.persist()
+  }
+
+  private showBossVictoryScreen(enemy: MapEnemy) {
+    this.busy = true
+    const { width, height } = this.scale
+    const overlay = this.add.container(0, 0).setScrollFactor(0).setDepth(250).setAlpha(0)
+    overlay.add(this.add.rectangle(width / 2, height / 2, width, height, 0x1a1408, 0.68))
+    overlay.add(this.add.ellipse(width / 2, height / 2, width * 1.1, height * 0.8, 0x000000, 0.15).setStrokeStyle(48, 0xd4a84b, 0.42))
+    overlay.add(this.add.text(width / 2, height / 2 - 52, 'VICTORY', { color: '#ffd36e', fontFamily: 'Georgia, serif', fontSize: '48px', fontStyle: 'bold' }).setOrigin(0.5))
+    const rewardLine = `+${enemy.goldReward}g  •  +${enemy.expReward} EXP`
+    overlay.add(this.add.text(width / 2, height / 2 + 8, rewardLine, { color: '#ffffff', fontFamily: 'Arial, sans-serif', fontSize: '18px' }).setOrigin(0.5))
+    const playTimeStr = this.formatPlayTime(this.saveData.playTime)
+    overlay.add(this.add.text(width / 2, height / 2 + 38, `Play Time: ${playTimeStr}`, { color: '#8ab4f8', fontFamily: 'Arial, sans-serif', fontSize: '15px' }).setOrigin(0.5))
+    const continueBtn = this.add.text(width / 2, height / 2 + 86, 'Continue', { color: '#86efac', fontFamily: 'Arial, sans-serif', fontSize: '20px' }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    continueBtn.on('pointerover', () => { continueBtn.setColor('#fff1a8'); audioManager.playSfx('ui_blip') })
+    continueBtn.on('pointerout', () => continueBtn.setColor('#86efac'))
+    continueBtn.on('pointerdown', () => {
+      audioManager.playSfx('ui_confirm')
+      this.tweens.add({ targets: overlay, alpha: 0, duration: 320, onComplete: () => { overlay.destroy(); this.busy = false; this.cameras.main.zoomTo(1, 400, 'Sine.easeInOut', true) } })
+    })
+    overlay.add(continueBtn)
+    this.tweens.add({ targets: overlay, alpha: 1, duration: 420, ease: 'Sine.easeOut' })
   }
 
   private handlePlayerDefeat() {
